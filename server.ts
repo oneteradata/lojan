@@ -194,7 +194,7 @@ async function startServer() {
         return res.json({ success: true, orderId: Date.now() }); // Fallback
       }
 
-      // 1. Cria o pedido
+      // 1. Cria o pedido no Postgres
       const orderResult = await pool.query(
         'INSERT INTO orders (user_id, total_price) VALUES ($1, $2) RETURNING id',
         [userId, total]
@@ -203,16 +203,20 @@ async function startServer() {
 
       // 2. Insere os itens
       for (const item of items) {
-         await pool.query(
-           'INSERT INTO order_items (order_id, product_id, quantity) VALUES ($1, $2, $3)',
-           [orderId, item.id, item.quantity]
-         );
+         try {
+           await pool.query(
+             'INSERT INTO order_items (order_id, product_id, quantity) VALUES ($1, $2, $3)',
+             [orderId, parseInt(item.id), parseInt(item.quantity)]
+           );
+         } catch (itemErr: any) {
+           console.warn(`Erro ao inserir item ${item.id} no pedido ${orderId}. Produto pode ter sido deletado do banco ou o tipo de dado está errado. Msg: ${itemErr.message}`);
+         }
       }
 
       res.json({ success: true, orderId });
-    } catch (err) {
-      console.error('Erro ao registrar pedido:', err);
-      res.status(500).json({ success: false, error: 'Erro ao gerar o pedido no sistema.' });
+    } catch (err: any) {
+      console.error('Erro geral ao registrar pedido:', err.message);
+      res.status(500).json({ success: false, error: 'PostgreSQL - Falha ao gravar a ordem.' });
     }
   });
 

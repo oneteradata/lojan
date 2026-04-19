@@ -123,7 +123,7 @@ export default function App() {
        return;
     }
     
-    setOrderStatus('Processando...');
+    setOrderStatus('Processando e comunicando com Postgres...');
     try {
       const payload = {
          userId: user.id,
@@ -139,18 +139,20 @@ export default function App() {
       const data = await res.json();
       
       if (data.success) {
-         setOrderStatus('Pedido finalizado com sucesso! (Nº ' + data.orderId + ')');
+         setOrderStatus(`✅ Pedido 00${data.orderId} gerado no Banco de Dados com Sucesso!`);
+         setCartItems([]); // Limpa a sacola INSTANTANEAMENTE
          setTimeout(() => {
-            setCartItems([]);
             setIsCartOpen(false);
             setOrderStatus(null);
-         }, 4000);
+         }, 3500);
       } else {
-         setOrderStatus('Erro ao finalizar pedido.');
+         setOrderStatus(`❌ Erro no SQL: ${data.error}`);
+         setTimeout(() => setOrderStatus(null), 4000);
       }
     } catch(err) {
-       setOrderStatus('Simulado: Pedido concluído!'); // Offline fallback
-       setTimeout(() => { setCartItems([]); setIsCartOpen(false); setOrderStatus(null); }, 3000);
+       setOrderStatus('⚠️ Erro de API/VPS - Simulado pedido completo!'); 
+       setCartItems([]);
+       setTimeout(() => { setIsCartOpen(false); setOrderStatus(null); }, 3500);
     }
   };
 
