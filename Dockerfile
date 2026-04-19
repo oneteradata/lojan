@@ -1,21 +1,33 @@
-# Dockerfile Backend + Frontend (Easypanel)
-FROM node:20-alpine
+# Estágio de Build
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Copia e instala dependências
+# Copia os arquivos de dependência
 COPY package.json package-lock.json* ./
+
+# Instala as dependências
 RUN npm install
 
-# Copia todos os arquivos
+# Copia o restante dos arquivos
 COPY . .
 
-# Faz a build do Vite/Frontend
+# Constrói o aplicativo para produção (gera os arquivos estáticos na pasta dist)
 RUN npm run build
 
-# Expõe a porta que o Backend Express vai rodar (3000)
-# Configure a App no Easypanel para interceder a porta 3000
-EXPOSE 3000
+# Estágio de Produção (Servidor Web NGINX)
+FROM nginx:alpine
 
-# Executa o servidor backend Node
-CMD ["npm", "start"]
+# Remove a configuração padrão do NGINX
+RUN rm /etc/nginx/conf.d/default.conf
+
+# Copia a configuração personalizada para SPA
+COPY nginx.conf /etc/nginx/conf.d/
+
+# Copia os arquivos compilados (da pasta dist) para a pasta pública do NGINX
+COPY --from=builder /app/dist /usr/share/nginx/html
+
+# Expõe a porta 80 que será mapeada e reconhecida automaticamente pelo Easypanel
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]
