@@ -18,6 +18,14 @@ RUN npm run build
 # Estágio de Produção (Servidor Web NGINX)
 FROM nginx:alpine
 
+# ---- HÍBRIDO: Instala NODE.JS no Nginx para rodar a API (PosgreSQL) internamente ----
+RUN apk add --no-cache nodejs npm
+WORKDIR /app
+COPY --from=builder /app /app
+RUN npm install -g tsx
+ENV NODE_ENV=production
+# -------------------------------------------------------------------------------------
+
 # Remove a configuração padrão do NGINX
 RUN rm /etc/nginx/conf.d/default.conf
 
@@ -30,4 +38,5 @@ COPY --from=builder /app/dist /usr/share/nginx/html
 # Expõe a porta 80 que será mapeada e reconhecida automaticamente pelo Easypanel
 EXPOSE 80
 
-CMD ["nginx", "-g", "daemon off;"]
+# Inicia o Backend (banco de dados Postgres - porta 3000) ocultamente E o Nginx expondo o site (porta 80)
+CMD sh -c "tsx server.ts & nginx -g 'daemon off;'"
