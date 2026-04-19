@@ -113,11 +113,43 @@ async function startServer() {
       if (dbResult.rows.length > 0) {
         res.json({ success: true, user: dbResult.rows[0] });
       } else {
-        res.status(401).json({ success: false, error: 'Credenciais inválidas. Tente admin@valentina.com e admin' });
+        res.status(401).json({ success: false, error: 'Credenciais inválidas. Tente novamente.' });
       }
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: 'Erro de conexão com o banco de dados.' });
+    }
+  });
+
+  // Registro de usuários
+  app.post('/api/register', async (req, res) => {
+    const { name, email, password } = req.body;
+    
+    if (!name || !email || !password) {
+      return res.status(400).json({ success: false, error: 'Preencha todos os campos obrigatórios.' });
+    }
+
+    try {
+      if (!dbConnected) {
+        return res.json({ success: true, user: { id: Date.now(), name, email } });
+      }
+
+      // Verifica se o email já existe
+      const checkResult = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
+      if (checkResult.rows.length > 0) {
+        return res.status(400).json({ success: false, error: 'Este e-mail já está em uso.' });
+      }
+
+      // Insere o novo usuário
+      const insertResult = await pool.query(
+        'INSERT INTO users (name, email, password) VALUES ($1, $2, $3) RETURNING id, name, email',
+        [name, email, password]
+      );
+      
+      res.json({ success: true, user: insertResult.rows[0] });
+    } catch (err) {
+      console.error('Erro ao registrar usuário:', err);
+      res.status(500).json({ success: false, error: 'Erro interno ao tentar registrar a conta.' });
     }
   });
 

@@ -33,10 +33,13 @@ export default function App() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [products, setProducts] = useState<any[]>(defaultProducts);
   const [showLogin, setShowLogin] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(false);
   const [user, setUser] = useState<any>(null);
+  
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [loginError, setLoginError] = useState('');
+  const [authError, setAuthError] = useState('');
 
   // Busca produtos do DB
   useEffect(() => {
@@ -48,24 +51,33 @@ export default function App() {
       .catch(err => console.error("Erro ao buscar produtos, usando falback visual.", err));
   }, []);
 
-  const handleLogin = async (e: any) => {
+  const handleAuth = async (e: any) => {
     e.preventDefault();
-    setLoginError('');
+    setAuthError('');
+    
+    const endpoint = isRegistering ? '/api/register' : '/api/login';
+    const bodyPayload = isRegistering ? { name, email, password } : { email, password };
+
     try {
-      const res = await fetch('/api/login', {
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify(bodyPayload)
       });
       const data = await res.json();
       if (data.success) {
         setUser(data.user);
         setShowLogin(false);
+        // Reset modal states on success
+        setEmail('');
+        setPassword('');
+        setName('');
+        setIsRegistering(false);
       } else {
-        setLoginError(data.error);
+        setAuthError(data.error);
       }
     } catch(err) {
-      setLoginError("Erro ao conectar no servidor.");
+      setAuthError("Erro ao conectar no servidor.");
     }
   };
 
@@ -106,18 +118,30 @@ export default function App() {
         </div>
       </header>
 
-      {/* Modal de Login (PostgreSQL) */}
+      {/* Modal de Autenticação (PostgreSQL) */}
       {showLogin && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm">
           <div className="bg-[#0a0a0a] border border-white/20 p-10 max-w-sm w-full relative">
             <button onClick={() => setShowLogin(false)} className="absolute top-4 right-4 text-gray-500 hover:text-white">✕</button>
-            <h2 className="font-serif text-3xl mb-2 text-center">Login</h2>
-            <p className="text-xs text-center text-gray-500 mb-8 uppercase tracking-widest">Acesso à conta</p>
+            <h2 className="font-serif text-3xl mb-2 text-center">{isRegistering ? 'Criar Conta' : 'Login'}</h2>
+            <p className="text-[0.65rem] text-center text-gray-500 mb-8 uppercase tracking-widest">
+              {isRegistering ? 'Junte-se à Maison Valentina' : 'Acesso à conta'}
+            </p>
             
-            <form onSubmit={handleLogin} className="flex flex-col gap-4">
+            <form onSubmit={handleAuth} className="flex flex-col gap-4">
+              {isRegistering && (
+                <input 
+                  type="text" 
+                  placeholder="Nome Completo" 
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  className="bg-transparent border-b border-white/20 pb-2 text-sm outline-none focus:border-[#d4af37] transition-colors"
+                  required
+                />
+              )}
               <input 
                 type="email" 
-                placeholder="E-mail (admin@valentina.com)" 
+                placeholder={isRegistering ? "E-mail" : "E-mail (ex: admin@valentina.com)"} 
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 className="bg-transparent border-b border-white/20 pb-2 text-sm outline-none focus:border-[#d4af37] transition-colors"
@@ -125,17 +149,30 @@ export default function App() {
               />
               <input 
                 type="password" 
-                placeholder="Senha (admin)" 
+                placeholder={isRegistering ? "Defina uma senha" : "Senha"} 
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 className="bg-transparent border-b border-white/20 pb-2 text-sm outline-none focus:border-[#d4af37] transition-colors"
                 required
               />
-              {loginError && <p className="text-red-400 text-xs mt-1">{loginError}</p>}
+              {authError && <p className="text-red-400 text-xs mt-1 text-center">{authError}</p>}
+              
               <button type="submit" className="bg-white text-black mt-6 py-3 text-xs uppercase tracking-widest font-semibold hover:bg-[#d4af37] hover:text-white transition-colors">
-                Entrar
+                {isRegistering ? 'Registrar' : 'Entrar'}
               </button>
             </form>
+
+            <div className="mt-6 text-center">
+              <button 
+                onClick={() => {
+                   setIsRegistering(!isRegistering);
+                   setAuthError('');
+                }} 
+                className="text-xs text-gray-400 hover:text-[#d4af37] transition-colors"
+              >
+                {isRegistering ? 'Já tem uma conta? Faça login' : 'Ainda não tem conta? Criar agora'}
+              </button>
+            </div>
           </div>
         </div>
       )}
