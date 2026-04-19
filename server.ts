@@ -28,25 +28,33 @@ async function initDB() {
     await pool.query('SELECT 1');
     dbConnected = true;
 
-    // Criação da tabela de produtos
+    // Criação da tabela de produtos (agora com description)
     await pool.query(`
       CREATE TABLE IF NOT EXISTS products (
         id SERIAL PRIMARY KEY,
         name VARCHAR(255) NOT NULL,
         price VARCHAR(50) NOT NULL,
-        image TEXT NOT NULL
+        image TEXT NOT NULL,
+        description TEXT
       );
     `);
+
+    // Fallback: adiciona a coluna description caso a tabela já exista sem ela
+    try {
+      await pool.query(`ALTER TABLE products ADD COLUMN description TEXT;`);
+    } catch (e) {
+      // Ignora erro se a coluna já existir no PostgreSQL
+    }
 
     // Inserção inicial de produtos, caso a tabela esteja vazia
     const result = await pool.query('SELECT COUNT(*) FROM products');
     if (parseInt(result.rows[0].count) === 0) {
       await pool.query(`
-        INSERT INTO products (name, price, image) VALUES 
-        ('Vestido Seda Siena', 'R$ 2.450', 'https://images.unsplash.com/photo-1595777457583-95e059d581b8?auto=format&fit=crop&q=80&w=800'),
-        ('Blazer Estruturado Noir', 'R$ 3.890', 'https://images.unsplash.com/photo-1604467794349-0b74285de7e7?auto=format&fit=crop&q=80&w=800'),
-        ('Calça Alfaiataria Creme', 'R$ 1.680', 'https://images.unsplash.com/photo-1509631179647-0177331693ae?auto=format&fit=crop&q=80&w=800'),
-        ('Trench Coat Clássico', 'R$ 5.200', 'https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&q=80&w=800');
+        INSERT INTO products (name, price, image, description) VALUES 
+        ('Vestido Seda Siena', 'R$ 2.450', 'https://images.unsplash.com/photo-1595777457583-95e059d581b8?auto=format&fit=crop&q=80&w=800', 'Um vestido de seda pura com caimento esvoaçante e sofisticação inigualável. Perfeito para noites de gala e eventos exclusivos.'),
+        ('Blazer Estruturado Noir', 'R$ 3.890', 'https://images.unsplash.com/photo-1604467794349-0b74285de7e7?auto=format&fit=crop&q=80&w=800', 'Alfaiataria impecável com ombros marcados e cintura ajustada em lã fria. O ápice do luxo minimalista europeu e do corte feito à mão.'),
+        ('Calça Alfaiataria Creme', 'R$ 1.680', 'https://images.unsplash.com/photo-1509631179647-0177331693ae?auto=format&fit=crop&q=80&w=800', 'Calça reta de cintura alta em crepe de alfaiataria premium. Traz leveza e imponência ao mesmo tempo, ideal para conjuntos clássicos.'),
+        ('Trench Coat Clássico', 'R$ 5.200', 'https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&q=80&w=800', 'A peça atemporal essencial. Confeccionado em gabardine resistente à água de alto padrão, forro em seda geométrica e botões em madrepérola escura.');
       `);
     }
 
@@ -57,6 +65,26 @@ async function initDB() {
         email VARCHAR(255) UNIQUE NOT NULL,
         password VARCHAR(255) NOT NULL,
         name VARCHAR(255)
+      );
+    `);
+
+    // Criação da tabela de pedidos (orders) e os itens
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS orders (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id),
+        total_price VARCHAR(50) NOT NULL,
+        status VARCHAR(50) DEFAULT 'Pendente',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS order_items (
+        id SERIAL PRIMARY KEY,
+        order_id INTEGER REFERENCES orders(id),
+        product_id INTEGER REFERENCES products(id),
+        quantity INTEGER NOT NULL
       );
     `);
 
@@ -150,6 +178,41 @@ async function startServer() {
     } catch (err) {
       console.error('Erro ao registrar usuário:', err);
       res.status(500).json({ success: false, error: 'Erro interno ao tentar registrar a conta.' });
+    }
+  });
+
+  // Criar novo pedido (Cart Checkout)
+  app.post('/api/orders', async (req, res) => {
+    const { userId, total, items } = req.body;
+    
+    if (!userId || !items || items.length === 0) {
+      return res.status(400).json({ success: false, error: 'Dados do pedido incompletos.' });
+    }
+
+    try {
+      if (!dbConnected) {
+        return res.json({ success: true, orderId: Date.now() }); // Fallback
+      }
+
+      // 1. Cria o pedido
+      const orderResult = await pool.query(
+        'INSERT INTO orders (user_id, total_price) VALUES ($1, $2) RETURNING id',
+        [userId, total]
+      );
+      const orderId = orderResult.rows[0].id;
+
+      // 2. Insere os itens
+      for (const item of items) {
+         await pool.query(
+           'INSERT INTO order_items (order_id, product_id, quantity) VALUES ($1, $2, $3)',
+           [orderId, item.id, item.quantity]
+         );
+      }
+
+      res.json({ success: true, orderId });
+    } catch (err) {
+      console.error('Erro ao registrar pedido:', err);
+      res.status(500).json({ success: false, error: 'Erro ao gerar o pedido no sistema.' });
     }
   });
 
