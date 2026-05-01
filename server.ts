@@ -205,11 +205,11 @@ async function startServer() {
     if (!req.file) return res.status(400).json({ error: 'Nenhum arquivo enviado.' });
     const fileName = `${Date.now()}-${req.file.originalname.replace(/\s+/g, '_')}`;
     try {
-      const bucketExists = await minioClient.bucketExists('market');
-      if (!bucketExists) await minioClient.makeBucket('market', 'us-east-1');
+      const bucketExists = await minioClient.bucketExists('marketplace');
+      if (!bucketExists) await minioClient.makeBucket('marketplace', 'us-east-1');
       const metaData = { 'Content-Type': req.file.mimetype };
-      await minioClient.putObject('market', fileName, req.file.buffer, req.file.size, metaData);
-      const url = `http://file.voryx.com.br/market/${fileName}`;
+      await minioClient.putObject('marketplace', fileName, req.file.buffer, req.file.size, metaData);
+      const url = `https://file.voryx.com.br/marketplace/${fileName}`;
       res.json({ success: true, url, fileName });
     } catch (err) {
       console.error('Erro MinIO Upload:', err);
@@ -220,7 +220,7 @@ async function startServer() {
   // Delete File MinIO
   app.delete('/api/upload/:fileName', async (req, res) => {
     try {
-      await minioClient.removeObject('market', req.params.fileName);
+      await minioClient.removeObject('marketplace', req.params.fileName);
       res.json({ success: true });
     } catch (err) {
       console.error('Erro MinIO Remove:', err);
