@@ -9,7 +9,7 @@ const { Pool } = pkg;
 // Credenciais definidas via instrução do Easypanel VPS
 const pool = new Pool({
   user: process.env.DB_USER || 'admin',
-  host: process.env.DB_HOST || 'sites_postgree_db_vitrine2',
+  host: process.env.DB_HOST || 'sites_postgree_db_vitrine',
   database: process.env.DB_NAME || 'site',
   password: process.env.DB_PASSWORD || '1234',
   port: 5432,
