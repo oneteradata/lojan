@@ -127,8 +127,8 @@ async function initDB() {
 
 async function startServer() {
   const app = express();
-  app.use(express.json({ limit: '50mb' }));
-  app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+  app.use(express.json({ limit: '250mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '250mb' }));
   const PORT = 3000;
 
   // Inicia banco de dados
@@ -152,12 +152,13 @@ async function startServer() {
     const { name, category, price, tokens, stock, details, media, variations } = req.body;
     try {
       if (!dbConnected) throw new Error("DB offline");
+      const imagesString = (media || []).map((m: any) => m.url).join(',');
       const result = await pool.query(`
-        INSERT INTO products (name, category, price, tokens, stock, details, media, variations)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *
+        INSERT INTO products (name, category, price, tokens, stock, details, media, variations, image)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *
       `, [
         name, category, String(price || '0'), parseInt(tokens) || 0, parseInt(stock) || 0, details, 
-        JSON.stringify(media || []), JSON.stringify(variations || [])
+        JSON.stringify(media || []), JSON.stringify(variations || []), imagesString
       ]);
       res.json({ success: true, product: result.rows[0] });
     } catch (err: any) {
@@ -182,13 +183,14 @@ async function startServer() {
     const { name, category, price, tokens, stock, details, media, variations } = req.body;
     try {
       if (!dbConnected) throw new Error("DB offline");
+      const imagesString = (media || []).map((m: any) => m.url).join(',');
       const result = await pool.query(`
         UPDATE products 
-        SET name = $1, category = $2, price = $3, tokens = $4, stock = $5, details = $6, media = $7, variations = $8
-        WHERE id = $9 RETURNING *
+        SET name = $1, category = $2, price = $3, tokens = $4, stock = $5, details = $6, media = $7, variations = $8, image = $9
+        WHERE id = $10 RETURNING *
       `, [
         name, category, String(price || '0'), parseInt(tokens) || 0, parseInt(stock) || 0, details, 
-        JSON.stringify(media || []), JSON.stringify(variations || []),
+        JSON.stringify(media || []), JSON.stringify(variations || []), imagesString,
         req.params.id
       ]);
       res.json({ success: true, product: result.rows[0] });
@@ -207,7 +209,7 @@ async function startServer() {
       if (!bucketExists) await minioClient.makeBucket('market', 'us-east-1');
       const metaData = { 'Content-Type': req.file.mimetype };
       await minioClient.putObject('market', fileName, req.file.buffer, req.file.size, metaData);
-      const url = `https://file.voryx.com.br/market/${fileName}`;
+      const url = `http://file.voryx.com.br/market/${fileName}`;
       res.json({ success: true, url, fileName });
     } catch (err) {
       console.error('Erro MinIO Upload:', err);

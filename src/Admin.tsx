@@ -266,19 +266,26 @@ function AdminProducts() {
             </div>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-               {products.map(p => (
+               {products.map(p => {
+                 const imagesArray = p.image ? p.image.split(',') : [];
+                 const firstImg = imagesArray.length > 0 ? imagesArray[0] : null;
+                 const isVideo = firstImg ? (firstImg.endsWith('.mp4') || firstImg.endsWith('.webm') || firstImg.endsWith('.mov')) : (p.media && p.media.length > 0 && p.media[0].type === 'video');
+                 const displayUrl = firstImg || (p.media && p.media.length > 0 ? p.media[0].url : '');
+
+                 return (
                  <div key={p.id} onClick={() => { setModalItem(p); setIsModalOpen(true); }} className="border border-gray-100 rounded-2xl overflow-hidden hover:shadow-md transition-all cursor-pointer">
-                    {p.media && p.media.length > 0 && p.media[0].type === 'video' ? (
-                       <video src={p.media[0].url} className="w-full aspect-square object-cover bg-gray-100" muted loop autoPlay playsInline />
+                    {isVideo ? (
+                       <video src={displayUrl} className="w-full aspect-square object-cover bg-gray-100" muted loop autoPlay playsInline />
                     ) : (
-                       <img src={p.image || (p.media && p.media.length > 0 ? p.media[0].url : '')} className="w-full aspect-square object-cover bg-gray-100" />
+                       <img src={displayUrl} className="w-full aspect-square object-cover bg-gray-100" />
                     )}
                     <div className="p-4">
                        <h4 className="font-semibold text-sm truncate">{p.name}</h4>
                        <p className="text-xs text-[#007AFF] font-medium mt-1">R$ {parseFloat(p.price).toLocaleString('pt-BR')}</p>
                     </div>
                  </div>
-               ))}
+                 );
+               })}
             </div>
           )}
        </div>

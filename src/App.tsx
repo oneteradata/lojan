@@ -364,8 +364,10 @@ function Storefront() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
           {products.map((product, i) => {
             const hasMedia = product.media && product.media.length > 0;
-            const imgSrc = product.image ? product.image : (hasMedia ? product.media[0].url : 'https://images.unsplash.com/photo-1595777457583-95e059d581b8?auto=format&fit=crop&q=80&w=800');
-            const isVideo = !product.image && hasMedia && product.media[0].type === 'video';
+            const imagesArray = product.image ? product.image.split(',') : [];
+            const firstImg = imagesArray.length > 0 ? imagesArray[0] : null;
+            const imgSrc = firstImg ? firstImg : (hasMedia ? product.media[0].url : 'https://images.unsplash.com/photo-1595777457583-95e059d581b8?auto=format&fit=crop&q=80&w=800');
+            const isVideo = firstImg ? (firstImg.endsWith('.mp4') || firstImg.endsWith('.webm') || firstImg.endsWith('.mov')) : (!product.image && hasMedia && product.media[0].type === 'video');
             const priceLabel = isNaN(Number(product.price)) ? product.price : `R$ ${parseFloat(product.price).toLocaleString('pt-BR')}`;
             return (
               <motion.div 
