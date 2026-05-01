@@ -28,33 +28,38 @@ async function initDB() {
     await pool.query('SELECT 1');
     dbConnected = true;
 
-    // Criação da tabela de produtos (agora com description)
+    // Criação da tabela de produtos (nova estrutura Voryx Admin)
     await pool.query(`
       CREATE TABLE IF NOT EXISTS products (
         id SERIAL PRIMARY KEY,
         name VARCHAR(255) NOT NULL,
-        price VARCHAR(50) NOT NULL,
-        image TEXT NOT NULL,
-        description TEXT
+        category VARCHAR(100),
+        price DECIMAL(10, 2) NOT NULL DEFAULT 0,
+        tokens INTEGER DEFAULT 0,
+        stock INTEGER DEFAULT 0,
+        details TEXT,
+        media JSONB DEFAULT '[]',
+        variations JSONB DEFAULT '[]',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
 
-    // Fallback: adiciona a coluna description caso a tabela já exista sem ela
+    // Atualiza a tabela existente caso já exista, para evitar erros (Fallback agressivo para dev)
     try {
-      await pool.query(`ALTER TABLE products ADD COLUMN description TEXT;`);
-    } catch (e) {
-      // Ignora erro se a coluna já existir no PostgreSQL
-    }
+      await pool.query(`ALTER TABLE products ADD COLUMN category VARCHAR(100);`);
+      await pool.query(`ALTER TABLE products ADD COLUMN tokens INTEGER DEFAULT 0;`);
+      await pool.query(`ALTER TABLE products ADD COLUMN stock INTEGER DEFAULT 0;`);
+      await pool.query(`ALTER TABLE products ADD COLUMN details TEXT;`);
+      await pool.query(`ALTER TABLE products ADD COLUMN media JSONB DEFAULT '[]';`);
+      await pool.query(`ALTER TABLE products ADD COLUMN variations JSONB DEFAULT '[]';`);
+    } catch (e) {}
 
     // Inserção inicial de produtos, caso a tabela esteja vazia
     const result = await pool.query('SELECT COUNT(*) FROM products');
     if (parseInt(result.rows[0].count) === 0) {
       await pool.query(`
-        INSERT INTO products (name, price, image, description) VALUES 
-        ('Vestido Seda Siena', 'R$ 2.450', 'https://images.unsplash.com/photo-1595777457583-95e059d581b8?auto=format&fit=crop&q=80&w=800', 'Um vestido de seda pura com caimento esvoaçante e sofisticação inigualável. Perfeito para noites de gala e eventos exclusivos.'),
-        ('Blazer Estruturado Noir', 'R$ 3.890', 'https://images.unsplash.com/photo-1604467794349-0b74285de7e7?auto=format&fit=crop&q=80&w=800', 'Alfaiataria impecável com ombros marcados e cintura ajustada em lã fria. O ápice do luxo minimalista europeu e do corte feito à mão.'),
-        ('Calça Alfaiataria Creme', 'R$ 1.680', 'https://images.unsplash.com/photo-1509631179647-0177331693ae?auto=format&fit=crop&q=80&w=800', 'Calça reta de cintura alta em crepe de alfaiataria premium. Traz leveza e imponência ao mesmo tempo, ideal para conjuntos clássicos.'),
-        ('Trench Coat Clássico', 'R$ 5.200', 'https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&q=80&w=800', 'A peça atemporal essencial. Confeccionado em gabardine resistente à água de alto padrão, forro em seda geométrica e botões em madrepérola escura.');
+        INSERT INTO products (name, price, category, stock, media) VALUES 
+        ('Produto Exemplo', 50.00, 'Geral', 5, '[{"type": "image", "url": "https://images.unsplash.com/photo-1595777457583-95e059d581b8?auto=format&fit=crop&q=80&w=800"}]');
       `);
     }
 
@@ -64,9 +69,14 @@ async function initDB() {
         id SERIAL PRIMARY KEY,
         email VARCHAR(255) UNIQUE NOT NULL,
         password VARCHAR(255) NOT NULL,
-        name VARCHAR(255)
+        name VARCHAR(255),
+        role VARCHAR(50) DEFAULT 'user'
       );
     `);
+
+    try {
+      await pool.query(`ALTER TABLE users ADD COLUMN role VARCHAR(50) DEFAULT 'user';`);
+    } catch (e) {}
 
     // Criação da tabela de pedidos (orders) e os itens
     await pool.query(`
@@ -117,10 +127,77 @@ async function startServer() {
   app.get('/api/products', async (req, res) => {
     try {
       if (!dbConnected) throw new Error("DB offline");
-      const dbResult = await pool.query('SELECT * FROM products ORDER BY id ASC');
+      const dbResult = await pool.query('SELECT * FROM products ORDER BY id DESC');
       res.json(dbResult.rows);
     } catch (err) {
-      // Retorna fallback se não houver conexão no ambiente AI Studio
+      res.status(500).json({ error: 'Erro de conexão com o banco de dados.' });
+    }
+  });
+
+  // Criação de produto
+  app.post('/api/products', async (req, res) => {
+    const { name, category, price, tokens, stock, details, media, variations } = req.body;
+    try {
+      if (!dbConnected) throw new Error("DB offline");
+      const result = await pool.query(`
+        INSERT INTO products (name, category, price, tokens, stock, details, media, variations)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *
+      `, [
+        name, category, price, tokens, stock, details, 
+        JSON.stringify(media || []), JSON.stringify(variations || [])
+      ]);
+      res.json({ success: true, product: result.rows[0] });
+    } catch (err: any) {
+      console.error(err);
+      res.status(500).json({ success: false, error: 'Erro ao criar produto.' });
+    }
+  });
+
+  // Deletar produto
+  app.delete('/api/products/:id', async (req, res) => {
+    try {
+      if (!dbConnected) throw new Error("DB offline");
+      await pool.query('DELETE FROM products WHERE id = $1', [req.params.id]);
+      res.json({ success: true });
+    } catch(err) {
+      res.status(500).json({ success: false, error: 'Erro ao deletar produto.' });
+    }
+  });
+
+  // Dashboard Stats
+  app.get('/api/stats', async (req, res) => {
+    try {
+      if (!dbConnected) throw new Error("DB offline");
+      const prodRes = await pool.query('SELECT COUNT(*) FROM products');
+      const ordersRes = await pool.query('SELECT COUNT(*) FROM orders');
+      const stockRes = await pool.query('SELECT SUM(stock) as total_stock FROM products');
+      
+      res.json({
+        success: true,
+        stats: {
+          products: parseInt(prodRes.rows[0].count) || 0,
+          orders: parseInt(ordersRes.rows[0].count) || 0,
+          stock: parseInt(stockRes.rows[0].total_stock) || 0,
+          likes: 0 // Mock for now
+        }
+      });
+    } catch (err) {
+      res.status(500).json({ success: false, error: 'Erro ao buscar estatísticas.' });
+    }
+  });
+
+  // Leitura de pedidos
+  app.get('/api/orders', async (req, res) => {
+    try {
+      if (!dbConnected) throw new Error("DB offline");
+      const dbResult = await pool.query(`
+        SELECT o.*, u.name as customer_name, u.email as customer_email 
+        FROM orders o 
+        LEFT JOIN users u ON o.user_id = u.id 
+        ORDER BY o.id DESC
+      `);
+      res.json(dbResult.rows);
+    } catch (err) {
       res.status(500).json({ error: 'Erro de conexão com o banco de dados.' });
     }
   });

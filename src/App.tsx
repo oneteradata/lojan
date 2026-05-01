@@ -1,41 +1,12 @@
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { Search, ShoppingBag, User, Menu, ArrowRight } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { Routes, Route } from 'react-router-dom';
+import AdminApp from './Admin';
 
-const defaultProducts = [
-  {
-    id: 1,
-    name: 'Vestido Seda Siena',
-    price: 'R$ 2.450',
-    image: 'https://images.unsplash.com/photo-1595777457583-95e059d581b8?auto=format&fit=crop&q=80&w=800',
-    description: 'Um vestido de seda pura com caimento esvoaçante e sofisticação inigualável. Perfeito para noites de gala e eventos exclusivos.'
-  },
-  {
-    id: 2,
-    name: 'Blazer Estruturado Noir',
-    price: 'R$ 3.890',
-    image: 'https://images.unsplash.com/photo-1604467794349-0b74285de7e7?auto=format&fit=crop&q=80&w=800',
-    description: 'Alfaiataria impecável com ombros marcados e cintura ajustada em lã fria. O ápice do luxo minimalista europeu e do corte feito à mão.'
-  },
-  {
-    id: 3,
-    name: 'Calça Alfaiataria Creme',
-    price: 'R$ 1.680',
-    image: 'https://images.unsplash.com/photo-1509631179647-0177331693ae?auto=format&fit=crop&q=80&w=800',
-    description: 'Calça reta de cintura alta em crepe de alfaiataria premium. Traz leveza e imponência ao mesmo tempo, ideal para conjuntos clássicos.'
-  },
-  {
-    id: 4,
-    name: 'Trench Coat Clássico',
-    price: 'R$ 5.200',
-    image: 'https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&q=80&w=800',
-    description: 'A peça atemporal essencial. Confeccionado em gabardine resistente à água de alto padrão, forro em seda geométrica e botões em madrepérola escura.'
-  }
-];
-
-export default function App() {
+function Storefront() {
   const [isScrolled, setIsScrolled] = useState(false);
-  const [products, setProducts] = useState<any[]>(defaultProducts);
+  const [products, setProducts] = useState<any[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
   
   const [showLogin, setShowLogin] = useState(false);
@@ -79,7 +50,6 @@ export default function App() {
       if (data.success) {
         setUser(data.user);
         setShowLogin(false);
-        // Reset modal states on success
         setEmail('');
         setPassword('');
         setName('');
@@ -89,7 +59,6 @@ export default function App() {
       }
     } catch(err) {
       setAuthError("Erro ao conectar no servidor. Tentando simular...");
-      // Falback para uso durante build caso servidor esteja off
       setUser({ id: 1, name: name || 'Admin Silva', email });
       setShowLogin(false);
     }
@@ -109,8 +78,12 @@ export default function App() {
 
   const calculateTotal = () => {
     const rawTotal = cartItems.reduce((acc, item) => {
-      // Remove 'R$', espaços, e converte '.' para milhar (no BR). Ex: "R$ 2.450" -> 2450
-      const numericPrice = parseFloat(item.price.replace(/[R$\s\.]/g, '').replace(',', '.'));
+      let numericPrice = 0;
+      if (typeof item.price === 'string') {
+        numericPrice = parseFloat(item.price.replace(/[R$\s\.]/g, '').replace(',', '.'));
+      } else {
+        numericPrice = Number(item.price);
+      }
       return acc + (numericPrice * item.quantity);
     }, 0);
     return `R$ ${rawTotal.toLocaleString('pt-BR')}`;
@@ -140,7 +113,7 @@ export default function App() {
       
       if (data.success) {
          setOrderStatus(`✅ Pedido 00${data.orderId} gerado no Banco de Dados com Sucesso!`);
-         setCartItems([]); // Limpa a sacola INSTANTANEAMENTE
+         setCartItems([]);
          setTimeout(() => {
             setIsCartOpen(false);
             setOrderStatus(null);
@@ -158,8 +131,10 @@ export default function App() {
 
   const scrollToProducts = (e: any) => {
      e.preventDefault();
-     const section = document.getElementById('products-section');
-     if (section) section.scrollIntoView({ behavior: 'smooth' });
+     setTimeout(() => {
+       const section = document.getElementById('products-section');
+       if (section) section.scrollIntoView({ behavior: 'smooth' });
+     }, 100);
   };
   
   const scrollToCategories = (e: any) => {
@@ -169,9 +144,7 @@ export default function App() {
   };
 
   useEffect(() => {
-    const handleScroll = () => {
-      setIsScrolled(window.scrollY > 50);
-    };
+    const handleScroll = () => setIsScrolled(window.scrollY > 50);
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
@@ -183,7 +156,7 @@ export default function App() {
         <div className="flex gap-6 hidden md:flex">
           <a href="#categories-section" onClick={scrollToCategories} className="nav-link text-xs tracking-widest uppercase">Coleções</a>
           <a href="#products-section" onClick={scrollToProducts} className="nav-link text-xs tracking-widest uppercase">Maison</a>
-          <a href="#footer" className="nav-link text-xs tracking-widest uppercase">Editorial</a>
+          <a href="/" className="nav-link text-xs tracking-widest uppercase text-[#d4af37]">Painel Voryx</a>
         </div>
         
         <div className="md:hidden">
@@ -212,7 +185,7 @@ export default function App() {
         </div>
       </header>
 
-      {/* Modal de Autenticação (PostgreSQL) */}
+      {/* Modal de Autenticação */}
       {showLogin && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm">
           <div className="bg-[#0a0a0a] border border-white/20 p-10 max-w-sm w-full relative">
@@ -350,7 +323,7 @@ export default function App() {
           ].map((cat, i) => (
             <motion.div 
               key={i} 
-              className="relative group cursor-pointer aspect-[3/4] md:aspect-auto md:h-[600px] overflow-hidden"
+              className="relative group cursor-pointer aspect-[3/4] md:h-[600px] overflow-hidden"
               initial={{ opacity: 0 }}
               whileInView={{ opacity: 1 }}
               viewport={{ once: true }}
@@ -376,38 +349,42 @@ export default function App() {
       <section id="products-section" className="py-32 px-6 md:px-12 max-w-7xl mx-auto w-full">
         <div className="flex justify-between items-end mb-16">
           <h3 className="font-serif text-4xl md:text-5xl font-light">Novidades</h3>
-          <a href="#" className="hidden md:inline-block nav-link text-xs tracking-widest uppercase">
+          <a href="#" className="hidden md:inline-block nav-link text-xs tracking-widest uppercase truncate">
             Ver Todas
           </a>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-          {products.map((product, i) => (
-            <motion.div 
-              key={product.id}
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.6, delay: i * 0.1 }}
-              className="group cursor-pointer"
-              onClick={() => setSelectedProduct(product)}
-            >
-              <div className="overflow-hidden mb-4 relative aspect-[3/4]">
-                <img 
-                  src={product.image} 
-                  alt={product.name} 
-                  className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-                  referrerPolicy="no-referrer"
-                />
-                <div className="absolute inset-0 bg-[#0a0a0a]/10 group-hover:bg-transparent transition-colors duration-500"></div>
-                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                  <span className="bg-white/90 text-black text-[10px] uppercase font-bold tracking-widest py-2 px-6 hover:bg-[#d4af37] hover:text-white transition-colors">Ver Detalhes</span>
+          {products.map((product, i) => {
+            const imgSrc = product.image ? product.image : (product.media && product.media.length > 0 ? product.media[0].url : 'https://images.unsplash.com/photo-1595777457583-95e059d581b8?auto=format&fit=crop&q=80&w=800');
+            const priceLabel = isNaN(Number(product.price)) ? product.price : `R$ ${parseFloat(product.price).toLocaleString('pt-BR')}`;
+            return (
+              <motion.div 
+                key={product.id}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.6, delay: i * 0.1 }}
+                className="group cursor-pointer"
+                onClick={() => setSelectedProduct({ ...product, image: imgSrc, price: priceLabel })}
+              >
+                <div className="overflow-hidden mb-4 relative aspect-[3/4]">
+                  <img 
+                    src={imgSrc} 
+                    alt={product.name} 
+                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                    referrerPolicy="no-referrer"
+                  />
+                  <div className="absolute inset-0 bg-[#0a0a0a]/10 group-hover:bg-transparent transition-colors duration-500"></div>
+                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                    <span className="bg-white/90 text-black text-[10px] uppercase font-bold tracking-widest py-2 px-6 hover:bg-[#d4af37] hover:text-white transition-colors">Ver Detalhes</span>
+                  </div>
                 </div>
-              </div>
-              <h5 className="font-serif text-lg text-white mb-1 group-hover:text-[#d4af37] transition-colors">{product.name}</h5>
-              <p className="font-sans text-sm text-gray-400">{product.price}</p>
-            </motion.div>
-          ))}
+                <h5 className="font-serif text-lg text-white mb-1 group-hover:text-[#d4af37] transition-colors line-clamp-1">{product.name}</h5>
+                <p className="font-sans text-sm text-gray-400">{priceLabel}</p>
+              </motion.div>
+            );
+          })}
         </div>
         
         <div className="mt-12 text-center md:hidden">
@@ -418,11 +395,14 @@ export default function App() {
       </section>
 
       {/* Product Details Modal */}
+      <AnimatePresence>
       {selectedProduct && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 md:p-12">
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 md:p-12">
+          <div className="absolute inset-0 bg-black/90 backdrop-blur-md cursor-pointer" onClick={() => setSelectedProduct(null)}></div>
           <motion.div 
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
             className="w-full max-w-5xl bg-[#0a0a0a] border border-white/10 flex flex-col md:flex-row relative max-h-full overflow-y-auto"
           >
             <button 
@@ -440,17 +420,17 @@ export default function App() {
               />
             </div>
             <div className="md:w-1/2 p-8 md:p-16 flex flex-col justify-center">
-              <span className="text-[10px] text-gray-500 uppercase tracking-[0.2em] mb-4">Coleção Exclusiva</span>
-              <h2 className="font-serif text-3xl md:text-5xl text-white mb-4">{selectedProduct.name}</h2>
+              <span className="text-[10px] text-gray-500 uppercase tracking-[0.2em] mb-4">Coleção Exclusiva {selectedProduct.category && `• ${selectedProduct.category}`}</span>
+              <h2 className="font-serif text-3xl md:text-5xl text-white mb-4 leading-tight">{selectedProduct.name}</h2>
               <p className="text-[#d4af37] text-xl md:text-2xl mb-8">{selectedProduct.price}</p>
               
               <div className="w-8 h-[1px] bg-white/20 mb-8"></div>
               
               <p className="text-gray-400 text-sm leading-relaxed mb-10">
-                {selectedProduct.description || 'Uma peça exclusiva da coleção Valentina. Confeccionada com os mais altos padrões de luxo em nosso ateliê, pensada para trazer elegância e sofisticação instantânea ao seu guarda-roupa.'}
+                {selectedProduct.details || selectedProduct.description || 'Uma peça exclusiva da coleção Valentina. Confeccionada com os mais altos padrões de luxo em nosso ateliê, pensada para trazer elegância e sofisticação instantânea ao seu guarda-roupa.'}
               </p>
               
-              <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-4 mt-auto">
                 <button onClick={() => handleAddToCart(selectedProduct)} className="w-full bg-white text-black py-4 uppercase text-xs tracking-[0.15em] font-bold hover:bg-[#d4af37] hover:text-white transition-all duration-300">
                   Adicionar à Sacola
                 </button>
@@ -465,13 +445,15 @@ export default function App() {
           </motion.div>
         </div>
       )}
+      </AnimatePresence>
 
       {/* Cart Drawer */}
+      <AnimatePresence>
       {isCartOpen && (
         <div className="fixed inset-0 z-[120] flex justify-end">
            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm cursor-pointer" onClick={() => setIsCartOpen(false)}></div>
            <motion.div 
-             initial={{ x: '100%' }} animate={{ x: 0 }} transition={{ type: 'tween' }}
+             initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'tween' }}
              className="w-full md:w-[400px] h-full bg-[#0a0a0a] border-l border-white/10 p-8 flex flex-col relative"
            >
              <button onClick={() => setIsCartOpen(false)} className="absolute top-8 right-8 text-white hover:text-[#d4af37] transition-colors">✕</button>
@@ -485,7 +467,7 @@ export default function App() {
                     <div key={item.id} className="flex gap-4 border-b border-white/10 pb-4">
                        <img src={item.image} alt={item.name} className="w-20 h-28 object-cover" />
                        <div className="flex-1 flex flex-col justify-center">
-                          <h6 className="font-serif text-white">{item.name}</h6>
+                          <h6 className="font-serif text-white line-clamp-1">{item.name}</h6>
                           <span className="font-sans text-xs text-gray-500 my-1">Qtd: {item.quantity}</span>
                           <span className="font-sans text-[#d4af37]">{item.price}</span>
                        </div>
@@ -519,9 +501,10 @@ export default function App() {
            </motion.div>
         </div>
       )}
+      </AnimatePresence>
 
       {/* Footer */}
-      <footer className="border-t border-white/10 mt-auto">
+      <footer id="footer" className="border-t border-white/10 mt-auto">
         <div className="max-w-7xl mx-auto w-full px-6 md:px-12 py-20">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-12 md:gap-8 mb-20 text-white">
             <div className="md:col-span-2">
@@ -557,7 +540,7 @@ export default function App() {
                 <li><a href="#" className="hover:text-[#d4af37] transition-colors">Entrega & Devoluções</a></li>
                 <li><a href="#" className="hover:text-[#d4af37] transition-colors">Guia de Medidas</a></li>
                 <li><a href="#" className="hover:text-[#d4af37] transition-colors">Personal Shopper</a></li>
-                <li><a href="#" className="hover:text-[#d4af37] transition-colors">Contato</a></li>
+                <li><a href="/" className="hover:text-[#d4af37] transition-colors text-[#d4af37]">Área do Lojista (Admin)</a></li>
               </ul>
             </div>
           </div>
@@ -572,5 +555,14 @@ export default function App() {
         </div>
       </footer>
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <Routes>
+      <Route path="/*" element={<AdminApp />} />
+      <Route path="/loja/*" element={<Storefront />} />
+    </Routes>
   );
 }
