@@ -57,14 +57,14 @@ async function initDB() {
     `);
 
     // Atualiza a tabela existente caso já exista, para evitar erros (Fallback agressivo para dev)
-    try {
-      await pool.query(`ALTER TABLE products ADD COLUMN category VARCHAR(100);`);
-      await pool.query(`ALTER TABLE products ADD COLUMN tokens INTEGER DEFAULT 0;`);
-      await pool.query(`ALTER TABLE products ADD COLUMN stock INTEGER DEFAULT 0;`);
-      await pool.query(`ALTER TABLE products ADD COLUMN details TEXT;`);
-      await pool.query(`ALTER TABLE products ADD COLUMN media JSONB DEFAULT '[]';`);
-      await pool.query(`ALTER TABLE products ADD COLUMN variations JSONB DEFAULT '[]';`);
-    } catch (e) {}
+    try { await pool.query(`ALTER TABLE products ADD COLUMN category VARCHAR(100);`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE products ADD COLUMN tokens INTEGER DEFAULT 0;`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE products ADD COLUMN stock INTEGER DEFAULT 0;`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE products ADD COLUMN details TEXT;`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE products ADD COLUMN media JSONB DEFAULT '[]';`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE products ADD COLUMN variations JSONB DEFAULT '[]';`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE products ALTER COLUMN image DROP NOT NULL;`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE products ALTER COLUMN price DROP NOT NULL;`); } catch (e) {}
 
     // Inserção inicial de produtos, caso a tabela esteja vazia
     const result = await pool.query('SELECT COUNT(*) FROM products');
@@ -127,7 +127,8 @@ async function initDB() {
 
 async function startServer() {
   const app = express();
-  app.use(express.json());
+  app.use(express.json({ limit: '50mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '50mb' }));
   const PORT = 3000;
 
   // Inicia banco de dados
@@ -155,13 +156,13 @@ async function startServer() {
         INSERT INTO products (name, category, price, tokens, stock, details, media, variations)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *
       `, [
-        name, category, price, tokens, stock, details, 
+        name, category, String(price || '0'), parseInt(tokens) || 0, parseInt(stock) || 0, details, 
         JSON.stringify(media || []), JSON.stringify(variations || [])
       ]);
       res.json({ success: true, product: result.rows[0] });
     } catch (err: any) {
-      console.error(err);
-      res.status(500).json({ success: false, error: 'Erro ao criar produto.' });
+      console.error('Erro ao criar:', err);
+      res.status(500).json({ success: false, error: 'Erro ao criar produto: ' + err.message });
     }
   });
 
@@ -186,14 +187,14 @@ async function startServer() {
         SET name = $1, category = $2, price = $3, tokens = $4, stock = $5, details = $6, media = $7, variations = $8
         WHERE id = $9 RETURNING *
       `, [
-        name, category, price, tokens, stock, details, 
+        name, category, String(price || '0'), parseInt(tokens) || 0, parseInt(stock) || 0, details, 
         JSON.stringify(media || []), JSON.stringify(variations || []),
         req.params.id
       ]);
       res.json({ success: true, product: result.rows[0] });
     } catch (err: any) {
-      console.error(err);
-      res.status(500).json({ success: false, error: 'Erro ao editar produto.' });
+      console.error('Erro ao editar:', err);
+      res.status(500).json({ success: false, error: 'Erro ao editar produto: ' + err.message });
     }
   });
 

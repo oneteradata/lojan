@@ -28,7 +28,14 @@ function Storefront() {
     fetch('/api/products')
       .then(res => res.json())
       .then(data => {
-        if (data && data.length > 0) setProducts(data);
+        if (data && data.length > 0) {
+           const parsedData = data.map((d: any) => ({
+             ...d,
+             media: typeof d.media === 'string' ? JSON.parse(d.media) : (d.media || []),
+             variations: typeof d.variations === 'string' ? JSON.parse(d.variations) : (d.variations || [])
+           }));
+           setProducts(parsedData);
+        }
       })
       .catch(err => console.error("Erro ao buscar produtos, usando falback visual.", err));
   }, []);
@@ -356,7 +363,9 @@ function Storefront() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
           {products.map((product, i) => {
-            const imgSrc = product.image ? product.image : (product.media && product.media.length > 0 ? product.media[0].url : 'https://images.unsplash.com/photo-1595777457583-95e059d581b8?auto=format&fit=crop&q=80&w=800');
+            const hasMedia = product.media && product.media.length > 0;
+            const imgSrc = product.image ? product.image : (hasMedia ? product.media[0].url : 'https://images.unsplash.com/photo-1595777457583-95e059d581b8?auto=format&fit=crop&q=80&w=800');
+            const isVideo = !product.image && hasMedia && product.media[0].type === 'video';
             const priceLabel = isNaN(Number(product.price)) ? product.price : `R$ ${parseFloat(product.price).toLocaleString('pt-BR')}`;
             return (
               <motion.div 
@@ -366,15 +375,23 @@ function Storefront() {
                 viewport={{ once: true }}
                 transition={{ duration: 0.6, delay: i * 0.1 }}
                 className="group cursor-pointer"
-                onClick={() => setSelectedProduct({ ...product, image: imgSrc, price: priceLabel })}
+                onClick={() => setSelectedProduct({ ...product, image: imgSrc, isVideo, price: priceLabel })}
               >
                 <div className="overflow-hidden mb-4 relative aspect-[3/4]">
-                  <img 
-                    src={imgSrc} 
-                    alt={product.name} 
-                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-                    referrerPolicy="no-referrer"
-                  />
+                  {isVideo ? (
+                    <video 
+                      src={imgSrc} 
+                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                      autoPlay muted loop playsInline
+                    />
+                  ) : (
+                    <img 
+                      src={imgSrc} 
+                      alt={product.name} 
+                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                      referrerPolicy="no-referrer"
+                    />
+                  )}
                   <div className="absolute inset-0 bg-[#0a0a0a]/10 group-hover:bg-transparent transition-colors duration-500"></div>
                   <div className="absolute bottom-4 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                     <span className="bg-white/90 text-black text-[10px] uppercase font-bold tracking-widest py-2 px-6 hover:bg-[#d4af37] hover:text-white transition-colors">Ver Detalhes</span>
@@ -412,12 +429,20 @@ function Storefront() {
               ✕
             </button>
             <div className="md:w-1/2 aspect-[3/4] md:aspect-auto">
-              <img 
-                src={selectedProduct.image} 
-                alt={selectedProduct.name} 
-                className="w-full h-full object-cover" 
-                referrerPolicy="no-referrer"
-              />
+              {selectedProduct.isVideo ? (
+                <video 
+                  src={selectedProduct.image} 
+                  className="w-full h-full object-cover" 
+                  autoPlay muted loop playsInline
+                />
+              ) : (
+                <img 
+                  src={selectedProduct.image} 
+                  alt={selectedProduct.name} 
+                  className="w-full h-full object-cover" 
+                  referrerPolicy="no-referrer"
+                />
+              )}
             </div>
             <div className="md:w-1/2 p-8 md:p-16 flex flex-col justify-center">
               <span className="text-[10px] text-gray-500 uppercase tracking-[0.2em] mb-4">Coleção Exclusiva {selectedProduct.category && `• ${selectedProduct.category}`}</span>

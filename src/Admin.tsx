@@ -228,7 +228,13 @@ function AdminProducts() {
     try {
        const res = await fetch('/api/products');
        const data = await res.json();
-       setProducts(data);
+       // Parse arrays back from Postgres payload if they were stringified instead of JSONB
+       const parsedData = data.map((d: any) => ({
+         ...d,
+         media: typeof d.media === 'string' ? JSON.parse(d.media) : (d.media || []),
+         variations: typeof d.variations === 'string' ? JSON.parse(d.variations) : (d.variations || [])
+       }));
+       setProducts(parsedData);
     } catch(e) {}
   };
 
@@ -306,13 +312,20 @@ function ProductModal({ item, onClose }: { item?: any, onClose: () => void }) {
     try {
       const url = item ? `/api/products/${item.id}` : '/api/products';
       const method = item ? 'PUT' : 'POST';
-      await fetch(url, {
+      const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...formData, media, variations })
       });
-      onClose();
-    } catch(e) {}
+      const data = await res.json();
+      if (!data.success) {
+        alert(data.error || 'Erro ao salvar produto');
+      } else {
+        onClose();
+      }
+    } catch(e) {
+      alert('Erro inesperado ao salvar.');
+    }
     setLoading(false);
   };
 
@@ -330,9 +343,12 @@ function ProductModal({ item, onClose }: { item?: any, onClose: () => void }) {
       if (data.success) {
         const type = file.type.startsWith('video') ? 'video' : 'image';
         setMedia([...media, { type, url: data.url, fileName: data.fileName }]);
+      } else {
+        alert('Erro Upload: ' + (data.error || 'Falha desconhecida.'));
       }
     } catch (err) {
       console.error(err);
+      alert('Tamanho do arquivo pode ter excedido o limite ou houve falha na rede.');
     }
     setUploading(false);
     e.target.value = ''; // clear input
