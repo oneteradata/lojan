@@ -65,16 +65,6 @@ function AdminLogin({ onLogin }: { onLogin: (user: any) => void }) {
         className="w-full max-w-md bg-white rounded-[32px] shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-8 box-border"
       >
         <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-          {!isRegistering && (
-            <div>
-              <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">SESSÃO (OPCIONAL)</label>
-              <input 
-                type="text" 
-                placeholder="ex: marketplace"
-                className="w-full bg-[#F5F5F7] border border-transparent focus:border-[#007AFF]/30 focus:bg-white rounded-2xl px-4 py-3.5 text-sm outline-none transition-all"
-              />
-            </div>
-          )}
           {isRegistering && (
             <div>
               <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">NOME</label>
@@ -231,7 +221,8 @@ function AdminOverview() {
 // -- Products Component --
 function AdminProducts() {
   const [products, setProducts] = useState<any[]>([]);
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [modalItem, setModalItem] = useState<any | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   const fetchProducts = async () => {
     try {
@@ -251,7 +242,7 @@ function AdminProducts() {
             <p className="text-[11px] font-bold text-[#86868B] tracking-widest mt-1 uppercase">Edição Rápida</p>
          </div>
          <button 
-           onClick={() => setIsAddModalOpen(true)}
+           onClick={() => { setModalItem(null); setIsModalOpen(true); }}
            className="w-10 h-10 bg-[#007AFF] rounded-full flex items-center justify-center text-white shadow-md hover:bg-[#0066CC] transition-colors"
          >
             <Plus className="w-5 h-5" />
@@ -270,8 +261,12 @@ function AdminProducts() {
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                {products.map(p => (
-                 <div key={p.id} className="border border-gray-100 rounded-2xl overflow-hidden hover:shadow-md transition-all cursor-pointer">
-                    <img src={p.image || (p.media && p.media.length > 0 ? p.media[0].url : '')} className="w-full aspect-square object-cover bg-gray-100" />
+                 <div key={p.id} onClick={() => { setModalItem(p); setIsModalOpen(true); }} className="border border-gray-100 rounded-2xl overflow-hidden hover:shadow-md transition-all cursor-pointer">
+                    {p.media && p.media.length > 0 && p.media[0].type === 'video' ? (
+                       <video src={p.media[0].url} className="w-full aspect-square object-cover bg-gray-100" muted loop autoPlay playsInline />
+                    ) : (
+                       <img src={p.image || (p.media && p.media.length > 0 ? p.media[0].url : '')} className="w-full aspect-square object-cover bg-gray-100" />
+                    )}
                     <div className="p-4">
                        <h4 className="font-semibold text-sm truncate">{p.name}</h4>
                        <p className="text-xs text-[#007AFF] font-medium mt-1">R$ {parseFloat(p.price).toLocaleString('pt-BR')}</p>
@@ -283,28 +278,36 @@ function AdminProducts() {
        </div>
 
        <AnimatePresence>
-         {isAddModalOpen && (
-           <AddProductModal onClose={() => { setIsAddModalOpen(false); fetchProducts(); }} />
+         {isModalOpen && (
+           <ProductModal item={modalItem} onClose={() => { setIsModalOpen(false); fetchProducts(); }} />
          )}
        </AnimatePresence>
     </motion.div>
   );
 }
 
-function AddProductModal({ onClose }: { onClose: () => void }) {
+function ProductModal({ item, onClose }: { item?: any, onClose: () => void }) {
   const [formData, setFormData] = useState({
-    name: '', category: 'Geral', price: '', tokens: '', stock: '', details: ''
+    name: item?.name || '', 
+    category: item?.category || 'Geral', 
+    price: item?.price || '', 
+    tokens: item?.tokens || '', 
+    stock: item?.stock || '', 
+    details: item?.details || ''
   });
-  const [media, setMedia] = useState<{type: string, url: string}[]>([]);
-  const [variations, setVariations] = useState<{type: string, options: string[]}[]>([{ type: 'cor', options: [] }]);
+  const [media, setMedia] = useState<{type: string, url: string, fileName?: string}[]>(item?.media || []);
+  const [variations, setVariations] = useState<{type: string, options: string[]}[]>(item?.variations || [{ type: 'cor', options: [] }]);
 
   const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   const handleSubmit = async () => {
     setLoading(true);
     try {
-      await fetch('/api/products', {
-        method: 'POST',
+      const url = item ? `/api/products/${item.id}` : '/api/products';
+      const method = item ? 'PUT' : 'POST';
+      await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...formData, media, variations })
       });
@@ -313,25 +316,90 @@ function AddProductModal({ onClose }: { onClose: () => void }) {
     setLoading(false);
   };
 
-  const handleMediaAdd = (type: string) => {
-    const url = prompt(`URL do ${type}:`);
-    if (url) setMedia([...media, { type, url }]);
+  const handleMediaUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    setUploading(true);
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    try {
+      const res = await fetch('/api/upload', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (data.success) {
+        const type = file.type.startsWith('video') ? 'video' : 'image';
+        setMedia([...media, { type, url: data.url, fileName: data.fileName }]);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+    setUploading(false);
+    e.target.value = ''; // clear input
   };
+  
+  const handleRemoveMedia = async (idx: number) => {
+    const removed = media[idx];
+    setMedia(media.filter((_, i) => i !== idx));
+    if (removed.fileName) {
+       try { await fetch(`/api/upload/${removed.fileName}`, { method: 'DELETE' }); } catch(e) {}
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!item) return;
+    if (confirm('Deseja realmente apagar este produto?')) {
+      setLoading(true);
+      await fetch(`/api/products/${item.id}`, { method: 'DELETE' });
+      for (const m of media) {
+        if (m.fileName) await fetch(`/api/upload/${m.fileName}`, { method: 'DELETE' }).catch(()=>null);
+      }
+      onClose();
+    }
+  };
+
+  const updateVariationType = (idx: number, type: string) => {
+    const newVars = [...variations];
+    newVars[idx].type = type;
+    setVariations(newVars);
+  };
+  
+  const addVariationOption = (idx: number) => {
+    const opt = prompt('Nova opção:');
+    if (opt) {
+      const newVars = [...variations];
+      newVars[idx].options.push(opt);
+      setVariations(newVars);
+    }
+  }
+  
+  const removeVariationOption = (idx: number, optIdx: number) => {
+    const newVars = [...variations];
+    newVars[idx].options.splice(optIdx, 1);
+    setVariations(newVars);
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm p-0 md:p-4">
        <motion.div 
          initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
-         className="w-full sm:max-w-xl h-[90vh] sm:h-[85vh] bg-white rounded-t-[32px] sm:rounded-[32px] flex flex-col shadow-2xl relative"
+         className="w-full sm:max-w-xl h-[90vh] sm:h-[85vh] bg-white rounded-t-[32px] sm:rounded-[32px] flex flex-col shadow-2xl relative overflow-hidden"
        >
-         <div className="px-6 py-5 border-b border-gray-100 flex justify-between items-center bg-white rounded-t-[32px] z-10 sticky top-0">
+         <div className="px-6 py-5 border-b border-gray-100 flex justify-between items-center bg-white z-10 sticky top-0">
             <div>
-              <h2 className="text-2xl font-bold text-[#1D1D1F] tracking-tight leading-none">Novo Produto</h2>
-              <p className="text-[10px] font-bold text-[#86868B] tracking-widest mt-1 uppercase">Adição ao inventário</p>
+              <h2 className="text-2xl font-bold text-[#1D1D1F] tracking-tight leading-none">{item ? 'Editar Produto' : 'Novo Produto'}</h2>
+              <p className="text-[10px] font-bold text-[#86868B] tracking-widest mt-1 uppercase">{item ? 'Atualização de inventário' : 'Adição ao inventário'}</p>
             </div>
-            <button onClick={onClose} className="w-8 h-8 bg-[#F5F5F7] rounded-full flex items-center justify-center text-[#1D1D1F] hover:bg-gray-200 transition-colors">
-              <X className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-2">
+              {item && (
+                <button onClick={handleDelete} className="w-8 h-8 bg-[#FFF0F0] rounded-full flex items-center justify-center text-[#FF3B30] hover:bg-red-100 transition-colors">
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              )}
+              <button onClick={onClose} className="w-8 h-8 bg-[#F5F5F7] rounded-full flex items-center justify-center text-[#1D1D1F] hover:bg-gray-200 transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
          </div>
 
          <div className="flex-1 overflow-y-auto px-6 py-6 space-y-8 bg-[#FAFAFA]">
@@ -341,7 +409,7 @@ function AddProductModal({ onClose }: { onClose: () => void }) {
                  <label className="text-[11px] font-bold text-[#1D1D1F] tracking-wide">GALERIA DE MÍDIA</label>
                  <span className="text-[10px] font-bold text-[#86868B] tracking-widest">{media.length}/10 ARQUIVOS</span>
                </div>
-               <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-none">
+               <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-none items-center">
                   {media.map((m, i) => (
                     <div key={i} className="relative w-24 h-24 shrink-0 rounded-2xl overflow-hidden bg-white shadow-sm border border-gray-100 group">
                       {m.type === 'video' ? (
@@ -350,21 +418,29 @@ function AddProductModal({ onClose }: { onClose: () => void }) {
                         <img src={m.url} className="w-full h-full object-cover" />
                       )}
                       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                         <Trash2 className="w-5 h-5 text-white cursor-pointer" onClick={() => setMedia(media.filter((_, idx) => idx !== i))} />
+                         <Trash2 className="w-5 h-5 text-white cursor-pointer" onClick={() => handleRemoveMedia(i)} />
                       </div>
                       <span className="absolute bottom-1.5 left-1.5 bg-black/60 text-white text-[8px] font-bold px-1.5 py-0.5 rounded uppercase">{m.type}</span>
                     </div>
                   ))}
-                  <div className="w-24 h-24 shrink-0 rounded-2xl border-2 border-dashed border-[#007AFF]/30 flex flex-col items-center justify-center gap-1 cursor-pointer hover:bg-[#007AFF]/5 transition-colors"
-                       onClick={() => handleMediaAdd(media.length === 0 ? 'video' : 'image')}>
-                    <Plus className="w-6 h-6 text-[#007AFF]" />
-                  </div>
+                  
+                  {uploading ? (
+                    <div className="w-24 h-24 shrink-0 rounded-2xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center gap-1 bg-gray-50">
+                       <RefreshCw className="w-5 h-5 text-[#86868B] animate-spin" />
+                       <span className="text-[9px] font-bold text-[#86868B]">ENVIANDO...</span>
+                    </div>
+                  ) : media.length < 10 && (
+                    <label className="w-24 h-24 shrink-0 rounded-2xl border-2 border-dashed border-[#007AFF]/30 flex flex-col items-center justify-center gap-1 cursor-pointer hover:bg-[#007AFF]/5 transition-colors">
+                      <Plus className="w-6 h-6 text-[#007AFF]" />
+                      <input type="file" className="hidden" accept="image/*,video/*" onChange={handleMediaUpload} />
+                    </label>
+                  )}
                </div>
             </div>
 
             {/* Identificação */}
             <div>
-              <label className="text-[11px] font-bold text-[#86868B] tracking-wide mb-2 block">IDENTIFICAÇÃO</label>
+              <label className="text-[11px] font-bold text-[#86868B] tracking-wide mb-2 block">IDENTIFICAÇÃO (NOME)</label>
               <input 
                 type="text" placeholder="Nome do produto" 
                 value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})}
@@ -381,6 +457,8 @@ function AddProductModal({ onClose }: { onClose: () => void }) {
               >
                 <option>Geral</option>
                 <option>Roupas</option>
+                <option>Moda</option>
+                <option>Eletrônicos</option>
                 <option>Acessórios</option>
               </select>
             </div>
@@ -399,7 +477,7 @@ function AddProductModal({ onClose }: { onClose: () => void }) {
                   </div>
                </div>
                <div>
-                  <label className="text-[10px] font-bold text-[#86868B] tracking-wide mb-2 block">TOKENS</label>
+                  <label className="text-[10px] font-bold text-[#86868B] tracking-wide mb-2 block">TOKENS (MOEDA)</label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2">🪙</span>
                     <input 
@@ -424,9 +502,9 @@ function AddProductModal({ onClose }: { onClose: () => void }) {
 
             {/* Detalhes */}
             <div>
-              <label className="text-[11px] font-bold text-[#86868B] tracking-wide mb-2 block">DETALHES ADICIONAIS</label>
+              <label className="text-[11px] font-bold text-[#86868B] tracking-wide mb-2 block">DETALHES ADICIONAIS / DESCRIÇÃO</label>
               <textarea 
-                placeholder="detalhes" rows={4}
+                placeholder="detalhes do produto" rows={4}
                 value={formData.details} onChange={e => setFormData({...formData, details: e.target.value})}
                 className="w-full bg-white border border-gray-200 focus:border-[#007AFF] rounded-2xl px-4 py-3.5 text-sm outline-none transition-all shadow-sm resize-none"
               />
@@ -436,30 +514,39 @@ function AddProductModal({ onClose }: { onClose: () => void }) {
             <div>
                <div className="flex justify-between items-center mb-3">
                  <label className="text-[11px] font-bold text-[#1D1D1F] tracking-wide">VARIAÇÕES DE SKU</label>
-                 <button className="w-6 h-6 bg-[#F5F5F7] rounded-full flex items-center justify-center text-[#007AFF]"><Plus className="w-3 h-3" /></button>
+                 <button onClick={() => setVariations([...variations, {type: 'nova', options: []}])} className="w-6 h-6 bg-[#F5F5F7] rounded-full flex items-center justify-center text-[#007AFF] hover:bg-gray-200"><Plus className="w-3 h-3" /></button>
                </div>
-               <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm">
-                  <label className="text-[9px] font-bold text-[#86868B] tracking-wide mb-1.5 block">TIPO DE VARIAÇÃO</label>
-                  <div className="flex gap-2">
-                    <input type="text" value="cor" readOnly className="flex-1 bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm font-medium" />
-                    <button className="w-10 h-10 bg-[#FFF0F0] rounded-xl flex items-center justify-center text-[#FF3B30]"><Trash2 className="w-4 h-4" /></button>
-                  </div>
-                  <label className="text-[9px] font-bold text-[#86868B] tracking-wide mt-4 mb-2 block">OPÇÕES</label>
-                  <div className="flex gap-2 flex-wrap">
-                     <span className="bg-white border border-gray-200 rounded-full px-3 py-1.5 text-xs font-semibold flex items-center gap-1 shadow-sm">preto <X className="w-3 h-3 text-gray-400" /></span>
-                     <span className="bg-white border border-gray-200 rounded-full px-3 py-1.5 text-xs font-semibold flex items-center gap-1 shadow-sm">branco <X className="w-3 h-3 text-gray-400" /></span>
-                     <span className="border border-dashed border-gray-300 text-gray-400 rounded-full px-3 py-1.5 text-xs font-medium">+ Opção</span>
-                  </div>
+               
+               <div className="space-y-4">
+                  {variations.map((v, idx) => (
+                    <div key={idx} className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm">
+                        <label className="text-[9px] font-bold text-[#86868B] tracking-wide mb-1.5 block">TIPO DE VARIAÇÃO</label>
+                        <div className="flex gap-2">
+                          <input type="text" value={v.type} onChange={(e) => updateVariationType(idx, e.target.value)} className="flex-1 bg-white border border-gray-200 focus:border-[#007AFF] rounded-xl px-3 py-2 text-sm font-medium outline-none" />
+                          <button onClick={() => setVariations(variations.filter((_, i) => i !== idx))} className="w-9 h-9 shrink-0 bg-[#FFF0F0] rounded-xl flex items-center justify-center text-[#FF3B30]"><Trash2 className="w-4 h-4" /></button>
+                        </div>
+                        <label className="text-[9px] font-bold text-[#86868B] tracking-wide mt-4 mb-2 block">OPÇÕES</label>
+                        <div className="flex gap-2 flex-wrap">
+                           {v.options.map((opt, optIdx) => (
+                             <span key={optIdx} className="bg-white border border-gray-200 rounded-full pl-3 pr-1 py-1 text-xs font-semibold flex items-center gap-1 shadow-sm">
+                               {opt} 
+                               <button onClick={() => removeVariationOption(idx, optIdx)} className="w-5 h-5 rounded-full hover:bg-gray-100 flex justify-center items-center"><X className="w-3 h-3 text-gray-500" /></button>
+                             </span>
+                           ))}
+                           <button onClick={() => addVariationOption(idx)} className="border border-dashed border-gray-300 text-gray-500 hover:text-gray-700 hover:border-gray-400 rounded-full px-3 py-1 text-xs font-medium transition-colors">+ Opção</button>
+                        </div>
+                    </div>
+                  ))}
                </div>
             </div>
          </div>
 
          <div className="px-6 py-5 border-t border-gray-100 bg-white sm:rounded-b-[32px]">
             <button 
-              onClick={handleSubmit} disabled={loading}
-              className="w-full bg-[#007AFF] hover:bg-[#0066CC] active:scale-[0.99] transition-all text-white font-semibold rounded-2xl py-4 flex items-center justify-center shadow-lg shadow-blue-500/20"
+              onClick={handleSubmit} disabled={loading || uploading}
+              className="w-full bg-[#007AFF] hover:bg-[#0066CC] active:scale-[0.99] transition-all text-white font-semibold rounded-2xl py-4 flex items-center justify-center shadow-lg shadow-blue-500/20 disabled:opacity-70 disabled:cursor-not-allowed"
             >
-              {loading ? 'Publicando...' : <><RefreshCw className="w-4 h-4 mr-2" /> Publicar no Catálogo</>}
+              {loading ? 'Salvando...' : <><RefreshCw className="w-4 h-4 mr-2" /> Salvar Produto</>}
             </button>
          </div>
        </motion.div>

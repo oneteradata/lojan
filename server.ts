@@ -2,8 +2,20 @@ import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import pkg from 'pg';
 import path from 'path';
+import * as Minio from 'minio';
+import multer from 'multer';
 
 const { Pool } = pkg;
+
+// Configuração do MinIO
+const minioClient = new Minio.Client({
+  endPoint: 'file.voryx.com.br',
+  port: 443,
+  useSSL: true,
+  accessKey: 'admin',
+  secretKey: '88490805'
+});
+const upload = multer({ storage: multer.memoryStorage() });
 
 // Configuração de conexão do PostgreSQL
 // Credenciais definidas via instrução do Easypanel VPS
@@ -161,6 +173,55 @@ async function startServer() {
       res.json({ success: true });
     } catch(err) {
       res.status(500).json({ success: false, error: 'Erro ao deletar produto.' });
+    }
+  });
+
+  // Editar produto
+  app.put('/api/products/:id', async (req, res) => {
+    const { name, category, price, tokens, stock, details, media, variations } = req.body;
+    try {
+      if (!dbConnected) throw new Error("DB offline");
+      const result = await pool.query(`
+        UPDATE products 
+        SET name = $1, category = $2, price = $3, tokens = $4, stock = $5, details = $6, media = $7, variations = $8
+        WHERE id = $9 RETURNING *
+      `, [
+        name, category, price, tokens, stock, details, 
+        JSON.stringify(media || []), JSON.stringify(variations || []),
+        req.params.id
+      ]);
+      res.json({ success: true, product: result.rows[0] });
+    } catch (err: any) {
+      console.error(err);
+      res.status(500).json({ success: false, error: 'Erro ao editar produto.' });
+    }
+  });
+
+  // Upload MinIO
+  app.post('/api/upload', upload.single('file'), async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: 'Nenhum arquivo enviado.' });
+    const fileName = `${Date.now()}-${req.file.originalname.replace(/\s+/g, '_')}`;
+    try {
+      const bucketExists = await minioClient.bucketExists('market');
+      if (!bucketExists) await minioClient.makeBucket('market', 'us-east-1');
+      const metaData = { 'Content-Type': req.file.mimetype };
+      await minioClient.putObject('market', fileName, req.file.buffer, req.file.size, metaData);
+      const url = `https://file.voryx.com.br/market/${fileName}`;
+      res.json({ success: true, url, fileName });
+    } catch (err) {
+      console.error('Erro MinIO Upload:', err);
+      res.status(500).json({ error: 'Erro ao fazer upload no MinIO.' });
+    }
+  });
+
+  // Delete File MinIO
+  app.delete('/api/upload/:fileName', async (req, res) => {
+    try {
+      await minioClient.removeObject('market', req.params.fileName);
+      res.json({ success: true });
+    } catch (err) {
+      console.error('Erro MinIO Remove:', err);
+      res.status(500).json({ error: 'Erro ao deletar arquivo no MinIO' });
     }
   });
 
