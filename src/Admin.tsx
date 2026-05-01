@@ -341,21 +341,49 @@ function ProductModal({ item, onClose }: { item?: any, onClose: () => void }) {
     if (!file) return;
     
     setUploading(true);
-    const formData = new FormData();
-    formData.append('file', file);
-    
     try {
-      const res = await fetch('/api/upload', { method: 'POST', body: formData });
-      const data = await res.json();
-      if (data.success) {
-        const type = file.type.startsWith('video') ? 'video' : 'image';
-        setMedia([...media, { type, url: data.url, fileName: data.fileName }]);
-      } else {
-        alert('Erro Upload: ' + (data.error || 'Falha desconhecida.'));
+      if (file.size > 250 * 1024 * 1024) {
+        alert("O arquivo não pode exceder 250MB.");
+        setUploading(false);
+        e.target.value = '';
+        return;
       }
-    } catch (err) {
+
+      const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+      const fileName = `${Date.now()}-${safeName}`;
+      
+      // 1. Gerar link de upload direto (Presigned URL)
+      const resSign = await fetch('/api/presigned-url', {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify({ fileName, mimeType: file.type })
+      });
+      const dataSign = await resSign.json();
+
+      if (!dataSign.success) {
+         throw new Error(dataSign.error || 'Falha ao gerar link de upload');
+      }
+
+      // 2. Fazer upload direto para o MinIO usando o link
+      const uploadRes = await fetch(dataSign.url, {
+         method: 'PUT',
+         headers: {
+           'Content-Type': file.type
+         },
+         body: file
+      });
+
+      if (!uploadRes.ok) {
+         throw new Error(`Falha no upload pro MinIO: ${uploadRes.statusText}`);
+      }
+
+      const finalUrl = `https://file.voryx.com.br/marketplace/${fileName}`;
+      const type = file.type.startsWith('video') ? 'video' : 'image';
+      setMedia([...media, { type, url: finalUrl, fileName }]);
+      
+    } catch (err: any) {
       console.error(err);
-      alert('Tamanho do arquivo pode ter excedido o limite ou houve falha na rede.');
+      alert('Erro no upload: ' + err.message + '. Se for um erro de CORS, certifique-se que o file.voryx.com.br permite requisições PUT do seu domínio.');
     }
     setUploading(false);
     e.target.value = ''; // clear input
@@ -436,7 +464,7 @@ function ProductModal({ item, onClose }: { item?: any, onClose: () => void }) {
                   {media.map((m, i) => (
                     <div key={i} className="relative w-24 h-24 shrink-0 rounded-2xl overflow-hidden bg-white shadow-sm border border-gray-100 group">
                       {m.type === 'video' ? (
-                        <video src={m.url} className="w-full h-full object-cover" muted loop autoPlay playsInline />
+                        <video src={m.url} className="w-full h-full object-cover" muted loop autoPlay playsInline preload="metadata" />
                       ) : (
                         <img src={m.url} className="w-full h-full object-cover" />
                       )}

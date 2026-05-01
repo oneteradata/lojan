@@ -200,7 +200,23 @@ async function startServer() {
     }
   });
 
-  // Upload MinIO
+  // Obter link de upload direto pro MinIO
+  app.post('/api/presigned-url', async (req, res) => {
+    const { fileName, mimeType } = req.body;
+    if (!fileName) return res.status(400).json({ error: 'Falta o nome do arquivo' });
+    try {
+      const bucketExists = await minioClient.bucketExists('marketplace');
+      if (!bucketExists) await minioClient.makeBucket('marketplace', 'us-east-1');
+      // expira em 1 dia (86400 segundos)
+      const url = await minioClient.presignedPutObject('marketplace', fileName, 86400); 
+      res.json({ success: true, url });
+    } catch (err) {
+      console.error('Erro Gerar Presigned URL MinIO:', err);
+      res.status(500).json({ error: 'Erro ao gerar link de upload direto.' });
+    }
+  });
+
+  // (Fallback caso o CORS não permita upload direto, mantido por compatibilidade)
   app.post('/api/upload', upload.single('file'), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'Nenhum arquivo enviado.' });
     const fileName = `${Date.now()}-${req.file.originalname.replace(/\s+/g, '_')}`;
