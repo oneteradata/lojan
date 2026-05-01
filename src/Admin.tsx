@@ -11,6 +11,8 @@ function cn(...inputs: ClassValue[]) {
 
 // -- Login Component --
 function AdminLogin({ onLogin }: { onLogin: (user: any) => void }) {
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -20,16 +22,26 @@ function AdminLogin({ onLogin }: { onLogin: (user: any) => void }) {
     e.preventDefault();
     setLoading(true);
     try {
-      const res = await fetch('/api/login', {
+      const endpoint = isRegistering ? '/api/register' : '/api/login';
+      const body = isRegistering ? { name, email, password, role: 'admin' } : { email, password };
+      
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify(body)
       });
       const data = await res.json();
-      if (data.success && (data.user.role === 'admin' || data.user.email === 'admin@valentina.com')) {
-        onLogin(data.user);
+      if (data.success) {
+        if (isRegistering) {
+          // Quando cadastra pelo painel admin, ja entra
+          onLogin({ ...data.user, role: 'admin' });
+        } else if (data.user.role === 'admin' || data.user.email === 'admin@valentina.com') {
+          onLogin(data.user);
+        } else {
+          setError('Acesso negado. Apenas administradores.');
+        }
       } else {
-        setError('Acesso negado ou credenciais inválidas.');
+        setError(data.error || 'Acesso negado ou credenciais inválidas.');
       }
     } catch (err) {
       setError('Erro ao conectar ao servidor.');
@@ -53,14 +65,29 @@ function AdminLogin({ onLogin }: { onLogin: (user: any) => void }) {
         className="w-full max-w-md bg-white rounded-[32px] shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-8 box-border"
       >
         <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-          <div>
-            <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">SESSÃO (OPCIONAL)</label>
-            <input 
-              type="text" 
-              placeholder="ex: marketplace"
-              className="w-full bg-[#F5F5F7] border border-transparent focus:border-[#007AFF]/30 focus:bg-white rounded-2xl px-4 py-3.5 text-sm outline-none transition-all"
-            />
-          </div>
+          {!isRegistering && (
+            <div>
+              <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">SESSÃO (OPCIONAL)</label>
+              <input 
+                type="text" 
+                placeholder="ex: marketplace"
+                className="w-full bg-[#F5F5F7] border border-transparent focus:border-[#007AFF]/30 focus:bg-white rounded-2xl px-4 py-3.5 text-sm outline-none transition-all"
+              />
+            </div>
+          )}
+          {isRegistering && (
+            <div>
+              <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">NOME</label>
+              <input 
+                type="text" 
+                value={name}
+                onChange={e => setName(e.target.value)}
+                placeholder="Seu nome"
+                className="w-full bg-[#F5F5F7] border border-transparent focus:border-[#007AFF]/30 focus:bg-white rounded-2xl px-4 py-3.5 text-sm outline-none transition-all"
+                required
+              />
+            </div>
+          )}
           <div>
             <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">E-MAIL</label>
             <input 
@@ -93,12 +120,19 @@ function AdminLogin({ onLogin }: { onLogin: (user: any) => void }) {
             disabled={loading}
             className="w-full bg-[#007AFF] hover:bg-[#0066CC] active:scale-[0.98] transition-all text-white font-semibold rounded-2xl py-3.5 mt-2 flex items-center justify-center shadow-sm disabled:opacity-70"
           >
-            {loading ? 'Entrando...' : 'Continuar'} <ChevronRight className="w-4 h-4 ml-1" />
+            {loading ? 'Processando...' : isRegistering ? 'Cadastrar' : 'Continuar'} <ChevronRight className="w-4 h-4 ml-1" />
           </button>
 
           <div className="text-center mt-2">
-            <button type="button" className="text-[#007AFF] text-sm font-medium hover:underline">
-              Não tem uma conta? Cadastre-se
+            <button 
+              type="button" 
+              onClick={() => {
+                setIsRegistering(!isRegistering);
+                setError('');
+              }} 
+              className="text-[#007AFF] text-sm font-medium hover:underline"
+            >
+              {isRegistering ? 'Já tem uma conta? Entrar' : 'Não tem uma conta? Cadastre-se'}
             </button>
           </div>
         </form>

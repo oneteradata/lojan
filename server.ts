@@ -102,8 +102,8 @@ async function initDB() {
     const userResult = await pool.query('SELECT COUNT(*) FROM users');
     if (parseInt(userResult.rows[0].count) === 0) {
       await pool.query(`
-        INSERT INTO users (email, password, name) VALUES 
-        ('admin@valentina.com', 'admin', 'Admin Valentina');
+        INSERT INTO users (email, password, name, role) VALUES 
+        ('admin@valentina.com', 'admin', 'Admin Valentina', 'admin');
       `);
     }
     console.log('✅ Banco de dados PostgreSQL sincronizado com sucesso.');
@@ -214,7 +214,7 @@ async function startServer() {
         return res.status(401).json({ success: false, error: 'Credenciais inválidas. Tente admin@valentina.com e admin' });
       }
 
-      const dbResult = await pool.query('SELECT id, name, email FROM users WHERE email = $1 AND password = $2', [email, password]);
+      const dbResult = await pool.query('SELECT id, name, email, role FROM users WHERE email = $1 AND password = $2', [email, password]);
       if (dbResult.rows.length > 0) {
         res.json({ success: true, user: dbResult.rows[0] });
       } else {
@@ -236,7 +236,7 @@ async function startServer() {
 
     try {
       if (!dbConnected) {
-        return res.json({ success: true, user: { id: Date.now(), name, email } });
+        return res.json({ success: true, user: { id: Date.now(), name, email, role: req.body.role || 'user' } });
       }
 
       // Verifica se o email já existe
@@ -247,8 +247,8 @@ async function startServer() {
 
       // Insere o novo usuário
       const insertResult = await pool.query(
-        'INSERT INTO users (name, email, password) VALUES ($1, $2, $3) RETURNING id, name, email',
-        [name, email, password]
+        'INSERT INTO users (name, email, password, role) VALUES ($1, $2, $3, $4) RETURNING id, name, email, role',
+        [name, email, password, req.body.role || 'user']
       );
       
       res.json({ success: true, user: insertResult.rows[0] });
