@@ -70,6 +70,9 @@ function Storefront() {
         if (data.token) localStorage.setItem('token', data.token);
         setUser(data.user);
         setShowLogin(false);
+        if (isRegistering) {
+            alert(`Cadastrado(a) com sucesso! Seu ID de cadastro é: ${data.user.id}`);
+        }
         setEmail('');
         setPassword('');
         setName('');
@@ -190,7 +193,7 @@ function Storefront() {
         <div className="flex gap-6 items-center">
           <Search className="w-4 h-4 cursor-pointer hover:text-[#d4af37] transition-colors" strokeWidth={1.5} />
           {user ? (
-            <span className="text-xs uppercase tracking-widest text-[#d4af37] hidden md:block">Olá, {user.name.split(' ')[0]}</span>
+            <span className="text-xs uppercase tracking-widest text-[#d4af37] hidden md:block" title={`ID: ${user.id}`}>Olá, {user.name.split(' ')[0]} (ID: {user.id})</span>
           ) : (
             <User onClick={() => setShowLogin(true)} className="w-4 h-4 cursor-pointer hover:text-[#d4af37] transition-colors hidden md:block" strokeWidth={1.5} />
           )}
@@ -413,7 +416,10 @@ function Storefront() {
                   </div>
                 </div>
                 <h5 className="font-serif text-lg text-white mb-1 group-hover:text-[#d4af37] transition-colors line-clamp-1">{product.name}</h5>
-                <p className="font-sans text-sm text-gray-400">{priceLabel}</p>
+                <div className="flex justify-between items-start mt-1">
+                  <p className="font-sans text-sm text-gray-400">{priceLabel}</p>
+                  {product.user_name && <p className="font-sans text-[9px] uppercase tracking-widest text-[#d4af37] opacity-80">Por {product.user_name}</p>}
+                </div>
               </motion.div>
             );
           })}

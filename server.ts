@@ -81,6 +81,8 @@ async function initDB() {
     `);
 
     // Atualiza a tabela existente caso já exista, para evitar erros (Fallback agressivo para dev)
+    try { await pool.query(`ALTER TABLE products ADD COLUMN user_id INTEGER;`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE products ADD COLUMN user_name VARCHAR(255);`); } catch (e) {}
     try { await pool.query(`ALTER TABLE products ADD COLUMN category VARCHAR(100);`); } catch (e) {}
     try { await pool.query(`ALTER TABLE products ADD COLUMN tokens INTEGER DEFAULT 0;`); } catch (e) {}
     try { await pool.query(`ALTER TABLE products ADD COLUMN stock INTEGER DEFAULT 0;`); } catch (e) {}
@@ -160,7 +162,7 @@ async function startServer() {
 
   // ----- ROTAS DA API -----
 
-  // Leitura de produtos
+  // Leitura de produtos (Pública - Vitrine)
   app.get('/api/products', async (req, res) => {
     try {
       if (!dbConnected) throw new Error("DB offline");
@@ -171,18 +173,39 @@ async function startServer() {
     }
   });
 
+  // Leitura de produtos (Admin Dashboard)
+  app.get('/api/admin/products', requireAuth, async (req: any, res) => {
+    try {
+      if (!dbConnected) throw new Error("DB offline");
+      const userRole = req.user.role;
+      const userId = req.user.id;
+      let dbResult;
+      
+      if (userRole === 'admin') {
+        dbResult = await pool.query('SELECT * FROM products ORDER BY id DESC');
+      } else {
+        dbResult = await pool.query('SELECT * FROM products WHERE user_id = $1 ORDER BY id DESC', [userId]);
+      }
+      res.json(dbResult.rows);
+    } catch (err) {
+      res.status(500).json({ error: 'Erro de conexão.' });
+    }
+  });
+
   // Criação de produto
-  app.post('/api/products', requireAuth, requireAdmin, async (req, res) => {
+  app.post('/api/products', requireAuth, async (req: any, res) => {
     const { name, category, price, tokens, stock, details, media, variations } = req.body;
     try {
       if (!dbConnected) throw new Error("DB offline");
+      const userId = req.user.id;
+      const userName = req.user.name;
       const imagesString = (media || []).map((m: any) => m.url).join(',');
       const result = await pool.query(`
-        INSERT INTO products (name, category, price, tokens, stock, details, media, variations, image)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *
+        INSERT INTO products (name, category, price, tokens, stock, details, media, variations, image, user_id, user_name)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *
       `, [
         name, category, String(price || '0'), parseInt(tokens) || 0, parseInt(stock) || 0, details, 
-        JSON.stringify(media || []), JSON.stringify(variations || []), imagesString
+        JSON.stringify(media || []), JSON.stringify(variations || []), imagesString, userId, userName
       ]);
       res.json({ success: true, product: result.rows[0] });
     } catch (err: any) {
@@ -192,9 +215,15 @@ async function startServer() {
   });
 
   // Deletar produto
-  app.delete('/api/products/:id', requireAuth, requireAdmin, async (req, res) => {
+  app.delete('/api/products/:id', requireAuth, async (req: any, res) => {
     try {
       if (!dbConnected) throw new Error("DB offline");
+      if (req.user.role !== 'admin') {
+         const product = await pool.query('SELECT user_id FROM products WHERE id = $1', [req.params.id]);
+         if (product.rows.length === 0 || product.rows[0].user_id !== req.user.id) {
+            return res.status(403).json({ success: false, error: 'Sem permissão para deletar este produto.' });
+         }
+      }
       await pool.query('DELETE FROM products WHERE id = $1', [req.params.id]);
       res.json({ success: true });
     } catch(err) {
@@ -203,10 +232,18 @@ async function startServer() {
   });
 
   // Editar produto
-  app.put('/api/products/:id', requireAuth, requireAdmin, async (req, res) => {
+  app.put('/api/products/:id', requireAuth, async (req: any, res) => {
     const { name, category, price, tokens, stock, details, media, variations } = req.body;
     try {
       if (!dbConnected) throw new Error("DB offline");
+      
+      if (req.user.role !== 'admin') {
+         const product = await pool.query('SELECT user_id FROM products WHERE id = $1', [req.params.id]);
+         if (product.rows.length === 0 || product.rows[0].user_id !== req.user.id) {
+            return res.status(403).json({ success: false, error: 'Sem permissão para editar este produto.' });
+         }
+      }
+
       const imagesString = (media || []).map((m: any) => m.url).join(',');
       const result = await pool.query(`
         UPDATE products 
@@ -225,7 +262,7 @@ async function startServer() {
   });
 
   // Obter link de upload direto pro MinIO
-  app.post('/api/presigned-url', requireAuth, requireAdmin, async (req, res) => {
+  app.post('/api/presigned-url', requireAuth, async (req, res) => {
     const { fileName, mimeType } = req.body;
     if (!fileName) return res.status(400).json({ error: 'Falta o nome do arquivo' });
     try {
@@ -241,7 +278,7 @@ async function startServer() {
   });
 
   // (Fallback caso o CORS não permita upload direto, mantido por compatibilidade)
-  app.post('/api/upload', requireAuth, requireAdmin, upload.single('file'), async (req, res) => {
+  app.post('/api/upload', requireAuth, upload.single('file'), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'Nenhum arquivo enviado.' });
     const fileName = `${Date.now()}-${req.file.originalname.replace(/\s+/g, '_')}`;
     try {
@@ -258,7 +295,7 @@ async function startServer() {
   });
 
   // Delete File MinIO
-  app.delete('/api/upload/:fileName', requireAuth, requireAdmin, async (req, res) => {
+  app.delete('/api/upload/:fileName', requireAuth, async (req, res) => {
     try {
       await minioClient.removeObject('marketplace', req.params.fileName);
       res.json({ success: true });
@@ -269,12 +306,31 @@ async function startServer() {
   });
 
   // Dashboard Stats
-  app.get('/api/stats', requireAuth, requireAdmin, async (req, res) => {
+  app.get('/api/stats', requireAuth, async (req: any, res) => {
     try {
       if (!dbConnected) throw new Error("DB offline");
-      const prodRes = await pool.query('SELECT COUNT(*) FROM products');
-      const ordersRes = await pool.query('SELECT COUNT(*) FROM orders');
-      const stockRes = await pool.query('SELECT SUM(stock) as total_stock FROM products');
+      const userId = req.user.id;
+      const isAdmin = req.user.role === 'admin';
+
+      let prodQuery = 'SELECT COUNT(*) FROM products';
+      let prodVals = [];
+      let stockQuery = 'SELECT SUM(stock) as total_stock FROM products';
+      let stockVals = [];
+      let ordersQuery = 'SELECT COUNT(*) FROM orders';
+      let ordersVals = [];
+
+      if (!isAdmin) {
+          prodQuery += ' WHERE user_id = $1';
+          prodVals.push(userId);
+          stockQuery += ' WHERE user_id = $1';
+          stockVals.push(userId);
+          ordersQuery = 'SELECT COUNT(DISTINCT o.id) FROM orders o JOIN order_items oi ON o.id = oi.order_id JOIN products p ON oi.product_id = p.id WHERE p.user_id = $1';
+          ordersVals.push(userId);
+      }
+
+      const prodRes = await pool.query(prodQuery, prodVals);
+      const ordersRes = await pool.query(ordersQuery, ordersVals);
+      const stockRes = await pool.query(stockQuery, stockVals);
       
       res.json({
         success: true,
@@ -282,7 +338,7 @@ async function startServer() {
           products: parseInt(prodRes.rows[0].count) || 0,
           orders: parseInt(ordersRes.rows[0].count) || 0,
           stock: parseInt(stockRes.rows[0].total_stock) || 0,
-          likes: 0 // Mock for now
+          likes: 0
         }
       });
     } catch (err) {
@@ -291,15 +347,31 @@ async function startServer() {
   });
 
   // Leitura de pedidos
-  app.get('/api/orders', requireAuth, requireAdmin, async (req, res) => {
+  app.get('/api/orders', requireAuth, async (req: any, res) => {
     try {
       if (!dbConnected) throw new Error("DB offline");
-      const dbResult = await pool.query(`
-        SELECT o.*, u.name as customer_name, u.email as customer_email 
-        FROM orders o 
-        LEFT JOIN users u ON o.user_id = u.id 
-        ORDER BY o.id DESC
-      `);
+      const userId = req.user.id;
+      const isAdmin = req.user.role === 'admin';
+
+      let dbResult;
+      if (isAdmin) {
+          dbResult = await pool.query(`
+            SELECT o.*, u.name as customer_name, u.email as customer_email 
+            FROM orders o 
+            LEFT JOIN users u ON o.user_id = u.id 
+            ORDER BY o.id DESC
+          `);
+      } else {
+          dbResult = await pool.query(`
+            SELECT DISTINCT o.*, u.name as customer_name, u.email as customer_email 
+            FROM orders o 
+            LEFT JOIN users u ON o.user_id = u.id 
+            JOIN order_items oi ON o.id = oi.order_id
+            JOIN products p ON oi.product_id = p.id
+            WHERE p.user_id = $1
+            ORDER BY o.id DESC
+          `, [userId]);
+      }
       res.json(dbResult.rows);
     } catch (err) {
       res.status(500).json({ error: 'Erro de conexão com o banco de dados.' });

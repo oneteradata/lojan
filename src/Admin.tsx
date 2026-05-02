@@ -43,12 +43,7 @@ function AdminLogin({ onLogin }: { onLogin: (user: any) => void }) {
       const data = await res.json();
       if (data.success) {
         if (data.token) localStorage.setItem('token', data.token);
-        if (data.user.role === 'admin' || data.user.email === 'admin@valentina.com') {
-          onLogin(data.user);
-        } else {
-          localStorage.removeItem('token');
-          setError('Acesso negado. Apenas administradores.');
-        }
+        onLogin(data.user);
       } else {
         setError(data.error || 'Acesso negado ou credenciais inválidas.');
       }
@@ -115,7 +110,7 @@ function AdminLogin({ onLogin }: { onLogin: (user: any) => void }) {
 }
 
 // -- Overview Component --
-function AdminOverview() {
+function AdminOverview({ user, onLogout }: { user: any, onLogout: () => void }) {
   const [stats, setStats] = useState({ products: 0, orders: 0, stock: 0, likes: 0 });
   const [loading, setLoading] = useState(true);
 
@@ -136,13 +131,13 @@ function AdminOverview() {
       <div className="flex justify-between items-end">
         <div>
           <h2 className="text-3xl font-bold text-[#1D1D1F] tracking-tight">Resumo</h2>
-          <p className="text-[11px] font-bold text-[#86868B] tracking-widest mt-1 uppercase">Visão Geral</p>
+          <p className="text-[11px] font-bold text-[#86868B] tracking-widest mt-1 uppercase">ID: {user?.id} • Visão Geral</p>
         </div>
         <div className="flex gap-3">
           <button onClick={fetchStats} className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-sm hover:bg-gray-50 transition-colors text-[#1D1D1F]">
             <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
           </button>
-          <button className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-sm hover:bg-gray-50 transition-colors text-[#FF3B30]">
+          <button onClick={onLogout} className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-sm hover:bg-gray-50 transition-colors text-[#FF3B30]">
             <LogOut className="w-4 h-4" />
           </button>
         </div>
@@ -209,7 +204,7 @@ function AdminProducts() {
 
   const fetchProducts = async () => {
     try {
-       const res = await apiFetch('/api/products');
+       const res = await apiFetch('/api/admin/products');
        const data = await res.json();
        // Parse arrays back from Postgres payload if they were stringified instead of JSONB
        const parsedData = data.map((d: any) => ({
@@ -264,7 +259,10 @@ function AdminProducts() {
                     )}
                     <div className="p-4">
                        <h4 className="font-semibold text-sm truncate">{p.name}</h4>
-                       <p className="text-xs text-[#007AFF] font-medium mt-1">R$ {parseFloat(p.price).toLocaleString('pt-BR')}</p>
+                       <div className="flex justify-between items-center mt-1">
+                         <p className="text-xs text-[#007AFF] font-medium">R$ {parseFloat(p.price).toLocaleString('pt-BR')}</p>
+                         {p.user_name && <p className="text-[9px] text-[#86868B] uppercase font-bold truncate max-w-[80px]">By {p.user_name}</p>}
+                       </div>
                     </div>
                  </div>
                  );
@@ -796,10 +794,10 @@ export default function AdminApp() {
     <div className="flex flex-col h-screen bg-white font-sans text-[#1D1D1F]">
       <div className="flex-1 overflow-x-hidden overflow-y-auto pb-20">
         <Routes>
-          <Route path="/" element={<AdminOverview />} />
+          <Route path="/" element={<AdminOverview user={user} onLogout={() => { localStorage.removeItem('token'); setUser(null); }} />} />
           <Route path="/products" element={<AdminProducts />} />
           <Route path="/orders" element={<AdminOrders />} />
-          <Route path="/users" element={<AdminUsers />} />
+          <Route path="/users" element={user.role === 'admin' ? <AdminUsers /> : <div className="p-8 text-center text-gray-500">Acesso negado. Apenas administradores.</div>} />
         </Routes>
       </div>
 
@@ -826,13 +824,15 @@ export default function AdminApp() {
           <ShoppingCart className={cn("w-6 h-6", location.pathname === '/orders' && "fill-current")} />
           <span className="text-[10px] font-semibold">Vendas</span>
         </button>
-        <button 
-          onClick={() => navigate('/users')}
-          className={cn("flex flex-col items-center gap-1", location.pathname === '/users' ? "text-[#007AFF]" : "text-[#86868B]")}
-        >
-          <Users className={cn("w-6 h-6", location.pathname === '/users' && "fill-current")} />
-          <span className="text-[10px] font-semibold">Equipe</span>
-        </button>
+        {user.role === 'admin' && (
+          <button 
+            onClick={() => navigate('/users')}
+            className={cn("flex flex-col items-center gap-1", location.pathname === '/users' ? "text-[#007AFF]" : "text-[#86868B]")}
+          >
+            <Users className={cn("w-6 h-6", location.pathname === '/users' && "fill-current")} />
+            <span className="text-[10px] font-semibold">Equipe</span>
+          </button>
+        )}
       </div>
     </div>
   );
