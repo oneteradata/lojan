@@ -9,6 +9,18 @@ function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+const apiFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  const token = localStorage.getItem('token');
+  if (token && typeof input === 'string' && input.startsWith('/api')) {
+     const customInit = init ? { ...init } : {};
+     const customHeaders = new Headers(customInit.headers || {});
+     customHeaders.set('Authorization', `Bearer ${token}`);
+     customInit.headers = customHeaders;
+     return fetch(input, customInit);
+  }
+  return fetch(input, init);
+};
+
 // -- Login Component --
 function AdminLogin({ onLogin }: { onLogin: (user: any) => void }) {
   const [isRegistering, setIsRegistering] = useState(false);
@@ -25,19 +37,21 @@ function AdminLogin({ onLogin }: { onLogin: (user: any) => void }) {
       const endpoint = isRegistering ? '/api/register' : '/api/login';
       const body = isRegistering ? { name, email, password, role: 'admin' } : { email, password };
       
-      const res = await fetch(endpoint, {
+      const res = await apiFetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
       });
       const data = await res.json();
       if (data.success) {
+        if (data.token) localStorage.setItem('token', data.token);
         if (isRegistering) {
           // Quando cadastra pelo painel admin, ja entra
           onLogin({ ...data.user, role: 'admin' });
         } else if (data.user.role === 'admin' || data.user.email === 'admin@valentina.com') {
           onLogin(data.user);
         } else {
+          localStorage.removeItem('token');
           setError('Acesso negado. Apenas administradores.');
         }
       } else {
@@ -139,7 +153,7 @@ function AdminOverview() {
   const fetchStats = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/stats');
+      const res = await apiFetch('/api/stats');
       const data = await res.json();
       if (data.success) setStats(data.stats);
     } catch (e) {}
@@ -226,7 +240,7 @@ function AdminProducts() {
 
   const fetchProducts = async () => {
     try {
-       const res = await fetch('/api/products');
+       const res = await apiFetch('/api/products');
        const data = await res.json();
        // Parse arrays back from Postgres payload if they were stringified instead of JSONB
        const parsedData = data.map((d: any) => ({
@@ -319,7 +333,7 @@ function ProductModal({ item, onClose }: { item?: any, onClose: () => void }) {
     try {
       const url = item ? `/api/products/${item.id}` : '/api/products';
       const method = item ? 'PUT' : 'POST';
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...formData, media, variations })
@@ -353,7 +367,7 @@ function ProductModal({ item, onClose }: { item?: any, onClose: () => void }) {
       const fileName = `${Date.now()}-${safeName}`;
       
       // 1. Gerar link de upload direto (Presigned URL)
-      const resSign = await fetch('/api/presigned-url', {
+      const resSign = await apiFetch('/api/presigned-url', {
          method: 'POST',
          headers: { 'Content-Type': 'application/json' },
          body: JSON.stringify({ fileName, mimeType: file.type })
@@ -393,7 +407,7 @@ function ProductModal({ item, onClose }: { item?: any, onClose: () => void }) {
     const removed = media[idx];
     setMedia(media.filter((_, i) => i !== idx));
     if (removed.fileName) {
-       try { await fetch(`/api/upload/${removed.fileName}`, { method: 'DELETE' }); } catch(e) {}
+       try { await apiFetch(`/api/upload/${removed.fileName}`, { method: 'DELETE' }); } catch(e) {}
     }
   };
 
@@ -401,9 +415,9 @@ function ProductModal({ item, onClose }: { item?: any, onClose: () => void }) {
     if (!item) return;
     if (confirm('Deseja realmente apagar este produto?')) {
       setLoading(true);
-      await fetch(`/api/products/${item.id}`, { method: 'DELETE' });
+      await apiFetch(`/api/products/${item.id}`, { method: 'DELETE' });
       for (const m of media) {
-        if (m.fileName) await fetch(`/api/upload/${m.fileName}`, { method: 'DELETE' }).catch(()=>null);
+        if (m.fileName) await apiFetch(`/api/upload/${m.fileName}`, { method: 'DELETE' }).catch(()=>null);
       }
       onClose();
     }
@@ -610,7 +624,7 @@ function AdminOrders() {
   const [orders, setOrders] = useState<any[]>([]);
 
   useEffect(() => {
-    fetch('/api/orders').then(r => r.json()).then(d => setOrders(d)).catch(e => {});
+    apiFetch('/api/orders').then(r => r.json()).then(d => setOrders(d)).catch(e => {});
   }, []);
 
   return (

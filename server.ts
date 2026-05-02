@@ -4,6 +4,30 @@ import pkg from 'pg';
 import path from 'path';
 import * as Minio from 'minio';
 import multer from 'multer';
+import jwt from 'jsonwebtoken';
+
+const JWT_SECRET = process.env.JWT_SECRET || 'valentina_jwt_super_secret_key_2026';
+
+const requireAuth = (req: any, res: any, next: any) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return res.status(401).json({ success: false, error: 'Acesso negado. Token não fornecido.' });
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.user = decoded;
+    next();
+  } catch (err) {
+    return res.status(401).json({ success: false, error: 'Token inválido ou expirado.' });
+  }
+};
+
+const requireAdmin = (req: any, res: any, next: any) => {
+  if (req.user?.role !== 'admin') {
+    return res.status(403).json({ success: false, error: 'Acesso negado. Requer privilégios de administrador.' });
+  }
+  next();
+};
+
 
 const { Pool } = pkg;
 
@@ -148,7 +172,7 @@ async function startServer() {
   });
 
   // Criação de produto
-  app.post('/api/products', async (req, res) => {
+  app.post('/api/products', requireAuth, requireAdmin, async (req, res) => {
     const { name, category, price, tokens, stock, details, media, variations } = req.body;
     try {
       if (!dbConnected) throw new Error("DB offline");
@@ -168,7 +192,7 @@ async function startServer() {
   });
 
   // Deletar produto
-  app.delete('/api/products/:id', async (req, res) => {
+  app.delete('/api/products/:id', requireAuth, requireAdmin, async (req, res) => {
     try {
       if (!dbConnected) throw new Error("DB offline");
       await pool.query('DELETE FROM products WHERE id = $1', [req.params.id]);
@@ -179,7 +203,7 @@ async function startServer() {
   });
 
   // Editar produto
-  app.put('/api/products/:id', async (req, res) => {
+  app.put('/api/products/:id', requireAuth, requireAdmin, async (req, res) => {
     const { name, category, price, tokens, stock, details, media, variations } = req.body;
     try {
       if (!dbConnected) throw new Error("DB offline");
@@ -201,7 +225,7 @@ async function startServer() {
   });
 
   // Obter link de upload direto pro MinIO
-  app.post('/api/presigned-url', async (req, res) => {
+  app.post('/api/presigned-url', requireAuth, requireAdmin, async (req, res) => {
     const { fileName, mimeType } = req.body;
     if (!fileName) return res.status(400).json({ error: 'Falta o nome do arquivo' });
     try {
@@ -217,7 +241,7 @@ async function startServer() {
   });
 
   // (Fallback caso o CORS não permita upload direto, mantido por compatibilidade)
-  app.post('/api/upload', upload.single('file'), async (req, res) => {
+  app.post('/api/upload', requireAuth, requireAdmin, upload.single('file'), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'Nenhum arquivo enviado.' });
     const fileName = `${Date.now()}-${req.file.originalname.replace(/\s+/g, '_')}`;
     try {
@@ -234,7 +258,7 @@ async function startServer() {
   });
 
   // Delete File MinIO
-  app.delete('/api/upload/:fileName', async (req, res) => {
+  app.delete('/api/upload/:fileName', requireAuth, requireAdmin, async (req, res) => {
     try {
       await minioClient.removeObject('marketplace', req.params.fileName);
       res.json({ success: true });
@@ -245,7 +269,7 @@ async function startServer() {
   });
 
   // Dashboard Stats
-  app.get('/api/stats', async (req, res) => {
+  app.get('/api/stats', requireAuth, requireAdmin, async (req, res) => {
     try {
       if (!dbConnected) throw new Error("DB offline");
       const prodRes = await pool.query('SELECT COUNT(*) FROM products');
@@ -267,7 +291,7 @@ async function startServer() {
   });
 
   // Leitura de pedidos
-  app.get('/api/orders', async (req, res) => {
+  app.get('/api/orders', requireAuth, requireAdmin, async (req, res) => {
     try {
       if (!dbConnected) throw new Error("DB offline");
       const dbResult = await pool.query(`
@@ -289,14 +313,18 @@ async function startServer() {
       if (!dbConnected) {
         // Fallback de demonstração caso o banco não conecte (Modo dev)
         if (email === 'admin@valentina.com' && password === 'admin') {
-           return res.json({ success: true, user: { id: 1, name: 'Admin Valentina', email } });
+           const user = { id: 1, name: 'Admin Valentina', email, role: 'admin' };
+           const token = jwt.sign(user, JWT_SECRET, { expiresIn: '1d' });
+           return res.json({ success: true, user, token });
         }
         return res.status(401).json({ success: false, error: 'Credenciais inválidas. Tente admin@valentina.com e admin' });
       }
 
       const dbResult = await pool.query('SELECT id, name, email, role FROM users WHERE email = $1 AND password = $2', [email, password]);
       if (dbResult.rows.length > 0) {
-        res.json({ success: true, user: dbResult.rows[0] });
+        const user = dbResult.rows[0];
+        const token = jwt.sign(user, JWT_SECRET, { expiresIn: '1d' });
+        res.json({ success: true, user, token });
       } else {
         res.status(401).json({ success: false, error: 'Credenciais inválidas. Tente novamente.' });
       }
@@ -316,7 +344,9 @@ async function startServer() {
 
     try {
       if (!dbConnected) {
-        return res.json({ success: true, user: { id: Date.now(), name, email, role: req.body.role || 'user' } });
+        const user = { id: Date.now(), name, email, role: req.body.role || 'user' };
+        const token = jwt.sign(user, JWT_SECRET, { expiresIn: '1d' });
+        return res.json({ success: true, user, token });
       }
 
       // Verifica se o email já existe
@@ -331,7 +361,9 @@ async function startServer() {
         [name, email, password, req.body.role || 'user']
       );
       
-      res.json({ success: true, user: insertResult.rows[0] });
+      const user = insertResult.rows[0];
+      const token = jwt.sign(user, JWT_SECRET, { expiresIn: '1d' });
+      res.json({ success: true, user, token });
     } catch (err) {
       console.error('Erro ao registrar usuário:', err);
       res.status(500).json({ success: false, error: 'Erro interno ao tentar registrar a conta.' });
@@ -339,7 +371,7 @@ async function startServer() {
   });
 
   // Criar novo pedido (Cart Checkout)
-  app.post('/api/orders', async (req, res) => {
+  app.post('/api/orders', requireAuth, async (req, res) => {
     const { userId, total, items } = req.body;
     
     if (!userId || !items || items.length === 0) {

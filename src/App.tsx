@@ -4,6 +4,18 @@ import { useState, useEffect } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import AdminApp from './Admin';
 
+const apiFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  const token = localStorage.getItem('token');
+  if (token && typeof input === 'string' && input.startsWith('/api')) {
+     const customInit = init ? { ...init } : {};
+     const customHeaders = new Headers(customInit.headers || {});
+     customHeaders.set('Authorization', `Bearer ${token}`);
+     customInit.headers = customHeaders;
+     return fetch(input, customInit);
+  }
+  return fetch(input, init);
+};
+
 function Storefront() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [products, setProducts] = useState<any[]>([]);
@@ -25,7 +37,7 @@ function Storefront() {
 
   // Busca produtos do DB
   useEffect(() => {
-    fetch('/api/products')
+    apiFetch('/api/products')
       .then(res => res.json())
       .then(data => {
         if (data && data.length > 0) {
@@ -48,13 +60,14 @@ function Storefront() {
     const bodyPayload = isRegistering ? { name, email, password } : { email, password };
 
     try {
-      const res = await fetch(endpoint, {
+      const res = await apiFetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(bodyPayload)
       });
       const data = await res.json();
       if (data.success) {
+        if (data.token) localStorage.setItem('token', data.token);
         setUser(data.user);
         setShowLogin(false);
         setEmail('');
@@ -111,7 +124,7 @@ function Storefront() {
          items: cartItems.map(item => ({ id: item.id, quantity: item.quantity }))
       };
       
-      const res = await fetch('/api/orders', {
+      const res = await apiFetch('/api/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
