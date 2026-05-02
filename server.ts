@@ -306,6 +306,68 @@ async function startServer() {
     }
   });
 
+  // Leitura de usuários
+  app.get('/api/users', requireAuth, requireAdmin, async (req, res) => {
+    try {
+      if (!dbConnected) throw new Error("DB offline");
+      const dbResult = await pool.query('SELECT id, name, email, role FROM users ORDER BY id DESC');
+      res.json(dbResult.rows);
+    } catch (err) {
+      res.status(500).json({ error: 'Erro de conexão com o banco de dados.' });
+    }
+  });
+
+  // Criação de usuário (painel admin)
+  app.post('/api/users', requireAuth, requireAdmin, async (req, res) => {
+    const { name, email, password, role } = req.body;
+    if (!name || !email || !password) return res.status(400).json({ success: false, error: 'Dados incompletos.' });
+    try {
+      if (!dbConnected) throw new Error("DB offline");
+      const pass = password;
+      const insertResult = await pool.query(
+        'INSERT INTO users (name, email, password, role) VALUES ($1, $2, $3, $4) RETURNING id, name, email, role',
+        [name, email, pass, role || 'user']
+      );
+      res.json({ success: true, user: insertResult.rows[0] });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Edição de usuário (painel admin)
+  app.put('/api/users/:id', requireAuth, requireAdmin, async (req, res) => {
+    const { name, email, role, password } = req.body;
+    try {
+      if (!dbConnected) throw new Error("DB offline");
+      if (password) {
+        const u = await pool.query(
+          'UPDATE users SET name = $1, email = $2, role = $3, password = $4 WHERE id = $5 RETURNING id, name, email, role',
+          [name, email, role, password, req.params.id]
+        );
+        return res.json({ success: true, user: u.rows[0] });
+      } else {
+        const u = await pool.query(
+          'UPDATE users SET name = $1, email = $2, role = $3 WHERE id = $4 RETURNING id, name, email, role',
+          [name, email, role, req.params.id]
+        );
+        return res.json({ success: true, user: u.rows[0] });
+      }
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Deletar usuário
+  app.delete('/api/users/:id', requireAuth, requireAdmin, async (req, res) => {
+    try {
+      if (!dbConnected) throw new Error("DB offline");
+      await pool.query('DELETE FROM users WHERE id = $1', [req.params.id]);
+      res.json({ success: true });
+    } catch(err) {
+      res.status(500).json({ success: false, error: 'Erro ao deletar usuário.' });
+    }
+  });
+
   // Login de usuários
   app.post('/api/login', async (req, res) => {
     const { email, password } = req.body;
@@ -344,7 +406,7 @@ async function startServer() {
 
     try {
       if (!dbConnected) {
-        const user = { id: Date.now(), name, email, role: req.body.role || 'user' };
+        const user = { id: Date.now(), name, email, role: 'user' };
         const token = jwt.sign(user, JWT_SECRET, { expiresIn: '1d' });
         return res.json({ success: true, user, token });
       }
@@ -358,7 +420,7 @@ async function startServer() {
       // Insere o novo usuário
       const insertResult = await pool.query(
         'INSERT INTO users (name, email, password, role) VALUES ($1, $2, $3, $4) RETURNING id, name, email, role',
-        [name, email, password, req.body.role || 'user']
+        [name, email, password, 'user']
       );
       
       const user = insertResult.rows[0];

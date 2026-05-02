@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { ShoppingBag, EyeOff, ChevronRight, RefreshCw, LogOut, TrendingUp, Package, ShoppingCart, Heart, Activity, Plus, X, Trash2, Home } from 'lucide-react';
+import { ShoppingBag, EyeOff, ChevronRight, RefreshCw, LogOut, TrendingUp, Package, ShoppingCart, Heart, Activity, Plus, X, Trash2, Home, Users, Lock, Unlock } from 'lucide-react';
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 
@@ -23,8 +23,6 @@ const apiFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<R
 
 // -- Login Component --
 function AdminLogin({ onLogin }: { onLogin: (user: any) => void }) {
-  const [isRegistering, setIsRegistering] = useState(false);
-  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -34,8 +32,8 @@ function AdminLogin({ onLogin }: { onLogin: (user: any) => void }) {
     e.preventDefault();
     setLoading(true);
     try {
-      const endpoint = isRegistering ? '/api/register' : '/api/login';
-      const body = isRegistering ? { name, email, password, role: 'admin' } : { email, password };
+      const endpoint = '/api/login';
+      const body = { email, password };
       
       const res = await apiFetch(endpoint, {
         method: 'POST',
@@ -45,10 +43,7 @@ function AdminLogin({ onLogin }: { onLogin: (user: any) => void }) {
       const data = await res.json();
       if (data.success) {
         if (data.token) localStorage.setItem('token', data.token);
-        if (isRegistering) {
-          // Quando cadastra pelo painel admin, ja entra
-          onLogin({ ...data.user, role: 'admin' });
-        } else if (data.user.role === 'admin' || data.user.email === 'admin@valentina.com') {
+        if (data.user.role === 'admin' || data.user.email === 'admin@valentina.com') {
           onLogin(data.user);
         } else {
           localStorage.removeItem('token');
@@ -79,19 +74,6 @@ function AdminLogin({ onLogin }: { onLogin: (user: any) => void }) {
         className="w-full max-w-md bg-white rounded-[32px] shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-8 box-border"
       >
         <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-          {isRegistering && (
-            <div>
-              <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">NOME</label>
-              <input 
-                type="text" 
-                value={name}
-                onChange={e => setName(e.target.value)}
-                placeholder="Seu nome"
-                className="w-full bg-[#F5F5F7] border border-transparent focus:border-[#007AFF]/30 focus:bg-white rounded-2xl px-4 py-3.5 text-sm outline-none transition-all"
-                required
-              />
-            </div>
-          )}
           <div>
             <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">E-MAIL</label>
             <input 
@@ -124,21 +106,8 @@ function AdminLogin({ onLogin }: { onLogin: (user: any) => void }) {
             disabled={loading}
             className="w-full bg-[#007AFF] hover:bg-[#0066CC] active:scale-[0.98] transition-all text-white font-semibold rounded-2xl py-3.5 mt-2 flex items-center justify-center shadow-sm disabled:opacity-70"
           >
-            {loading ? 'Processando...' : isRegistering ? 'Cadastrar' : 'Continuar'} <ChevronRight className="w-4 h-4 ml-1" />
+            {loading ? 'Processando...' : 'Continuar'} <ChevronRight className="w-4 h-4 ml-1" />
           </button>
-
-          <div className="text-center mt-2">
-            <button 
-              type="button" 
-              onClick={() => {
-                setIsRegistering(!isRegistering);
-                setError('');
-              }} 
-              className="text-[#007AFF] text-sm font-medium hover:underline"
-            >
-              {isRegistering ? 'Já tem uma conta? Entrar' : 'Não tem uma conta? Cadastre-se'}
-            </button>
-          </div>
         </form>
       </motion.div>
     </div>
@@ -665,6 +634,154 @@ function AdminOrders() {
 }
 
 
+// -- Users Component --
+function AdminUsers() {
+  const [users, setUsers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [formData, setFormData] = useState({ name: '', email: '', password: '', role: 'user' });
+
+  const fetchUsers = async () => {
+    try {
+      const res = await apiFetch('/api/users');
+      const data = await res.json();
+      setUsers(data);
+    } catch (e) {}
+  };
+
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  const handleAdd = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const res = await apiFetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData)
+      });
+      const data = await res.json();
+      if (data.success) {
+        setShowAddForm(false);
+        setFormData({ name: '', email: '', password: '', role: 'user' });
+        fetchUsers();
+      } else {
+        alert(data.error);
+      }
+    } catch (e) {}
+    setLoading(false);
+  };
+
+  const handleToggleBlock = async (u: any) => {
+    const newRole = u.role === 'blocked' ? 'user' : 'blocked';
+    try {
+      await apiFetch(`/api/users/${u.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: u.name, email: u.email, role: newRole })
+      });
+      fetchUsers();
+    } catch (e) {}
+  };
+
+  const handleDelete = async (u: any) => {
+    if (!confirm(`Remover usuário ${u.name}?`)) return;
+    try {
+      await apiFetch(`/api/users/${u.id}`, { method: 'DELETE' });
+      fetchUsers();
+    } catch (e) {}
+  };
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-4 md:p-8 h-full flex flex-col relative">
+       <div className="mb-6 flex justify-between items-end">
+          <div>
+            <h2 className="text-3xl font-bold text-[#1D1D1F] tracking-tight">Equipe</h2>
+            <p className="text-[11px] font-bold text-[#86868B] tracking-widest mt-1 uppercase">Acesso & Permissões</p>
+          </div>
+          <button 
+             onClick={() => setShowAddForm(true)}
+             className="w-10 h-10 bg-black text-white rounded-full flex items-center justify-center hover:scale-105 transition-transform shadow-lg shadow-black/20"
+          >
+             <Plus className="w-5 h-5" />
+          </button>
+       </div>
+
+       <div className="bg-[#F5F5F7] rounded-[32px] flex-1 flex flex-col p-6 overflow-hidden relative">
+          <div className="space-y-4 overflow-y-auto w-full">
+            {users.map(u => (
+              <div key={u.id} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex justify-between items-center">
+                 <div>
+                   <p className="font-bold text-sm text-[#1D1D1F] flex items-center gap-2">
+                     {u.name}
+                     {u.role === 'admin' && <span className="bg-blue-100 text-blue-700 text-[9px] uppercase font-bold px-1.5 py-0.5 rounded">Admin</span>}
+                     {u.role === 'blocked' && <span className="bg-red-100 text-red-700 text-[9px] uppercase font-bold px-1.5 py-0.5 rounded">Block</span>}
+                   </p>
+                   <p className="text-xs text-[#86868B] mt-0.5">{u.email}</p>
+                 </div>
+                 <div className="flex gap-2">
+                   {u.email !== 'admin@valentina.com' && (
+                     <>
+                       <button onClick={() => handleToggleBlock(u)} className="p-2 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
+                         {u.role === 'blocked' ? <Unlock className="w-4 h-4 text-green-600" /> : <Lock className="w-4 h-4 text-orange-500" />}
+                       </button>
+                       <button onClick={() => handleDelete(u)} className="p-2 bg-red-50 rounded-xl hover:bg-red-100 transition-colors">
+                         <Trash2 className="w-4 h-4 text-red-500" />
+                       </button>
+                     </>
+                   )}
+                 </div>
+              </div>
+            ))}
+          </div>
+       </div>
+
+       {showAddForm && (
+         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/40 backdrop-blur-sm sm:p-6" onClick={() => setShowAddForm(false)}>
+            <motion.div initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} transition={{ type: "spring", bounce: 0, duration: 0.4 }}
+              onClick={e => e.stopPropagation()}
+              className="bg-white w-full max-w-md rounded-t-[32px] sm:rounded-[32px] shadow-2xl flex flex-col max-h-[90vh] overflow-hidden"
+            >
+               <div className="flex items-center justify-between p-6 border-b border-gray-100">
+                  <h3 className="text-xl font-bold tracking-tight">Novo Usuário</h3>
+                  <button onClick={() => setShowAddForm(false)} className="w-8 h-8 flex items-center justify-center bg-gray-100 rounded-full hover:bg-gray-200">
+                    <X className="w-4 h-4" />
+                  </button>
+               </div>
+               
+               <form onSubmit={handleAdd} className="p-6 space-y-4">
+                 <div>
+                   <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Nome</label>
+                   <input required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                 </div>
+                 <div>
+                   <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Email</label>
+                   <input required type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                 </div>
+                 <div>
+                   <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Senha</label>
+                   <input required type="password" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                 </div>
+                 <div>
+                   <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Permissão</label>
+                   <select value={formData.role} onChange={e => setFormData({...formData, role: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                     <option value="user">Usuário Comum</option>
+                     <option value="admin">Administrador</option>
+                   </select>
+                 </div>
+                 <button type="submit" disabled={loading} className="w-full bg-[#007AFF] text-white font-semibold rounded-2xl py-4 mt-6 disabled:opacity-70">
+                   {loading ? 'Salvando...' : 'Adicionar Usuário'}
+                 </button>
+               </form>
+            </motion.div>
+         </div>
+       )}
+    </motion.div>
+  );
+}
+
 // -- Main Router Shell --
 export default function AdminApp() {
   const [user, setUser] = useState<any>(null);
@@ -682,6 +799,7 @@ export default function AdminApp() {
           <Route path="/" element={<AdminOverview />} />
           <Route path="/products" element={<AdminProducts />} />
           <Route path="/orders" element={<AdminOrders />} />
+          <Route path="/users" element={<AdminUsers />} />
         </Routes>
       </div>
 
@@ -707,6 +825,13 @@ export default function AdminApp() {
         >
           <ShoppingCart className={cn("w-6 h-6", location.pathname === '/orders' && "fill-current")} />
           <span className="text-[10px] font-semibold">Vendas</span>
+        </button>
+        <button 
+          onClick={() => navigate('/users')}
+          className={cn("flex flex-col items-center gap-1", location.pathname === '/users' ? "text-[#007AFF]" : "text-[#86868B]")}
+        >
+          <Users className={cn("w-6 h-6", location.pathname === '/users' && "fill-current")} />
+          <span className="text-[10px] font-semibold">Equipe</span>
         </button>
       </div>
     </div>
