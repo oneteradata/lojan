@@ -188,6 +188,11 @@ async function initDB() {
       }
     } catch(e) {}
 
+    try { await pool.query(`ALTER TABLE system_settings ADD COLUMN cost_7d_amount INTEGER DEFAULT 1;`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE system_settings ADD COLUMN cost_7d_type INTEGER DEFAULT 128;`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE system_settings ADD COLUMN cost_30d_amount INTEGER DEFAULT 2;`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE system_settings ADD COLUMN cost_30d_type INTEGER DEFAULT 256;`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE products ADD COLUMN duration_days INTEGER DEFAULT 7;`); } catch (e) {}
     try { await pool.query(`ALTER TABLE products ADD COLUMN is_available BOOLEAN DEFAULT false;`); } catch (e) {}
     try { await pool.query(`ALTER TABLE products ADD COLUMN req_token_amount INTEGER DEFAULT 1;`); } catch (e) {}
     try { await pool.query(`ALTER TABLE products ADD COLUMN req_token_type INTEGER DEFAULT 128;`); } catch (e) {}
@@ -275,17 +280,27 @@ async function startServer() {
 
   // Criação de produto
   app.post('/api/products', requireAuth, async (req: any, res) => {
-    const { name, category, price, tokens, stock, details, media, variations, business_model, tables, seats_per_table } = req.body;
+    const { name, category, price, tokens, stock, details, media, variations, business_model, tables, seats_per_table, duration_days } = req.body;
     try {
       if (!dbConnected) throw new Error("DB offline");
       const userId = req.user.id;
       const userName = req.user.name;
       const userEmail = req.user.email;
 
-      const settingsResult = await pool.query('SELECT product_token_cost_amount, product_token_cost_type FROM system_settings LIMIT 1');
+      const settingsResult = await pool.query('SELECT product_token_cost_amount, product_token_cost_type, cost_7d_amount, cost_7d_type, cost_30d_amount, cost_30d_type FROM system_settings LIMIT 1');
       const settings = settingsResult.rows[0];
-      const requiredAmount = settings ? settings.product_token_cost_amount : 1;
-      const requiredTypeLength = settings ? settings.product_token_cost_type : 128;
+      
+      const duration = parseInt(duration_days) === 30 ? 30 : 7;
+      let requiredAmount = 1;
+      let requiredTypeLength = 128;
+      
+      if (duration === 30) {
+        requiredAmount = settings && settings.cost_30d_amount !== null ? settings.cost_30d_amount : 2;
+        requiredTypeLength = settings && settings.cost_30d_type !== null ? settings.cost_30d_type : 256;
+      } else {
+        requiredAmount = settings && settings.cost_7d_amount !== null ? settings.cost_7d_amount : (settings?.product_token_cost_amount || 1);
+        requiredTypeLength = settings && settings.cost_7d_type !== null ? settings.cost_7d_type : (settings?.product_token_cost_type || 128);
+      }
 
       // Check user wallet
       const userRes = await pool.query('SELECT wallet FROM users WHERE id = $1', [userId]);
@@ -295,8 +310,8 @@ async function startServer() {
       const matchingTokens = userTokens.filter((t: string) => t.length === requiredTypeLength);
       
       if (matchingTokens.length < requiredAmount) {
-        await logAction(userId, userEmail, 'criar_produto_falhou', `Tentou cadastrar produto mas não tem tokens suficientes (tem ${matchingTokens.length}, precisa ${requiredAmount} do tipo ${requiredTypeLength})`);
-        return res.status(400).json({ success: false, error: `Saldo insuficiente. Necessário ${requiredAmount} token(s) do tipo ${requiredTypeLength}.` });
+        await logAction(userId, userEmail, 'criar_produto_falhou', `Tentou cadastrar produto (${duration} dias) mas não tem tokens suficientes (tem ${matchingTokens.length}, precisa ${requiredAmount} do tipo ${requiredTypeLength})`);
+        return res.status(400).json({ success: false, error: `Saldo insuficiente para modalidade de ${duration} dias. Necessário ${requiredAmount} token(s) do tipo ${requiredTypeLength}.` });
       }
 
       // Deduct tokens
@@ -314,13 +329,13 @@ async function startServer() {
 
       const imagesString = (media || []).map((m: any) => m.url).join(',');
       const result = await pool.query(`
-        INSERT INTO products (name, category, price, tokens, stock, details, media, variations, image, user_id, user_name, business_model, tables, seats_per_table, is_available, req_token_amount, req_token_type)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, false, $15, $16) RETURNING *
+        INSERT INTO products (name, category, price, tokens, stock, details, media, variations, image, user_id, user_name, business_model, tables, seats_per_table, is_available, req_token_amount, req_token_type, duration_days)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, false, $15, $16, $17) RETURNING *
       `, [
         name, category, String(price || '0'), parseInt(tokens) || 0, parseInt(stock) || 0, details, 
-        JSON.stringify(media || []), JSON.stringify(variations || []), imagesString, userId, userName, business_model || 'Venda', tables || null, seats_per_table || null, requiredAmount, requiredTypeLength
+        JSON.stringify(media || []), JSON.stringify(variations || []), imagesString, userId, userName, business_model || 'Venda', tables || null, seats_per_table || null, requiredAmount, requiredTypeLength, duration
       ]);
-      await logAction(userId, userEmail, 'produto_adicionado', `Produto ${result.rows[0].name} criado (pendente) e debitou ${requiredAmount} tokens do tipo ${requiredTypeLength}`);
+      await logAction(userId, userEmail, 'produto_adicionado', `Produto ${result.rows[0].name} criado (pendente) para ${duration} dias e debitou ${requiredAmount} tokens do tipo ${requiredTypeLength}`);
       res.json({ success: true, product: result.rows[0] });
     } catch (err: any) {
       console.error('Erro ao criar:', err);
@@ -669,6 +684,33 @@ async function startServer() {
       const updateResult = await pool.query('UPDATE credit_requests SET status = $1 WHERE id = $2 RETURNING *', [status, reqId]);
       await logAction(req.user.id, req.user.email, 'credito_atualizado', `Admin mudou o status do pedido ${reqId} para ${status}`);
       res.json({ success: true, request: updateResult.rows[0] });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // ========== SETTINGS ==========
+  app.get('/api/settings', requireAuth, async (req: any, res) => {
+    try {
+      if (!dbConnected) throw new Error("DB offline");
+      const dbResult = await pool.query('SELECT * FROM system_settings LIMIT 1');
+      res.json({ success: true, settings: dbResult.rows[0] });
+    } catch (err) {
+      res.status(500).json({ success: false, error: 'Erro de conexão com o banco de dados.' });
+    }
+  });
+
+  app.put('/api/settings', requireAuth, requireAdmin, async (req: any, res) => {
+    const { cost_7d_amount, cost_7d_type, cost_30d_amount, cost_30d_type } = req.body;
+    try {
+      if (!dbConnected) throw new Error("DB offline");
+      const dbResult = await pool.query(`
+        UPDATE system_settings 
+        SET cost_7d_amount=$1, cost_7d_type=$2, cost_30d_amount=$3, cost_30d_type=$4
+        RETURNING *
+      `, [cost_7d_amount, cost_7d_type, cost_30d_amount, cost_30d_type]);
+      await logAction(req.user.id, req.user.email, 'config_atualizada', 'Admin atualizou as configurações de tipo de tokens e valores');
+      res.json({ success: true, settings: dbResult.rows[0] });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }

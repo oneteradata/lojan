@@ -409,7 +409,8 @@ function ProductModal({ item, user, onClose }: { item?: any, user?: any, onClose
     details: item?.details || '',
     tables: item?.tables || '',
     seats_per_table: item?.seats_per_table || '2',
-    is_available: item?.is_available || false
+    is_available: item?.is_available || false,
+    duration_days: item?.duration_days?.toString() || '7'
   });
   const [media, setMedia] = useState<{type: string, url: string, fileName?: string}[]>(item?.media || []);
   const [variations, setVariations] = useState<{type: string, options: string[], multiple?: boolean, multipleCount?: boolean, optionPrices?: string[]}[]>(item?.variations || [{ type: 'cor', options: [] }]);
@@ -645,6 +646,19 @@ function ProductModal({ item, user, onClose }: { item?: any, user?: any, onClose
                   <option value="Reserva">Reserva</option>
                 </select>
               </div>
+              
+              {!item && (
+                <div>
+                  <label className="text-[11px] font-bold text-[#86868B] tracking-wide mb-2 block">TEMPO DE PUBLICAÇÃO</label>
+                  <select 
+                    value={formData.duration_days} onChange={e => setFormData({...formData, duration_days: e.target.value})}
+                    className="w-full bg-white border border-gray-200 focus:border-[#007AFF] rounded-2xl px-4 py-3.5 text-sm outline-none transition-all shadow-sm appearance-none"
+                  >
+                    <option value="7">7 Dias (Plano Básico)</option>
+                    <option value="30">30 Dias (Plano Mensal)</option>
+                  </select>
+                </div>
+              )}
             </div>
 
             {formData.business_model === 'Reserva' && (

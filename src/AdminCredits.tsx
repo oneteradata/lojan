@@ -13,6 +13,7 @@ export function AdminCredits({ user }: { user: any }) {
   const [requests, setRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
+  const [settings, setSettings] = useState<any>(null);
   
   const [newReq, setNewReq] = useState({ user_id_recebedor: '', quantidade: '', tipo_token: '' });
 
@@ -22,13 +23,36 @@ export function AdminCredits({ user }: { user: any }) {
       const res = await apiFetch('/api/credit-requests');
       const data = await res.json();
       setRequests(data);
+      
+      if (user.role === 'admin') {
+        const setRes = await apiFetch('/api/settings');
+        const setData = await setRes.json();
+        if (setData.success) {
+          setSettings(setData.settings);
+        }
+      }
     } catch(e) {}
     setLoading(false);
   };
 
   useEffect(() => {
     fetchRequests();
-  }, []);
+  }, [user.role]);
+
+  const handleUpdateSettings = async (e: any) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      await apiFetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settings)
+      });
+      fetchRequests();
+      alert('Configurações atualizadas com sucesso!');
+    } catch (e) {}
+    setLoading(false);
+  };
 
   const handleCreate = async (e: any) => {
     e.preventDefault();
@@ -78,6 +102,47 @@ export function AdminCredits({ user }: { user: any }) {
            )}
          </div>
       </div>
+
+      {user.role === 'admin' && settings && (
+        <div className="bg-white p-6 rounded-2xl border border-gray-100 mb-6 shadow-sm">
+          <h3 className="font-bold text-sm mb-4 text-[#1D1D1F] uppercase tracking-widest border-b border-gray-100 pb-2">Custos de Produto</h3>
+          <form onSubmit={handleUpdateSettings} className="space-y-4">
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+                   <h4 className="font-bold text-xs text-gray-500 mb-3 uppercase">Modalidade 7 Dias</h4>
+                   <div className="grid grid-cols-2 gap-4">
+                     <div>
+                       <label className="text-[10px] font-bold text-gray-400 mb-1 block">Qtd. Tokens</label>
+                       <input type="number" required value={settings.cost_7d_amount || ''} onChange={e => setSettings({...settings, cost_7d_amount: Number(e.target.value)})} className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500" />
+                     </div>
+                     <div>
+                       <label className="text-[10px] font-bold text-gray-400 mb-1 block">Tipo do Token (eX)</label>
+                       <input type="number" required value={settings.cost_7d_type || ''} onChange={e => setSettings({...settings, cost_7d_type: Number(e.target.value)})} className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500" />
+                     </div>
+                   </div>
+                </div>
+                <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+                   <h4 className="font-bold text-xs text-gray-500 mb-3 uppercase">Modalidade 30 Dias</h4>
+                   <div className="grid grid-cols-2 gap-4">
+                     <div>
+                       <label className="text-[10px] font-bold text-gray-400 mb-1 block">Qtd. Tokens</label>
+                       <input type="number" required value={settings.cost_30d_amount || ''} onChange={e => setSettings({...settings, cost_30d_amount: Number(e.target.value)})} className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500" />
+                     </div>
+                     <div>
+                       <label className="text-[10px] font-bold text-gray-400 mb-1 block">Tipo do Token (eX)</label>
+                       <input type="number" required value={settings.cost_30d_type || ''} onChange={e => setSettings({...settings, cost_30d_type: Number(e.target.value)})} className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500" />
+                     </div>
+                   </div>
+                </div>
+             </div>
+             <div className="flex justify-end">
+               <button type="submit" disabled={loading} className="px-5 py-2.5 bg-black text-white rounded-xl text-sm font-bold hover:bg-gray-800 disabled:opacity-50">
+                 Salvar Configurações
+               </button>
+             </div>
+          </form>
+        </div>
+      )}
 
       <div className="bg-gray-50 p-6 rounded-2xl border border-gray-100 mb-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
          <div>
