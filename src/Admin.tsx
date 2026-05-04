@@ -396,7 +396,7 @@ function AdminProducts() {
 function ProductModal({ item, onClose }: { item?: any, onClose: () => void }) {
   const [formData, setFormData] = useState({
     name: item?.name || '', 
-    category: item?.category || 'Geral', 
+    category: item?.category || 'Beleza feminina', 
     business_model: item?.business_model || 'Venda',
     price: item?.price || '', 
     tokens: item?.tokens || '', 
@@ -600,11 +600,18 @@ function ProductModal({ item, onClose }: { item?: any, onClose: () => void }) {
                   value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})}
                   className="w-full bg-white border border-gray-200 focus:border-[#007AFF] rounded-2xl px-4 py-3.5 text-sm outline-none transition-all shadow-sm appearance-none"
                 >
-                  <option>Geral</option>
-                  <option>Roupas</option>
-                  <option>Moda</option>
-                  <option>Eletrônicos</option>
-                  <option>Acessórios</option>
+                  <option>Beleza feminina</option>
+                  <option>Saúde</option>
+                  <option>Automotivo</option>
+                  <option>Delivery</option>
+                  <option>Restaurante</option>
+                  <option>Eletrodoméstico</option>
+                  <option>Eletrônico</option>
+                  <option>Construção</option>
+                  <option>Farmaceutico</option>
+                  <option>Mercado</option>
+                  <option>Veículo</option>
+                  <option>Imoveis</option>
                 </select>
               </div>
               <div>
