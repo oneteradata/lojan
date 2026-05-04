@@ -58,6 +58,16 @@ pool.on('error', (err) => {
 
 let dbConnected = false;
 
+async function logAction(userId: number | null, userEmail: string | null, eventName: string, details: string) {
+  try {
+    if (!dbConnected) return;
+    await pool.query('INSERT INTO logs (user_id, user_email, event_name, details) VALUES ($1, $2, $3, $4)', 
+      [userId, userEmail, eventName, details]);
+  } catch(e) {
+    console.error('Erro ao salvar log:', e);
+  }
+}
+
 async function initDB() {
   try {
     // Testa a conexão antes de tentar rodar os comandos
@@ -119,6 +129,8 @@ async function initDB() {
     try { await pool.query(`ALTER TABLE users ADD COLUMN company_name VARCHAR(255);`); } catch (e) {}
     try { await pool.query(`ALTER TABLE users ADD COLUMN company_logo TEXT;`); } catch (e) {}
 
+    try { await pool.query(`ALTER TABLE users ADD COLUMN wallet JSONB DEFAULT '{"tokens": []}';`); } catch (e) {}
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS user_client (
         id SERIAL PRIMARY KEY,
@@ -135,6 +147,51 @@ async function initDB() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
+
+    // Novas tabelas
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS logs (
+        id SERIAL PRIMARY KEY,
+        event_name VARCHAR(255),
+        user_id INTEGER,
+        user_email VARCHAR(255),
+        details TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS credit_requests (
+        id SERIAL PRIMARY KEY,
+        user_id_recebedor INTEGER,
+        user_id_solicitante INTEGER,
+        quantidade INTEGER NOT NULL,
+        tipo_token INTEGER NOT NULL,
+        status VARCHAR(50) DEFAULT 'pendente',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS system_settings (
+        id SERIAL PRIMARY KEY,
+        product_token_cost_amount INTEGER DEFAULT 1,
+        product_token_cost_type INTEGER DEFAULT 128
+      );
+    `);
+
+    // Insert default system settings if missing
+    try {
+      const sysRes = await pool.query('SELECT COUNT(*) FROM system_settings');
+      if (parseInt(sysRes.rows[0].count) === 0) {
+        await pool.query('INSERT INTO system_settings (product_token_cost_amount, product_token_cost_type) VALUES (1, 128)');
+      }
+    } catch(e) {}
+
+    try { await pool.query(`ALTER TABLE products ADD COLUMN is_available BOOLEAN DEFAULT false;`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE products ADD COLUMN req_token_amount INTEGER DEFAULT 1;`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE products ADD COLUMN req_token_type INTEGER DEFAULT 128;`); } catch (e) {}
+
 
     // Criação da tabela de pedidos (orders) e os itens
     await pool.query(`
@@ -190,7 +247,7 @@ async function startServer() {
   app.get('/api/products', async (req, res) => {
     try {
       if (!dbConnected) throw new Error("DB offline");
-      const dbResult = await pool.query('SELECT * FROM products ORDER BY id DESC');
+      const dbResult = await pool.query('SELECT * FROM products WHERE is_available = true ORDER BY id DESC');
       res.json(dbResult.rows);
     } catch (err) {
       res.status(500).json({ error: 'Erro de conexão com o banco de dados.' });
@@ -223,14 +280,47 @@ async function startServer() {
       if (!dbConnected) throw new Error("DB offline");
       const userId = req.user.id;
       const userName = req.user.name;
+      const userEmail = req.user.email;
+
+      const settingsResult = await pool.query('SELECT product_token_cost_amount, product_token_cost_type FROM system_settings LIMIT 1');
+      const settings = settingsResult.rows[0];
+      const requiredAmount = settings ? settings.product_token_cost_amount : 1;
+      const requiredTypeLength = settings ? settings.product_token_cost_type : 128;
+
+      // Check user wallet
+      const userRes = await pool.query('SELECT wallet FROM users WHERE id = $1', [userId]);
+      const wallet = userRes.rows[0].wallet || { tokens: [] };
+      const userTokens = wallet.tokens || [];
+      
+      const matchingTokens = userTokens.filter((t: string) => t.length === requiredTypeLength);
+      
+      if (matchingTokens.length < requiredAmount) {
+        await logAction(userId, userEmail, 'criar_produto_falhou', `Tentou cadastrar produto mas não tem tokens suficientes (tem ${matchingTokens.length}, precisa ${requiredAmount} do tipo ${requiredTypeLength})`);
+        return res.status(400).json({ success: false, error: `Saldo insuficiente. Necessário ${requiredAmount} token(s) do tipo ${requiredTypeLength}.` });
+      }
+
+      // Deduct tokens
+      let deducted = 0;
+      const newTokensList = [];
+      for (const t of userTokens) {
+        if (t.length === requiredTypeLength && deducted < requiredAmount) {
+          deducted++;
+        } else {
+          newTokensList.push(t);
+        }
+      }
+      wallet.tokens = newTokensList;
+      await pool.query('UPDATE users SET wallet = $1 WHERE id = $2', [JSON.stringify(wallet), userId]);
+
       const imagesString = (media || []).map((m: any) => m.url).join(',');
       const result = await pool.query(`
-        INSERT INTO products (name, category, price, tokens, stock, details, media, variations, image, user_id, user_name, business_model, tables, seats_per_table)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING *
+        INSERT INTO products (name, category, price, tokens, stock, details, media, variations, image, user_id, user_name, business_model, tables, seats_per_table, is_available, req_token_amount, req_token_type)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, false, $15, $16) RETURNING *
       `, [
         name, category, String(price || '0'), parseInt(tokens) || 0, parseInt(stock) || 0, details, 
-        JSON.stringify(media || []), JSON.stringify(variations || []), imagesString, userId, userName, business_model || 'Venda', tables || null, seats_per_table || null
+        JSON.stringify(media || []), JSON.stringify(variations || []), imagesString, userId, userName, business_model || 'Venda', tables || null, seats_per_table || null, requiredAmount, requiredTypeLength
       ]);
+      await logAction(userId, userEmail, 'produto_adicionado', `Produto ${result.rows[0].name} criado (pendente) e debitou ${requiredAmount} tokens do tipo ${requiredTypeLength}`);
       res.json({ success: true, product: result.rows[0] });
     } catch (err: any) {
       console.error('Erro ao criar:', err);
@@ -242,14 +332,20 @@ async function startServer() {
   app.delete('/api/products/:id', requireAuth, async (req: any, res) => {
     try {
       if (!dbConnected) throw new Error("DB offline");
+      const userEmail = req.user.email;
       if (req.user.role !== 'admin') {
          const product = await pool.query('SELECT user_id FROM products WHERE id = $1', [req.params.id]);
          if (product.rows.length === 0 || product.rows[0].user_id !== req.user.id) {
             return res.status(403).json({ success: false, error: 'Sem permissão para deletar este produto.' });
          }
       }
-      await pool.query('DELETE FROM products WHERE id = $1', [req.params.id]);
-      res.json({ success: true });
+      const dbResult = await pool.query('DELETE FROM products WHERE id = $1 RETURNING id', [req.params.id]);
+      if (dbResult.rows.length > 0) {
+          await logAction(req.user.id, userEmail, 'produto_removido', `Produto ${req.params.id} removido`);
+          res.json({ success: true });
+      } else {
+          res.status(404).json({ success: false, error: 'Produto não encontrado.' });
+      }
     } catch(err) {
       res.status(500).json({ success: false, error: 'Erro ao deletar produto.' });
     }
@@ -257,27 +353,33 @@ async function startServer() {
 
   // Editar produto
   app.put('/api/products/:id', requireAuth, async (req: any, res) => {
-    const { name, category, price, tokens, stock, details, media, variations, business_model, tables, seats_per_table } = req.body;
+    const { name, category, price, tokens, stock, details, media, variations, business_model, tables, seats_per_table, is_available } = req.body;
     try {
       if (!dbConnected) throw new Error("DB offline");
+      const userEmail = req.user.email;
+      const isAdmin = req.user.role === 'admin';
       
-      if (req.user.role !== 'admin') {
-         const product = await pool.query('SELECT user_id FROM products WHERE id = $1', [req.params.id]);
-         if (product.rows.length === 0 || product.rows[0].user_id !== req.user.id) {
-            return res.status(403).json({ success: false, error: 'Sem permissão para editar este produto' });
-         }
+      const productObj = await pool.query('SELECT * FROM products WHERE id = $1', [req.params.id]);
+      if (productObj.rows.length === 0) return res.status(404).json({ success: false, error: 'Produto não encontrado' });
+      
+      if (!isAdmin && productObj.rows[0].user_id !== req.user.id) {
+          return res.status(403).json({ success: false, error: 'Sem permissão para editar este produto' });
       }
+
+      // Se for admin, permite alterar is_available, se não, mantém o anterior
+      const statusToSet = isAdmin && is_available !== undefined ? is_available : productObj.rows[0].is_available;
 
       const imagesString = (media || []).map((m: any) => m.url).join(',');
       const result = await pool.query(`
         UPDATE products 
-        SET name = $1, category = $2, price = $3, tokens = $4, stock = $5, details = $6, media = $7, variations = $8, image = $9, business_model = $10, tables = $11, seats_per_table = $12
-        WHERE id = $13 RETURNING *
+        SET name = $1, category = $2, price = $3, tokens = $4, stock = $5, details = $6, media = $7, variations = $8, image = $9, business_model = $10, tables = $11, seats_per_table = $12, is_available = $13
+        WHERE id = $14 RETURNING *
       `, [
         name, category, String(price || '0'), parseInt(tokens) || 0, parseInt(stock) || 0, details, 
-        JSON.stringify(media || []), JSON.stringify(variations || []), imagesString, business_model || 'Venda', tables || null, seats_per_table || null,
+        JSON.stringify(media || []), JSON.stringify(variations || []), imagesString, business_model || 'Venda', tables || null, seats_per_table || null, statusToSet,
         req.params.id
       ]);
+      await logAction(req.user.id, userEmail, 'produto_editado', `Produto ${req.params.id} (${name}) editado`);
       res.json({ success: true, product: result.rows[0] });
     } catch (err: any) {
       console.error('Erro ao editar:', err);
@@ -406,15 +508,15 @@ async function startServer() {
   app.get('/api/users', requireAuth, requireAdmin, async (req, res) => {
     try {
       if (!dbConnected) throw new Error("DB offline");
-      const dbResult = await pool.query('SELECT id, name, email, role, company_name, company_logo FROM users ORDER BY id DESC');
+      const dbResult = await pool.query('SELECT id, name, email, role, company_name, company_logo, wallet FROM users ORDER BY id DESC');
       res.json(dbResult.rows);
     } catch (err) {
       res.status(500).json({ error: 'Erro de conexão com o banco de dados.' });
     }
   });
 
-  // Criação de usuário (painel admin)
-  app.post('/api/users', requireAuth, requireAdmin, async (req, res) => {
+  // Log user addition and deletion
+  app.post('/api/users', requireAuth, requireAdmin, async (req: any, res) => {
     const { name, email, password, role, company_name, company_logo } = req.body;
     if (!name || !email || !password) return res.status(400).json({ success: false, error: 'Dados incompletos.' });
     try {
@@ -424,43 +526,151 @@ async function startServer() {
         'INSERT INTO users (name, email, password, role, company_name, company_logo) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, name, email, role, company_name, company_logo',
         [name, email, pass, role || 'user', company_name || null, company_logo || null]
       );
+      await logAction(req.user.id, req.user.email, 'usuario_adicionado', `O admin adicionou ${email}`);
       res.json({ success: true, user: insertResult.rows[0] });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }
   });
 
-  // Edição de usuário (painel admin)
-  app.put('/api/users/:id', requireAuth, requireAdmin, async (req, res) => {
+  app.put('/api/users/:id', requireAuth, requireAdmin, async (req: any, res) => {
     const { name, email, role, password, company_name, company_logo } = req.body;
     try {
       if (!dbConnected) throw new Error("DB offline");
+      let u;
       if (password) {
-        const u = await pool.query(
+        u = await pool.query(
           'UPDATE users SET name = $1, email = $2, role = $3, password = $4, company_name = $5, company_logo = $6 WHERE id = $7 RETURNING id, name, email, role, company_name, company_logo',
           [name, email, role, password, company_name || null, company_logo || null, req.params.id]
         );
-        return res.json({ success: true, user: u.rows[0] });
       } else {
-        const u = await pool.query(
+        u = await pool.query(
           'UPDATE users SET name = $1, email = $2, role = $3, company_name = $4, company_logo = $5 WHERE id = $6 RETURNING id, name, email, role, company_name, company_logo',
           [name, email, role, company_name || null, company_logo || null, req.params.id]
         );
-        return res.json({ success: true, user: u.rows[0] });
       }
+      await logAction(req.user.id, req.user.email, 'usuario_editado', `O admin editou ${email}`);
+      return res.json({ success: true, user: u.rows[0] });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }
   });
 
-  // Deletar usuário
-  app.delete('/api/users/:id', requireAuth, requireAdmin, async (req, res) => {
+  app.delete('/api/users/:id', requireAuth, requireAdmin, async (req: any, res) => {
     try {
       if (!dbConnected) throw new Error("DB offline");
       await pool.query('DELETE FROM users WHERE id = $1', [req.params.id]);
+      await logAction(req.user.id, req.user.email, 'usuario_removido', `O admin deletou usuário ${req.params.id}`);
       res.json({ success: true });
     } catch(err) {
       res.status(500).json({ success: false, error: 'Erro ao deletar usuário.' });
+    }
+  });
+
+  app.get('/api/me', requireAuth, async (req: any, res) => {
+    try {
+      if (!dbConnected) throw new Error("DB offline");
+      const dbResult = await pool.query('SELECT id, name, email, role, company_name, company_logo, wallet FROM users WHERE id = $1', [req.user.id]);
+      if (dbResult.rows.length > 0) {
+        res.json({ success: true, user: dbResult.rows[0] });
+      } else {
+        res.status(404).json({ success: false, error: 'Usuário não encontrado' });
+      }
+    } catch (err) {
+      res.status(500).json({ success: false, error: 'Erro ao buscar dados.' });
+    }
+  });
+
+  // GET /api/logs
+  app.get('/api/logs', requireAuth, requireAdmin, async (req: any, res) => {
+    try {
+      if (!dbConnected) throw new Error("DB offline");
+      const dbResult = await pool.query('SELECT * FROM logs ORDER BY id DESC LIMIT 500');
+      res.json(dbResult.rows);
+    } catch (err) {
+      res.status(500).json({ error: 'Erro de conexão com o banco de dados.' });
+    }
+  });
+
+  // ========== CREDITS (PEDIDOS DE CRÉDITO) ==========
+  app.get('/api/credit-requests', requireAuth, async (req: any, res) => {
+    try {
+      if (!dbConnected) throw new Error("DB offline");
+      const isAdmin = req.user.role === 'admin';
+      let q = `
+        SELECT cr.*, u_rec.name as recebedor_nome, u_rec.email as recebedor_email, u_sol.name as solicitante_nome 
+        FROM credit_requests cr 
+        LEFT JOIN users u_rec ON cr.user_id_recebedor = u_rec.id 
+        LEFT JOIN users u_sol ON cr.user_id_solicitante = u_sol.id 
+      `;
+      let vars = [];
+      if (!isAdmin) {
+        q += ' WHERE cr.user_id_recebedor = $1';
+        vars.push(req.user.id);
+      }
+      q += ' ORDER BY cr.id DESC';
+      
+      const dbResult = await pool.query(q, vars);
+      res.json(dbResult.rows);
+    } catch (err) {
+      res.status(500).json({ error: 'Erro de conexão.' });
+    }
+  });
+
+  app.post('/api/credit-requests', requireAuth, requireAdmin, async (req: any, res) => {
+    try {
+      const { user_id_recebedor, quantidade, tipo_token } = req.body;
+      if (!dbConnected) throw new Error("DB offline");
+      const insertResult = await pool.query(
+        'INSERT INTO credit_requests (user_id_recebedor, user_id_solicitante, quantidade, tipo_token, status) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+        [user_id_recebedor, req.user.id, quantidade, tipo_token, 'pendente']
+      );
+      await logAction(req.user.id, req.user.email, 'credito_solicitado', `Admin solicitou ${quantidade} tokens do tipo ${tipo_token} para o usuario ${user_id_recebedor}`);
+      res.json({ success: true, request: insertResult.rows[0] });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.put('/api/credit-requests/:id/status', requireAuth, requireAdmin, async (req: any, res) => {
+    try {
+      const { status } = req.body;
+      if (!dbConnected) throw new Error("DB offline");
+      
+      const reqId = req.params.id;
+      const qRes = await pool.query('SELECT * FROM credit_requests WHERE id = $1', [reqId]);
+      if (qRes.rows.length === 0) return res.status(404).json({ success: false, error: 'Pedido não encontrado' });
+      
+      const pedido = qRes.rows[0];
+      
+      // If changing to 'gerado', logic to add tokens to user wallet
+      if (status === 'gerado' && pedido.status !== 'gerado') {
+        const userRes = await pool.query('SELECT wallet FROM users WHERE id = $1', [pedido.user_id_recebedor]);
+        if (userRes.rows.length > 0) {
+           const wallet = userRes.rows[0].wallet || { tokens: [] };
+           const userTokens = wallet.tokens || [];
+           
+           // Generate tokens string of required length
+           const length = pedido.tipo_token;
+           for(let i=0; i<pedido.quantidade; i++) {
+             // Generate random string of length
+             let tokenStr = '';
+             const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+             for(let j=0; j<length; j++) {
+               tokenStr += chars.charAt(Math.floor(Math.random() * chars.length));
+             }
+             userTokens.push(tokenStr);
+           }
+           wallet.tokens = userTokens;
+           await pool.query('UPDATE users SET wallet = $1 WHERE id = $2', [JSON.stringify(wallet), pedido.user_id_recebedor]);
+        }
+      }
+
+      const updateResult = await pool.query('UPDATE credit_requests SET status = $1 WHERE id = $2 RETURNING *', [status, reqId]);
+      await logAction(req.user.id, req.user.email, 'credito_atualizado', `Admin mudou o status do pedido ${reqId} para ${status}`);
+      res.json({ success: true, request: updateResult.rows[0] });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
     }
   });
 
@@ -539,15 +749,19 @@ async function startServer() {
       if (dbResult.rows.length > 0) {
         const user = dbResult.rows[0];
         if (user.role === 'blocked') {
+          await logAction(user.id, user.email, 'login_falhou', 'Usuário bloqueado tentou acessar');
           return res.status(403).json({ success: false, error: 'Usuário bloqueado pelo administrador.' });
         }
+        await logAction(user.id, user.email, 'login', 'Login efetuado com sucesso');
         const token = jwt.sign(user, JWT_SECRET, { expiresIn: '1d' });
         res.json({ success: true, user, token });
       } else {
+        await logAction(null, email, 'login_falhou', 'Credenciais inválidas');
         res.status(401).json({ success: false, error: 'Credenciais inválidas. Tente novamente.' });
       }
     } catch (err) {
       console.error(err);
+      await logAction(null, email, 'erro', 'Erro no login');
       res.status(500).json({ error: 'Erro de conexão com o banco de dados.' });
     }
   });
@@ -570,6 +784,7 @@ async function startServer() {
       // Verifica se o email já existe
       const checkResult = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
       if (checkResult.rows.length > 0) {
+        await logAction(null, email, 'registro_falhou', 'E-mail já em uso');
         return res.status(400).json({ success: false, error: 'Este e-mail já está em uso.' });
       }
 
@@ -580,6 +795,7 @@ async function startServer() {
       );
       
       const user = insertResult.rows[0];
+      await logAction(user.id, user.email, 'registro', 'Conta criada com sucesso');
       const token = jwt.sign(user, JWT_SECRET, { expiresIn: '1d' });
       res.json({ success: true, user, token });
     } catch (err) {
