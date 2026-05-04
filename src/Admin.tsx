@@ -388,7 +388,8 @@ function ProductModal({ item, onClose }: { item?: any, onClose: () => void }) {
     details: item?.details || ''
   });
   const [media, setMedia] = useState<{type: string, url: string, fileName?: string}[]>(item?.media || []);
-  const [variations, setVariations] = useState<{type: string, options: string[]}[]>(item?.variations || [{ type: 'cor', options: [] }]);
+  const [variations, setVariations] = useState<{type: string, options: string[], multiple?: boolean, multipleCount?: boolean}[]>(item?.variations || [{ type: 'cor', options: [] }]);
+  const [newOptionTexts, setNewOptionTexts] = useState<{[key: number]: string}>({});
 
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -493,15 +494,6 @@ function ProductModal({ item, onClose }: { item?: any, onClose: () => void }) {
     newVars[idx].type = type;
     setVariations(newVars);
   };
-  
-  const addVariationOption = (idx: number) => {
-    const opt = prompt('Nova opção:');
-    if (opt) {
-      const newVars = [...variations];
-      newVars[idx].options.push(opt);
-      setVariations(newVars);
-    }
-  }
   
   const removeVariationOption = (idx: number, optIdx: number) => {
     const newVars = [...variations];
@@ -670,14 +662,77 @@ function ProductModal({ item, onClose }: { item?: any, onClose: () => void }) {
                           <button onClick={() => setVariations(variations.filter((_, i) => i !== idx))} className="w-9 h-9 shrink-0 bg-[#FFF0F0] rounded-xl flex items-center justify-center text-[#FF3B30]"><Trash2 className="w-4 h-4" /></button>
                         </div>
                         <label className="text-[9px] font-bold text-[#86868B] tracking-wide mt-4 mb-2 block">OPÇÕES</label>
-                        <div className="flex gap-2 flex-wrap">
+                        <div className="flex gap-2 flex-wrap items-center">
                            {v.options.map((opt, optIdx) => (
                              <span key={optIdx} className="bg-white border border-gray-200 rounded-full pl-3 pr-1 py-1 text-xs font-semibold flex items-center gap-1 shadow-sm">
                                {opt} 
-                               <button onClick={() => removeVariationOption(idx, optIdx)} className="w-5 h-5 rounded-full hover:bg-gray-100 flex justify-center items-center"><X className="w-3 h-3 text-gray-500" /></button>
+                               <button onClick={(e) => { e.preventDefault(); removeVariationOption(idx, optIdx); }} className="w-5 h-5 rounded-full hover:bg-gray-100 flex justify-center items-center"><X className="w-3 h-3 text-gray-500" /></button>
                              </span>
                            ))}
-                           <button onClick={() => addVariationOption(idx)} className="border border-dashed border-gray-300 text-gray-500 hover:text-gray-700 hover:border-gray-400 rounded-full px-3 py-1 text-xs font-medium transition-colors">+ Opção</button>
+                           <div className="flex items-center gap-1 border-b border-gray-300 pb-0.5">
+                             <input 
+                               type="text" 
+                               value={newOptionTexts[idx] || ''} 
+                               onChange={e => setNewOptionTexts({...newOptionTexts, [idx]: e.target.value})} 
+                               onKeyDown={e => {
+                                 if (e.key === 'Enter') {
+                                     e.preventDefault();
+                                     if (newOptionTexts[idx]) {
+                                         const newVars = [...variations];
+                                         newVars[idx].options.push(newOptionTexts[idx]);
+                                         setVariations(newVars);
+                                         setNewOptionTexts({...newOptionTexts, [idx]: ''});
+                                     }
+                                 }
+                               }}
+                               placeholder="+ Nova opção"
+                               className="text-xs bg-transparent border-none outline-none font-medium w-24 text-gray-600 placeholder-gray-400"
+                             />
+                             <button 
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  if (newOptionTexts[idx]) {
+                                      const newVars = [...variations];
+                                      newVars[idx].options.push(newOptionTexts[idx]);
+                                      setVariations(newVars);
+                                      setNewOptionTexts({...newOptionTexts, [idx]: ''});
+                                  }
+                                }}
+                                className="text-[#007AFF] hover:bg-blue-50 rounded-full px-2 py-0.5 text-[10px] font-bold transition-colors"
+                             >
+                                ADD
+                             </button>
+                           </div>
+                        </div>
+
+                        {/* Configurações Adicionais da Variação */}
+                        <div className="flex flex-col gap-2 mt-4 pt-3 border-t border-gray-50">
+                          <label className="flex items-center gap-2 cursor-pointer w-fit">
+                            <input 
+                              type="checkbox" 
+                              checked={v.multiple || false}
+                              onChange={(e) => {
+                                const newVars = [...variations];
+                                newVars[idx].multiple = e.target.checked;
+                                setVariations(newVars);
+                              }}
+                              className="accent-[#007AFF] w-4 h-4 cursor-pointer"
+                            />
+                            <span className="text-[10px] font-bold text-[#86868B] tracking-wide">ACEITAR MÚLTIPLAS OPÇÕES</span>
+                          </label>
+                          <label className="flex items-center gap-2 cursor-pointer w-fit">
+                            <input 
+                              type="checkbox" 
+                              checked={v.multipleCount || false}
+                              onChange={(e) => {
+                                const newVars = [...variations];
+                                newVars[idx].multipleCount = e.target.checked;
+                                setVariations(newVars);
+                              }}
+                              className="accent-[#007AFF] w-4 h-4 cursor-pointer"
+                            />
+                            <span className="text-[10px] font-bold text-[#86868B] tracking-wide">INCLUIR CONTAGEM (EX: +2 BATATAS)</span>
+                          </label>
                         </div>
                     </div>
                   ))}
