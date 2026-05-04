@@ -701,49 +701,54 @@ function ProductModal({ item, onClose }: { item?: any, onClose: () => void }) {
                                <button onClick={(e) => { e.preventDefault(); removeVariationOption(idx, optIdx); }} className="w-5 h-5 rounded-full hover:bg-gray-100 flex justify-center items-center"><X className="w-3 h-3 text-gray-500" /></button>
                              </span>
                            ))}
-                           <div className="flex items-center gap-1 border-b border-gray-300 pb-0.5">
-                             <input 
-                               type="text" 
-                               value={newOptionTexts[idx] || ''} 
-                               onChange={e => setNewOptionTexts({...newOptionTexts, [idx]: e.target.value})} 
-                               onKeyDown={e => {
-                                 if (e.key === 'Enter') {
-                                     e.preventDefault();
-                                     if (newOptionTexts[idx]) {
-                                         const newVars = [...variations];
-                                         newVars[idx].options.push(newOptionTexts[idx]);
-                                         if (!newVars[idx].optionPrices) newVars[idx].optionPrices = [];
-                                         newVars[idx].optionPrices!.push(newOptionPrices[idx] || '');
-                                         setVariations(newVars);
-                                         setNewOptionTexts({...newOptionTexts, [idx]: ''});
-                                         setNewOptionPrices({...newOptionPrices, [idx]: ''});
-                                     }
-                                 }
-                               }}
-                               placeholder="+ Nova opção"
-                               className="text-xs bg-transparent border-none outline-none font-medium w-20 text-gray-600 placeholder-gray-400"
-                             />
-                             <input 
-                               type="number" 
-                               value={newOptionPrices[idx] || ''} 
-                               onChange={e => setNewOptionPrices({...newOptionPrices, [idx]: e.target.value})} 
-                               onKeyDown={e => {
-                                 if (e.key === 'Enter') {
-                                     e.preventDefault();
-                                     if (newOptionTexts[idx]) {
-                                         const newVars = [...variations];
-                                         newVars[idx].options.push(newOptionTexts[idx]);
-                                         if (!newVars[idx].optionPrices) newVars[idx].optionPrices = [];
-                                         newVars[idx].optionPrices!.push(newOptionPrices[idx] || '');
-                                         setVariations(newVars);
-                                         setNewOptionTexts({...newOptionTexts, [idx]: ''});
-                                         setNewOptionPrices({...newOptionPrices, [idx]: ''});
-                                     }
-                                 }
-                               }}
-                               placeholder="+ R$ (opcional)"
-                               className="text-xs bg-transparent border-none outline-none font-medium w-24 text-gray-600 placeholder-gray-400"
-                             />
+                           <div className="flex gap-2 mt-2 w-full">
+                             <div className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 flex items-center">
+                               <input 
+                                 type="text" 
+                                 value={newOptionTexts[idx] || ''} 
+                                 onChange={e => setNewOptionTexts({...newOptionTexts, [idx]: e.target.value})} 
+                                 onKeyDown={e => {
+                                   if (e.key === 'Enter') {
+                                       e.preventDefault();
+                                       if (newOptionTexts[idx]) {
+                                           const newVars = [...variations];
+                                           newVars[idx].options.push(newOptionTexts[idx]);
+                                           if (!newVars[idx].optionPrices) newVars[idx].optionPrices = [];
+                                           newVars[idx].optionPrices!.push(newOptionPrices[idx] || '');
+                                           setVariations(newVars);
+                                           setNewOptionTexts({...newOptionTexts, [idx]: ''});
+                                           setNewOptionPrices({...newOptionPrices, [idx]: ''});
+                                       }
+                                   }
+                                 }}
+                                 placeholder="Nome da opção"
+                                 className="text-xs bg-transparent border-none outline-none font-medium w-full text-gray-700 placeholder-gray-400"
+                               />
+                             </div>
+                             <div className="w-28 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 flex items-center">
+                               <span className="text-xs text-gray-400 mr-1 font-medium">R$</span>
+                               <input 
+                                 type="number" 
+                                 value={newOptionPrices[idx] || ''} 
+                                 onChange={e => setNewOptionPrices({...newOptionPrices, [idx]: e.target.value})} 
+                                 onKeyDown={e => {
+                                   if (e.key === 'Enter') {
+                                       e.preventDefault();
+                                       if (newOptionTexts[idx]) {
+                                           const newVars = [...variations];
+                                           newVars[idx].options.push(newOptionTexts[idx]);
+                                           if (!newVars[idx].optionPrices) newVars[idx].optionPrices = [];
+                                           newVars[idx].optionPrices!.push(newOptionPrices[idx] || '');
+                                           setVariations(newVars);
+                                           setNewOptionTexts({...newOptionTexts, [idx]: ''});
+                                           setNewOptionPrices({...newOptionPrices, [idx]: ''});
+                                       }
+                                   }
+                                 }}
+                                 placeholder="0,00"
+                                 className="text-xs bg-transparent border-none outline-none font-medium w-full text-gray-700 placeholder-gray-400"
+                               />
+                             </div>
                              <button 
                                 onClick={(e) => {
                                   e.preventDefault();
@@ -757,7 +762,7 @@ function ProductModal({ item, onClose }: { item?: any, onClose: () => void }) {
                                       setNewOptionPrices({...newOptionPrices, [idx]: ''});
                                   }
                                 }}
-                                className="text-[#007AFF] hover:bg-blue-50 rounded-full px-2 py-0.5 text-[10px] font-bold transition-colors"
+                                className="bg-[#007AFF] hover:bg-blue-600 text-white rounded-xl px-4 text-xs font-bold transition-colors"
                              >
                                 ADD
                              </button>
@@ -871,7 +876,11 @@ function AdminUsers() {
     try {
       const res = await apiFetch('/api/users');
       const data = await res.json();
-      setUsers(data);
+      if (Array.isArray(data)) {
+        setUsers(data);
+      } else {
+        setUsers([]);
+      }
     } catch (e) {}
   };
 
