@@ -263,7 +263,7 @@ async function startServer() {
   });
 
   // Obter link de upload direto pro MinIO
-  app.post('/api/presigned-url', requireAuth, async (req, res) => {
+  app.post('/api/presigned-url', async (req, res) => {
     const { fileName, mimeType } = req.body;
     if (!fileName) return res.status(400).json({ error: 'Falta o nome do arquivo' });
     try {
