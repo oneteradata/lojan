@@ -58,6 +58,26 @@ pool.on('error', (err) => {
 
 let dbConnected = false;
 
+function normalizeUserWallet(user: any) {
+  if (!user) return;
+  const rawWallet = user.wallet || {};
+  let userTokens: string[] = [];
+  const uidStr = String(user.id);
+  if (Array.isArray(rawWallet.tokens)) {
+    userTokens = rawWallet.tokens.filter((t: any) => typeof t === 'string');
+  } else if (rawWallet[uidStr] && typeof rawWallet[uidStr] === 'object') {
+    userTokens = Object.values(rawWallet[uidStr]).filter((t: any) => typeof t === 'string') as string[];
+  } else {
+    for (const k in rawWallet) {
+      if (typeof rawWallet[k] === 'object' && !Array.isArray(rawWallet[k])) {
+        userTokens = Object.values(rawWallet[k]).filter((t: any) => typeof t === 'string') as string[];
+        break;
+      }
+    }
+  }
+  user.wallet = { tokens: userTokens };
+}
+
 async function logAction(userId: number | null, userEmail: string | null, eventName: string, details: string) {
   try {
     if (!dbConnected) return;
@@ -304,8 +324,22 @@ async function startServer() {
 
       // Check user wallet
       const userRes = await pool.query('SELECT wallet FROM users WHERE id = $1', [userId]);
-      const wallet = userRes.rows[0].wallet || { tokens: [] };
-      const userTokens = wallet.tokens || [];
+      const rawWallet = userRes.rows[0].wallet || {};
+      
+      let userTokens: string[] = [];
+      const uidStr = String(userId);
+      if (Array.isArray(rawWallet.tokens)) {
+        userTokens = rawWallet.tokens.filter((t: any) => typeof t === 'string');
+      } else if (rawWallet[uidStr] && typeof rawWallet[uidStr] === 'object') {
+        userTokens = Object.values(rawWallet[uidStr]).filter((t: any) => typeof t === 'string') as string[];
+      } else {
+        for (const k in rawWallet) {
+          if (typeof rawWallet[k] === 'object' && !Array.isArray(rawWallet[k])) {
+            userTokens = Object.values(rawWallet[k]).filter((t: any) => typeof t === 'string') as string[];
+            break;
+          }
+        }
+      }
       
       const matchingTokens = userTokens.filter((t: string) => t.length === requiredTypeLength);
       
@@ -324,8 +358,8 @@ async function startServer() {
           newTokensList.push(t);
         }
       }
-      wallet.tokens = newTokensList;
-      await pool.query('UPDATE users SET wallet = $1 WHERE id = $2', [JSON.stringify(wallet), userId]);
+      const newWallet = { tokens: newTokensList };
+      await pool.query('UPDATE users SET wallet = $1 WHERE id = $2', [JSON.stringify(newWallet), userId]);
 
       const imagesString = (media || []).map((m: any) => m.url).join(',');
       const result = await pool.query(`
@@ -524,6 +558,7 @@ async function startServer() {
     try {
       if (!dbConnected) throw new Error("DB offline");
       const dbResult = await pool.query('SELECT id, name, email, role, company_name, company_logo, wallet FROM users ORDER BY id DESC');
+      dbResult.rows.forEach(normalizeUserWallet);
       res.json(dbResult.rows);
     } catch (err) {
       res.status(500).json({ error: 'Erro de conexão com o banco de dados.' });
@@ -587,6 +622,7 @@ async function startServer() {
       if (!dbConnected) throw new Error("DB offline");
       const dbResult = await pool.query('SELECT id, name, email, role, company_name, company_logo, wallet FROM users WHERE id = $1', [req.user.id]);
       if (dbResult.rows.length > 0) {
+        normalizeUserWallet(dbResult.rows[0]);
         res.json({ success: true, user: dbResult.rows[0] });
       } else {
         res.status(404).json({ success: false, error: 'Usuário não encontrado' });
