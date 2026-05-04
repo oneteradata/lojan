@@ -292,7 +292,7 @@ function AdminProducts() {
                        <h4 className="font-semibold text-sm truncate">{p.name}</h4>
                        <div className="flex justify-between items-center mt-1">
                          <p className="text-xs text-[#007AFF] font-medium">
-                           {Number(p.price) === 0 ? 'A consultar' : `R$ ${parseFloat(p.price).toLocaleString('pt-BR')}${p.business_model === 'Venda por kg' ? ' / kg' : (p.business_model && p.business_model !== 'Venda por unidade' ? ` (${p.business_model})` : '')}`}
+                           {Number(p.price) === 0 ? 'A consultar' : `R$ ${parseFloat(p.price).toLocaleString('pt-BR')}${(p.business_model && p.business_model !== 'Venda' && p.business_model !== 'Venda por unidade') ? ` (${p.business_model})` : ''}`}
                          </p>
                          {p.user_name && <p className="text-[9px] text-[#86868B] uppercase font-bold truncate max-w-[80px]">By {p.user_name}</p>}
                        </div>
@@ -317,7 +317,7 @@ function ProductModal({ item, onClose }: { item?: any, onClose: () => void }) {
   const [formData, setFormData] = useState({
     name: item?.name || '', 
     category: item?.category || 'Geral', 
-    business_model: item?.business_model || 'Venda por unidade',
+    business_model: item?.business_model || 'Venda',
     price: item?.price || '', 
     tokens: item?.tokens || '', 
     stock: item?.stock || '', 
@@ -530,14 +530,15 @@ function ProductModal({ item, onClose }: { item?: any, onClose: () => void }) {
                 </select>
               </div>
               <div>
-                <label className="text-[11px] font-bold text-[#86868B] tracking-wide mb-2 block">MODELO DE NEGÓCIO</label>
+                <label className="text-[11px] font-bold text-[#86868B] tracking-wide mb-2 block">TIPO DE PRODUTO</label>
                 <select 
                   value={formData.business_model} onChange={e => setFormData({...formData, business_model: e.target.value})}
                   className="w-full bg-white border border-gray-200 focus:border-[#007AFF] rounded-2xl px-4 py-3.5 text-sm outline-none transition-all shadow-sm appearance-none"
                 >
-                  <option value="Venda por unidade">Venda por unidade</option>
-                  <option value="Venda por kg">Venda por kg</option>
-                  <option value="Agendamento">Agendamento</option>
+                  <option value="Venda">Venda</option>
+                  <option value="Serviço">Serviço</option>
+                  <option value="Delivery">Delivery</option>
+                  <option value="Reserva">Reserva</option>
                 </select>
               </div>
             </div>

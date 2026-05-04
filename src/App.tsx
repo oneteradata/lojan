@@ -387,9 +387,9 @@ function Storefront() {
             const parsedPrice = parseFloat(product.price);
             let priceLabel = parsedPrice === 0 ? 'A consultar' : (isNaN(parsedPrice) ? product.price : `R$ ${parsedPrice.toLocaleString('pt-BR')}`);
             if (parsedPrice > 0 && product.business_model) {
-              if (product.business_model === 'Venda por kg') priceLabel += ' / kg';
-              else if (product.business_model === 'Venda por unidade') priceLabel += '';
-              else priceLabel += ` (${product.business_model})`;
+              if (product.business_model !== 'Venda' && product.business_model !== 'Venda por unidade') {
+                priceLabel += ` (${product.business_model})`;
+              }
             }
             return (
               <motion.div 
