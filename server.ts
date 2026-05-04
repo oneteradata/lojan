@@ -113,9 +113,9 @@ async function initDB() {
       );
     `);
 
-    try {
-      await pool.query(`ALTER TABLE users ADD COLUMN role VARCHAR(50) DEFAULT 'user';`);
-    } catch (e) {}
+    try { await pool.query(`ALTER TABLE users ADD COLUMN role VARCHAR(50) DEFAULT 'user';`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE users ADD COLUMN company_name VARCHAR(255);`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE users ADD COLUMN company_logo TEXT;`); } catch (e) {}
 
     // Criação da tabela de pedidos (orders) e os itens
     await pool.query(`
@@ -383,7 +383,7 @@ async function startServer() {
   app.get('/api/users', requireAuth, requireAdmin, async (req, res) => {
     try {
       if (!dbConnected) throw new Error("DB offline");
-      const dbResult = await pool.query('SELECT id, name, email, role FROM users ORDER BY id DESC');
+      const dbResult = await pool.query('SELECT id, name, email, role, company_name, company_logo FROM users ORDER BY id DESC');
       res.json(dbResult.rows);
     } catch (err) {
       res.status(500).json({ error: 'Erro de conexão com o banco de dados.' });
@@ -392,14 +392,14 @@ async function startServer() {
 
   // Criação de usuário (painel admin)
   app.post('/api/users', requireAuth, requireAdmin, async (req, res) => {
-    const { name, email, password, role } = req.body;
+    const { name, email, password, role, company_name, company_logo } = req.body;
     if (!name || !email || !password) return res.status(400).json({ success: false, error: 'Dados incompletos.' });
     try {
       if (!dbConnected) throw new Error("DB offline");
       const pass = password;
       const insertResult = await pool.query(
-        'INSERT INTO users (name, email, password, role) VALUES ($1, $2, $3, $4) RETURNING id, name, email, role',
-        [name, email, pass, role || 'user']
+        'INSERT INTO users (name, email, password, role, company_name, company_logo) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, name, email, role, company_name, company_logo',
+        [name, email, pass, role || 'user', company_name || null, company_logo || null]
       );
       res.json({ success: true, user: insertResult.rows[0] });
     } catch (err: any) {
@@ -409,19 +409,19 @@ async function startServer() {
 
   // Edição de usuário (painel admin)
   app.put('/api/users/:id', requireAuth, requireAdmin, async (req, res) => {
-    const { name, email, role, password } = req.body;
+    const { name, email, role, password, company_name, company_logo } = req.body;
     try {
       if (!dbConnected) throw new Error("DB offline");
       if (password) {
         const u = await pool.query(
-          'UPDATE users SET name = $1, email = $2, role = $3, password = $4 WHERE id = $5 RETURNING id, name, email, role',
-          [name, email, role, password, req.params.id]
+          'UPDATE users SET name = $1, email = $2, role = $3, password = $4, company_name = $5, company_logo = $6 WHERE id = $7 RETURNING id, name, email, role, company_name, company_logo',
+          [name, email, role, password, company_name || null, company_logo || null, req.params.id]
         );
         return res.json({ success: true, user: u.rows[0] });
       } else {
         const u = await pool.query(
-          'UPDATE users SET name = $1, email = $2, role = $3 WHERE id = $4 RETURNING id, name, email, role',
-          [name, email, role, req.params.id]
+          'UPDATE users SET name = $1, email = $2, role = $3, company_name = $4, company_logo = $5 WHERE id = $6 RETURNING id, name, email, role, company_name, company_logo',
+          [name, email, role, company_name || null, company_logo || null, req.params.id]
         );
         return res.json({ success: true, user: u.rows[0] });
       }
@@ -477,7 +477,7 @@ async function startServer() {
 
   // Registro de usuários
   app.post('/api/register', async (req, res) => {
-    const { name, email, password } = req.body;
+    const { name, email, password, company_name, company_logo } = req.body;
     
     if (!name || !email || !password) {
       return res.status(400).json({ success: false, error: 'Preencha todos os campos obrigatórios.' });
@@ -485,7 +485,7 @@ async function startServer() {
 
     try {
       if (!dbConnected) {
-        const user = { id: Date.now(), name, email, role: 'user' };
+        const user = { id: Date.now(), name, email, role: 'user', company_name, company_logo };
         const token = jwt.sign(user, JWT_SECRET, { expiresIn: '1d' });
         return res.json({ success: true, user, token });
       }
@@ -498,8 +498,8 @@ async function startServer() {
 
       // Insere o novo usuário
       const insertResult = await pool.query(
-        'INSERT INTO users (name, email, password, role) VALUES ($1, $2, $3, $4) RETURNING id, name, email, role',
-        [name, email, password, 'user']
+        'INSERT INTO users (name, email, password, role, company_name, company_logo) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, name, email, role, company_name, company_logo',
+        [name, email, password, 'user', company_name || null, company_logo || null]
       );
       
       const user = insertResult.rows[0];

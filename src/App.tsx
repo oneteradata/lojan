@@ -25,15 +25,19 @@ function Storefront() {
   const [isRegistering, setIsRegistering] = useState(false);
   const [user, setUser] = useState<any>(null);
   
+  // Auth state
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+  const [companyName, setCompanyName] = useState('');
+  const [companyLogo, setCompanyLogo] = useState('');
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [authError, setAuthError] = useState('');
+
   // Cart state
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [cartItems, setCartItems] = useState<any[]>([]);
   const [orderStatus, setOrderStatus] = useState<string | null>(null);
-
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [authError, setAuthError] = useState('');
 
   // Busca produtos do DB
   useEffect(() => {
@@ -54,10 +58,11 @@ function Storefront() {
 
   const handleAuth = async (e: any) => {
     e.preventDefault();
+    if (uploadingLogo) return;
     setAuthError('');
     
     const endpoint = isRegistering ? '/api/register' : '/api/login';
-    const bodyPayload = isRegistering ? { name, email, password } : { email, password };
+    const bodyPayload = isRegistering ? { name, email, password, company_name: companyName, company_logo: companyLogo } : { email, password };
 
     try {
       const res = await apiFetch(endpoint, {
@@ -76,6 +81,8 @@ function Storefront() {
         setEmail('');
         setPassword('');
         setName('');
+        setCompanyName('');
+        setCompanyLogo('');
         setIsRegistering(false);
       } else {
         setAuthError(data.error);
@@ -85,6 +92,40 @@ function Storefront() {
       setUser({ id: 1, name: name || 'Admin Silva', email });
       setShowLogin(false);
     }
+  };
+
+  const handleLogoUpload = async (e: any) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingLogo(true);
+    setAuthError('');
+    try {
+      if (file.size > 2 * 1024 * 1024) throw new Error("A imagem deve ter no máximo 2MB");
+      const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+      const fileName = `${Date.now()}-${safeName}`;
+      
+      const resSign = await apiFetch('/api/presigned-url', {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify({ fileName, mimeType: file.type })
+      });
+      const dataSign = await resSign.json();
+      if (!dataSign.success) throw new Error(dataSign.error || 'Falha ao gerar link de upload');
+
+      const uploadRes = await fetch(dataSign.url, {
+         method: 'PUT',
+         headers: { 'Content-Type': file.type },
+         body: file
+      });
+      if (!uploadRes.ok) throw new Error(`Falha no upload pro MinIO: ${uploadRes.statusText}`);
+
+      const finalUrl = `https://file.voryx.com.br/marketplace/${fileName}`;
+      setCompanyLogo(finalUrl);
+    } catch (err: any) {
+      setAuthError('Erro no upload: ' + err.message);
+    }
+    setUploadingLogo(false);
+    e.target.value = '';
   };
 
   const handleAddToCart = (product: any) => {
@@ -220,18 +261,39 @@ function Storefront() {
             
             <form onSubmit={handleAuth} className="flex flex-col gap-4">
               {isRegistering && (
-                <input 
-                  type="text" 
-                  placeholder="Nome Completo" 
-                  value={name}
-                  onChange={e => setName(e.target.value)}
-                  className="bg-transparent border-b border-white/20 pb-2 text-sm outline-none focus:border-[#d4af37] transition-colors"
-                  required
-                />
+                <>
+                  <input 
+                    type="text" 
+                    placeholder="Nome Completo" 
+                    value={name}
+                    onChange={e => setName(e.target.value)}
+                    className="bg-transparent border-b border-white/20 pb-2 text-sm outline-none focus:border-[#d4af37] transition-colors"
+                    required
+                  />
+                  <input 
+                    type="text" 
+                    placeholder="Nome da Empresa (opcional)" 
+                    value={companyName}
+                    onChange={e => setCompanyName(e.target.value)}
+                    className="bg-transparent border-b border-white/20 pb-2 text-sm outline-none focus:border-[#d4af37] transition-colors"
+                  />
+                  <div className="flex border-b border-white/20 pb-2 items-center justify-between">
+                    <span className="text-sm text-gray-400">Foto da Empresa</span>
+                    <input 
+                      type="file" 
+                      accept="image/*"
+                      onChange={handleLogoUpload}
+                      disabled={uploadingLogo}
+                      className="text-xs max-w-[150px] file:mr-2 file:py-1 file:px-2 file:rounded-full file:border-0 file:text-[10px] file:bg-white file:text-black hover:file:bg-[#d4af37] cursor-pointer"
+                    />
+                  </div>
+                  {uploadingLogo && <span className="text-[10px] text-[#d4af37]">Enviando logo...</span>}
+                  {companyLogo && <img src={companyLogo} alt="Logo" className="h-10 object-contain self-center" />}
+                </>
               )}
               <input 
                 type="text" 
-                placeholder={isRegistering ? "E-mail" : "ID ou E-mail (ex: admin@valentina.com)"} 
+                placeholder={isRegistering ? "E-mail" : "ID ou E-mail (ex: admin@valentina.com)"}  
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 className="bg-transparent border-b border-white/20 pb-2 text-sm outline-none focus:border-[#d4af37] transition-colors"

@@ -27,15 +27,53 @@ function AdminLogin({ onLogin }: { onLogin: (user: any) => void }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [companyName, setCompanyName] = useState('');
+  const [companyLogo, setCompanyLogo] = useState('');
+  const [uploadingLogo, setUploadingLogo] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const handleLogoUpload = async (e: any) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingLogo(true);
+    setError('');
+    try {
+      if (file.size > 2 * 1024 * 1024) throw new Error("A imagem deve ter no máximo 2MB");
+      const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+      const fileName = `${Date.now()}-${safeName}`;
+      
+      const resSign = await apiFetch('/api/presigned-url', {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify({ fileName, mimeType: file.type })
+      });
+      const dataSign = await resSign.json();
+      if (!dataSign.success) throw new Error(dataSign.error || 'Falha ao gerar link de upload');
+
+      const uploadRes = await fetch(dataSign.url, {
+         method: 'PUT',
+         headers: { 'Content-Type': file.type },
+         body: file
+      });
+      if (!uploadRes.ok) throw new Error(`Falha no upload pro MinIO: ${uploadRes.statusText}`);
+
+      const finalUrl = `https://file.voryx.com.br/marketplace/${fileName}`;
+      setCompanyLogo(finalUrl);
+    } catch (err: any) {
+      setError('Erro no upload: ' + err.message);
+    }
+    setUploadingLogo(false);
+    e.target.value = '';
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (uploadingLogo) return;
     setLoading(true);
     try {
       const endpoint = isRegistering ? '/api/register' : '/api/login';
-      const body = isRegistering ? { name, email, password } : { email, password };
+      const body = isRegistering ? { name, email, password, company_name: companyName, company_logo: companyLogo } : { email, password };
       
       const res = await apiFetch(endpoint, {
         method: 'POST',
@@ -75,17 +113,43 @@ function AdminLogin({ onLogin }: { onLogin: (user: any) => void }) {
       >
         <form onSubmit={handleSubmit} className="flex flex-col gap-5">
           {isRegistering && (
-            <div>
-              <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">NOME</label>
-              <input 
-                type="text" 
-                value={name}
-                onChange={e => setName(e.target.value)}
-                placeholder="Seu nome"
-                className="w-full bg-[#F5F5F7] border border-transparent focus:border-[#007AFF]/30 focus:bg-white rounded-2xl px-4 py-3.5 text-sm outline-none transition-all"
-                required
-              />
-            </div>
+            <>
+              <div>
+                <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">NOME</label>
+                <input 
+                  type="text" 
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  placeholder="Seu nome"
+                  className="w-full bg-[#F5F5F7] border border-transparent focus:border-[#007AFF]/30 focus:bg-white rounded-2xl px-4 py-3.5 text-sm outline-none transition-all"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">NOME DA EMPRESA (OPCIONAL)</label>
+                <input 
+                  type="text" 
+                  value={companyName}
+                  onChange={e => setCompanyName(e.target.value)}
+                  placeholder="Nome da sua empresa"
+                  className="w-full bg-[#F5F5F7] border border-transparent focus:border-[#007AFF]/30 focus:bg-white rounded-2xl px-4 py-3.5 text-sm outline-none transition-all"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">FOTO DA EMPRESA (OPCIONAL)</label>
+                <div className="flex items-center gap-4">
+                  <input 
+                    type="file" 
+                    accept="image/*"
+                    onChange={handleLogoUpload}
+                    disabled={uploadingLogo}
+                    className="text-xs file:mr-2 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-[10px] file:bg-[#E8F0FE] file:text-[#007AFF] hover:file:bg-[#D2E3FC] cursor-pointer"
+                  />
+                  {uploadingLogo && <span className="text-[10px] text-[#007AFF] font-bold">ENVIANDO...</span>}
+                  {companyLogo && <img src={companyLogo} alt="Logo" className="w-10 h-10 object-cover rounded-md" />}
+                </div>
+              </div>
+            </>
           )}
           <div>
             <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">{isRegistering ? 'E-MAIL' : 'ID OU E-MAIL'}</label>
@@ -686,7 +750,8 @@ function AdminUsers() {
   const [loading, setLoading] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
-  const [formData, setFormData] = useState({ name: '', email: '', password: '', role: 'user' });
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [formData, setFormData] = useState({ name: '', email: '', password: '', role: 'user', company_name: '', company_logo: '' });
 
   const fetchUsers = async () => {
     try {
@@ -700,8 +765,42 @@ function AdminUsers() {
     fetchUsers();
   }, []);
 
+  const handleLogoUpload = async (e: any) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingLogo(true);
+    try {
+      if (file.size > 2 * 1024 * 1024) throw new Error("A imagem deve ter no máximo 2MB");
+      const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+      const fileName = `${Date.now()}-${safeName}`;
+      
+      const resSign = await apiFetch('/api/presigned-url', {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify({ fileName, mimeType: file.type })
+      });
+      const dataSign = await resSign.json();
+      if (!dataSign.success) throw new Error(dataSign.error || 'Falha ao gerar link de upload');
+
+      const uploadRes = await fetch(dataSign.url, {
+         method: 'PUT',
+         headers: { 'Content-Type': file.type },
+         body: file
+      });
+      if (!uploadRes.ok) throw new Error(`Falha no upload pro MinIO: ${uploadRes.statusText}`);
+
+      const finalUrl = `https://file.voryx.com.br/marketplace/${fileName}`;
+      setFormData(prev => ({...prev, company_logo: finalUrl}));
+    } catch (err: any) {
+      alert('Erro no upload: ' + err.message);
+    }
+    setUploadingLogo(false);
+    e.target.value = '';
+  };
+
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (uploadingLogo) return;
     setLoading(true);
     try {
       const url = editingUser ? `/api/users/${editingUser.id}` : '/api/users';
@@ -716,7 +815,7 @@ function AdminUsers() {
       if (data.success) {
         setShowAddForm(false);
         setEditingUser(null);
-        setFormData({ name: '', email: '', password: '', role: 'user' });
+        setFormData({ name: '', email: '', password: '', role: 'user', company_name: '', company_logo: '' });
         fetchUsers();
       } else {
         alert(data.error);
@@ -753,7 +852,7 @@ function AdminUsers() {
             <p className="text-[11px] font-bold text-[#86868B] tracking-widest mt-1 uppercase">Acesso & Permissões</p>
           </div>
           <button 
-             onClick={() => { setEditingUser(null); setFormData({ name: '', email: '', password: '', role: 'user' }); setShowAddForm(true); }}
+             onClick={() => { setEditingUser(null); setFormData({ name: '', email: '', password: '', role: 'user', company_name: '', company_logo: '' }); setShowAddForm(true); }}
              className="w-10 h-10 bg-black text-white rounded-full flex items-center justify-center hover:scale-105 transition-transform shadow-lg shadow-black/20"
           >
              <Plus className="w-5 h-5" />
@@ -764,18 +863,29 @@ function AdminUsers() {
           <div className="space-y-4 overflow-y-auto w-full">
             {users.map(u => (
               <div key={u.id} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex justify-between items-center">
-                 <div>
-                   <p className="font-bold text-sm text-[#1D1D1F] flex items-center gap-2">
-                     {u.name} (ID: {u.id})
-                     {u.role === 'admin' && <span className="bg-blue-100 text-blue-700 text-[9px] uppercase font-bold px-1.5 py-0.5 rounded">Admin</span>}
-                     {u.role === 'blocked' && <span className="bg-red-100 text-red-700 text-[9px] uppercase font-bold px-1.5 py-0.5 rounded">Block</span>}
-                   </p>
-                   <p className="text-xs text-[#86868B] mt-0.5">{u.email}</p>
+                 <div className="flex items-center gap-4">
+                   {u.company_logo ? (
+                     <img src={u.company_logo} alt={u.company_name || 'Logo'} className="w-10 h-10 object-cover rounded-xl border border-gray-100 bg-gray-50" />
+                   ) : (
+                     <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center text-gray-400">
+                       <User className="w-5 h-5" />
+                     </div>
+                   )}
+                   <div>
+                     <p className="font-bold text-sm text-[#1D1D1F] flex items-center gap-2">
+                       {u.name} (ID: {u.id})
+                       {u.role === 'admin' && <span className="bg-blue-100 text-blue-700 text-[9px] uppercase font-bold px-1.5 py-0.5 rounded">Admin</span>}
+                       {u.role === 'blocked' && <span className="bg-red-100 text-red-700 text-[9px] uppercase font-bold px-1.5 py-0.5 rounded">Block</span>}
+                     </p>
+                     <p className="text-xs text-[#86868B] mt-0.5">
+                       {u.company_name ? `${u.company_name} • ${u.email}` : u.email}
+                     </p>
+                   </div>
                  </div>
                  <div className="flex gap-2">
                    {u.email !== 'admin@valentina.com' && (
                      <>
-                       <button onClick={() => { setEditingUser(u); setFormData({ name: u.name, email: u.email, password: '', role: u.role }); setShowAddForm(true); }} className="text-[10px] uppercase font-bold text-[#007AFF] px-2 bg-blue-50 rounded-xl hover:bg-blue-100 transition-colors">Editar</button>
+                       <button onClick={() => { setEditingUser(u); setFormData({ name: u.name, email: u.email, password: '', role: u.role, company_name: u.company_name || '', company_logo: u.company_logo || '' }); setShowAddForm(true); }} className="text-[10px] uppercase font-bold text-[#007AFF] px-2 bg-blue-50 rounded-xl hover:bg-blue-100 transition-colors">Editar</button>
                        <button onClick={() => handleToggleBlock(u)} className="p-2 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
                          {u.role === 'blocked' ? <Unlock className="w-4 h-4 text-green-600" /> : <Lock className="w-4 h-4 text-orange-500" />}
                        </button>
@@ -803,10 +913,22 @@ function AdminUsers() {
                   </button>
                </div>
                
-               <form onSubmit={handleAdd} className="p-6 space-y-4">
+               <form onSubmit={handleAdd} className="p-6 space-y-4 overflow-y-auto max-h-[70vh]">
                  <div>
                    <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Nome</label>
                    <input required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                 </div>
+                 <div>
+                   <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Empresa (Opcional)</label>
+                   <input value={formData.company_name} onChange={e => setFormData({...formData, company_name: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                 </div>
+                 <div>
+                   <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Foto da Empresa</label>
+                   <div className="flex flex-col gap-2">
+                     <input type="file" accept="image/*" onChange={handleLogoUpload} disabled={uploadingLogo} className="text-xs file:mr-2 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-[11px] file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer" />
+                     {uploadingLogo && <span className="text-[10px] text-blue-600 font-bold">Enviando...</span>}
+                     {formData.company_logo && <img src={formData.company_logo} alt="Logo" className="h-10 w-10 object-cover rounded-md" />}
+                   </div>
                  </div>
                  <div>
                    <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Email</label>
