@@ -118,14 +118,23 @@ async function initDB() {
     try { await pool.query(`ALTER TABLE users ADD COLUMN role VARCHAR(50) DEFAULT 'user';`); } catch (e) {}
     try { await pool.query(`ALTER TABLE users ADD COLUMN company_name VARCHAR(255);`); } catch (e) {}
     try { await pool.query(`ALTER TABLE users ADD COLUMN company_logo TEXT;`); } catch (e) {}
-    try { await pool.query(`ALTER TABLE users ADD COLUMN nome_completo VARCHAR(255);`); } catch (e) {}
-    try { await pool.query(`ALTER TABLE users ADD COLUMN primeiro_nome VARCHAR(255);`); } catch (e) {}
-    try { await pool.query(`ALTER TABLE users ADD COLUMN data_nascimento VARCHAR(50);`); } catch (e) {}
-    try { await pool.query(`ALTER TABLE users ADD COLUMN telegram VARCHAR(255);`); } catch (e) {}
-    try { await pool.query(`ALTER TABLE users ADD COLUMN melhor_horario VARCHAR(255);`); } catch (e) {}
-    try { await pool.query(`ALTER TABLE users ADD COLUMN interesses TEXT;`); } catch (e) {}
-    try { await pool.query(`ALTER TABLE users ADD COLUMN senha_mestre VARCHAR(255);`); } catch (e) {}
-    try { await pool.query(`ALTER TABLE users ADD COLUMN convite VARCHAR(255);`); } catch (e) {}
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS user_client (
+        id SERIAL PRIMARY KEY,
+        nome_completo VARCHAR(255),
+        primeiro_nome VARCHAR(255),
+        data_nascimento VARCHAR(50),
+        telegram VARCHAR(255),
+        email VARCHAR(255) UNIQUE NOT NULL,
+        melhor_horario VARCHAR(255),
+        interesses TEXT,
+        senha_mestre VARCHAR(255),
+        convite VARCHAR(255),
+        role VARCHAR(50) DEFAULT 'client',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
 
     // Criação da tabela de pedidos (orders) e os itens
     await pool.query(`
@@ -397,7 +406,7 @@ async function startServer() {
   app.get('/api/users', requireAuth, requireAdmin, async (req, res) => {
     try {
       if (!dbConnected) throw new Error("DB offline");
-      const dbResult = await pool.query('SELECT id, name, email, role, company_name, company_logo, nome_completo, primeiro_nome, data_nascimento, telegram, melhor_horario, interesses, senha_mestre, convite FROM users ORDER BY id DESC');
+      const dbResult = await pool.query('SELECT id, name, email, role, company_name, company_logo FROM users ORDER BY id DESC');
       res.json(dbResult.rows);
     } catch (err) {
       res.status(500).json({ error: 'Erro de conexão com o banco de dados.' });
@@ -406,14 +415,14 @@ async function startServer() {
 
   // Criação de usuário (painel admin)
   app.post('/api/users', requireAuth, requireAdmin, async (req, res) => {
-    const { name, email, password, role, company_name, company_logo, nome_completo, primeiro_nome, data_nascimento, telegram, melhor_horario, interesses, senha_mestre, convite } = req.body;
-    if (!email || !password) return res.status(400).json({ success: false, error: 'Dados incompletos.' });
+    const { name, email, password, role, company_name, company_logo } = req.body;
+    if (!name || !email || !password) return res.status(400).json({ success: false, error: 'Dados incompletos.' });
     try {
       if (!dbConnected) throw new Error("DB offline");
       const pass = password;
       const insertResult = await pool.query(
-        'INSERT INTO users (name, email, password, role, company_name, company_logo, nome_completo, primeiro_nome, data_nascimento, telegram, melhor_horario, interesses, senha_mestre, convite) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING id, name, email, role, company_name, company_logo, nome_completo, primeiro_nome, data_nascimento, telegram, melhor_horario, interesses, senha_mestre, convite',
-        [name, email, pass, role || 'user', company_name || null, company_logo || null, nome_completo || null, primeiro_nome || null, data_nascimento || null, telegram || null, melhor_horario || null, interesses || null, senha_mestre || null, convite || null]
+        'INSERT INTO users (name, email, password, role, company_name, company_logo) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, name, email, role, company_name, company_logo',
+        [name, email, pass, role || 'user', company_name || null, company_logo || null]
       );
       res.json({ success: true, user: insertResult.rows[0] });
     } catch (err: any) {
@@ -423,19 +432,19 @@ async function startServer() {
 
   // Edição de usuário (painel admin)
   app.put('/api/users/:id', requireAuth, requireAdmin, async (req, res) => {
-    const { name, email, role, password, company_name, company_logo, nome_completo, primeiro_nome, data_nascimento, telegram, melhor_horario, interesses, senha_mestre, convite } = req.body;
+    const { name, email, role, password, company_name, company_logo } = req.body;
     try {
       if (!dbConnected) throw new Error("DB offline");
       if (password) {
         const u = await pool.query(
-          'UPDATE users SET name = $1, email = $2, role = $3, password = $4, company_name = $5, company_logo = $6, nome_completo = $8, primeiro_nome = $9, data_nascimento = $10, telegram = $11, melhor_horario = $12, interesses = $13, senha_mestre = $14, convite = $15 WHERE id = $7 RETURNING id, name, email, role, company_name, company_logo, nome_completo, primeiro_nome, data_nascimento, telegram, melhor_horario, interesses, senha_mestre, convite',
-          [name, email, role, password, company_name || null, company_logo || null, req.params.id, nome_completo || null, primeiro_nome || null, data_nascimento || null, telegram || null, melhor_horario || null, interesses || null, senha_mestre || null, convite || null]
+          'UPDATE users SET name = $1, email = $2, role = $3, password = $4, company_name = $5, company_logo = $6 WHERE id = $7 RETURNING id, name, email, role, company_name, company_logo',
+          [name, email, role, password, company_name || null, company_logo || null, req.params.id]
         );
         return res.json({ success: true, user: u.rows[0] });
       } else {
         const u = await pool.query(
-          'UPDATE users SET name = $1, email = $2, role = $3, company_name = $4, company_logo = $5, nome_completo = $7, primeiro_nome = $8, data_nascimento = $9, telegram = $10, melhor_horario = $11, interesses = $12, senha_mestre = $13, convite = $14 WHERE id = $6 RETURNING id, name, email, role, company_name, company_logo, nome_completo, primeiro_nome, data_nascimento, telegram, melhor_horario, interesses, senha_mestre, convite',
-          [name, email, role, company_name || null, company_logo || null, req.params.id, nome_completo || null, primeiro_nome || null, data_nascimento || null, telegram || null, melhor_horario || null, interesses || null, senha_mestre || null, convite || null]
+          'UPDATE users SET name = $1, email = $2, role = $3, company_name = $4, company_logo = $5 WHERE id = $6 RETURNING id, name, email, role, company_name, company_logo',
+          [name, email, role, company_name || null, company_logo || null, req.params.id]
         );
         return res.json({ success: true, user: u.rows[0] });
       }
@@ -452,6 +461,57 @@ async function startServer() {
       res.json({ success: true });
     } catch(err) {
       res.status(500).json({ success: false, error: 'Erro ao deletar usuário.' });
+    }
+  });
+
+  // ========== USER_CLIENT ENDPOINTS ==========
+
+  app.get('/api/user_client', requireAuth, requireAdmin, async (req, res) => {
+    try {
+      if (!dbConnected) throw new Error("DB offline");
+      const dbResult = await pool.query('SELECT * FROM user_client ORDER BY id DESC');
+      res.json(dbResult.rows);
+    } catch (err) {
+      res.status(500).json({ error: 'Erro de conexão com o banco de dados.' });
+    }
+  });
+
+  app.post('/api/user_client', requireAuth, requireAdmin, async (req, res) => {
+    const { email, senha_mestre, nome_completo, primeiro_nome, data_nascimento, telegram, melhor_horario, interesses, convite } = req.body;
+    if (!email || !senha_mestre) return res.status(400).json({ success: false, error: 'Email e senha mestre são obrigatórios.' });
+    try {
+      if (!dbConnected) throw new Error("DB offline");
+      const insertResult = await pool.query(
+        'INSERT INTO user_client (email, senha_mestre, nome_completo, primeiro_nome, data_nascimento, telegram, melhor_horario, interesses, convite) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *',
+        [email, senha_mestre, nome_completo || null, primeiro_nome || null, data_nascimento || null, telegram || null, melhor_horario || null, interesses || null, convite || null]
+      );
+      res.json({ success: true, user: insertResult.rows[0] });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.put('/api/user_client/:id', requireAuth, requireAdmin, async (req, res) => {
+    const { email, senha_mestre, nome_completo, primeiro_nome, data_nascimento, telegram, melhor_horario, interesses, convite, role } = req.body;
+    try {
+      if (!dbConnected) throw new Error("DB offline");
+      const u = await pool.query(
+        'UPDATE user_client SET email = $1, senha_mestre = $2, nome_completo = $3, primeiro_nome = $4, data_nascimento = $5, telegram = $6, melhor_horario = $7, interesses = $8, convite = $9, role = $10 WHERE id = $11 RETURNING *',
+        [email, senha_mestre, nome_completo || null, primeiro_nome || null, data_nascimento || null, telegram || null, melhor_horario || null, interesses || null, convite || null, role || 'client', req.params.id]
+      );
+      return res.json({ success: true, user: u.rows[0] });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.delete('/api/user_client/:id', requireAuth, requireAdmin, async (req, res) => {
+    try {
+      if (!dbConnected) throw new Error("DB offline");
+      await pool.query('DELETE FROM user_client WHERE id = $1', [req.params.id]);
+      res.json({ success: true });
+    } catch(err) {
+      res.status(500).json({ success: false, error: 'Erro ao deletar cliente.' });
     }
   });
 

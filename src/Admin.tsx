@@ -864,32 +864,35 @@ function AdminOrders() {
 
 
 // -- Users Component --
-function AdminUsers() {
+export function AdminUsers() {
+  const [activeTab, setActiveTab] = useState<'team' | 'clients'>('team');
   const [users, setUsers] = useState<any[]>([]);
+  const [clients, setClients] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
-  const defaultFormState = { 
-    name: '', email: '', password: '', role: 'user', company_name: '', company_logo: '',
-    nome_completo: '', primeiro_nome: '', data_nascimento: '', telegram: '', melhor_horario: '', interesses: '', senha_mestre: '', convite: ''
+  
+  const defaultTeamFormState = { name: '', email: '', password: '', role: 'user', company_name: '', company_logo: '' };
+  const defaultClientFormState = { 
+    email: '', senha_mestre: '', nome_completo: '', primeiro_nome: '', data_nascimento: '', telegram: '', melhor_horario: '', interesses: '', convite: ''
   };
-  const [formData, setFormData] = useState(defaultFormState);
+  const [formData, setFormData] = useState<any>(defaultTeamFormState);
 
-  const fetchUsers = async () => {
+  const fetchData = async () => {
     try {
-      const res = await apiFetch('/api/users');
-      const data = await res.json();
-      if (Array.isArray(data)) {
-        setUsers(data);
-      } else {
-        setUsers([]);
-      }
+      const resTeam = await apiFetch('/api/users');
+      const dataTeam = await resTeam.json();
+      if (Array.isArray(dataTeam)) setUsers(dataTeam);
+
+      const resClient = await apiFetch('/api/user_client');
+      const dataClient = await resClient.json();
+      if (Array.isArray(dataClient)) setClients(dataClient);
     } catch (e) {}
   };
 
   useEffect(() => {
-    fetchUsers();
+    fetchData();
   }, []);
 
   const handleLogoUpload = async (e: any) => {
@@ -917,7 +920,7 @@ function AdminUsers() {
       if (!uploadRes.ok) throw new Error(`Falha no upload pro MinIO: ${uploadRes.statusText}`);
 
       const finalUrl = `https://file.voryx.com.br/marketplace/${fileName}`;
-      setFormData(prev => ({...prev, company_logo: finalUrl}));
+      setFormData((prev: any) => ({...prev, company_logo: finalUrl}));
     } catch (err: any) {
       alert('Erro no upload: ' + err.message);
     }
@@ -930,8 +933,15 @@ function AdminUsers() {
     if (uploadingLogo) return;
     setLoading(true);
     try {
-      const url = editingUser ? `/api/users/${editingUser.id}` : '/api/users';
-      const method = editingUser ? 'PUT' : 'POST';
+      let url = '';
+      let method = '';
+      if (activeTab === 'team') {
+          url = editingUser ? `/api/users/${editingUser.id}` : '/api/users';
+          method = editingUser ? 'PUT' : 'POST';
+      } else {
+          url = editingUser ? `/api/user_client/${editingUser.id}` : '/api/user_client';
+          method = editingUser ? 'PUT' : 'POST';
+      }
 
       const res = await apiFetch(url, {
         method,
@@ -942,8 +952,8 @@ function AdminUsers() {
       if (data.success) {
         setShowAddForm(false);
         setEditingUser(null);
-        setFormData(defaultFormState);
-        fetchUsers();
+        setFormData(activeTab === 'team' ? defaultTeamFormState : defaultClientFormState);
+        fetchData();
       } else {
         alert(data.error);
       }
@@ -951,44 +961,78 @@ function AdminUsers() {
     setLoading(false);
   };
 
-  const handleToggleBlock = async (u: any) => {
-    const newRole = u.role === 'blocked' ? 'user' : 'blocked';
+  const handleToggleBlock = async (u: any, type: 'team'|'client') => {
+    const newRole = u.role === 'blocked' ? (type === 'team' ? 'user' : 'client') : 'blocked';
     try {
-      await apiFetch(`/api/users/${u.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: u.name, email: u.email, role: newRole })
-      });
-      fetchUsers();
+      const url = type === 'team' ? `/api/users/${u.id}` : `/api/user_client/${u.id}`;
+      // Sending enough info so PUT payload is acceptable
+      if (type === 'team') {
+          await apiFetch(url, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: u.name, email: u.email, role: newRole })
+          });
+      } else {
+          await apiFetch(url, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: u.email, senha_mestre: u.senha_mestre, nome_completo: u.nome_completo, role: newRole })
+          });
+      }
+      fetchData();
     } catch (e) {}
   };
 
-  const handleDelete = async (u: any) => {
-    if (!confirm(`Remover usuário ${u.name}?`)) return;
+  const handleDelete = async (u: any, type: 'team'|'client') => {
+    const displayName = type === 'team' ? u.name : (u.nome_completo || u.email);
+    if (!confirm(`Remover ${type === 'team' ? 'usuário' : 'cliente'} ${displayName}?`)) return;
     try {
-      await apiFetch(`/api/users/${u.id}`, { method: 'DELETE' });
-      fetchUsers();
+      const url = type === 'team' ? `/api/users/${u.id}` : `/api/user_client/${u.id}`;
+      await apiFetch(url, { method: 'DELETE' });
+      fetchData();
     } catch (e) {}
   };
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-4 md:p-8 h-full flex flex-col relative">
-       <div className="mb-6 flex justify-between items-end">
-          <div>
-            <h2 className="text-3xl font-bold text-[#1D1D1F] tracking-tight">Equipe</h2>
-            <p className="text-[11px] font-bold text-[#86868B] tracking-widest mt-1 uppercase">Acesso & Permissões</p>
-          </div>
-          <button 
-             onClick={() => { setEditingUser(null); setFormData(defaultFormState); setShowAddForm(true); }}
-             className="w-10 h-10 bg-black text-white rounded-full flex items-center justify-center hover:scale-105 transition-transform shadow-lg shadow-black/20"
-          >
-             <Plus className="w-5 h-5" />
-          </button>
+       <div className="mb-6">
+         <div className="flex justify-between items-end mb-4">
+           <div>
+             <h2 className="text-3xl font-bold text-[#1D1D1F] tracking-tight">{activeTab === 'team' ? 'Equipe' : 'Clientes'}</h2>
+             <p className="text-[11px] font-bold text-[#86868B] tracking-widest mt-1 uppercase">Acesso & Permissões</p>
+           </div>
+           <button 
+              onClick={() => { 
+                  setEditingUser(null); 
+                  setFormData(activeTab === 'team' ? defaultTeamFormState : defaultClientFormState); 
+                  setShowAddForm(true); 
+              }}
+              className="w-10 h-10 bg-black text-white rounded-full flex items-center justify-center hover:scale-105 transition-transform shadow-lg shadow-black/20"
+           >
+              <Plus className="w-5 h-5" />
+           </button>
+         </div>
+         
+         {/* Tabs */}
+         <div className="flex gap-2">
+            <button 
+               onClick={() => setActiveTab('team')} 
+               className={`px-4 py-2 text-xs font-bold uppercase tracking-widest rounded-full transition-colors ${activeTab === 'team' ? 'bg-[#1D1D1F] text-white' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}
+            >
+               Gerenciar Equipe
+            </button>
+            <button 
+               onClick={() => setActiveTab('clients')} 
+               className={`px-4 py-2 text-xs font-bold uppercase tracking-widest rounded-full transition-colors ${activeTab === 'clients' ? 'bg-[#1D1D1F] text-white' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}
+            >
+               Gerenciar Clientes
+            </button>
+         </div>
        </div>
 
        <div className="bg-[#F5F5F7] rounded-[32px] flex-1 flex flex-col p-6 overflow-hidden relative">
           <div className="space-y-4 overflow-y-auto w-full">
-            {users.map(u => (
+            {activeTab === 'team' && users.map(u => (
               <div key={u.id} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex justify-between items-center">
                  <div className="flex items-center gap-4">
                    {u.company_logo ? (
@@ -1020,26 +1064,60 @@ function AdminUsers() {
                            password: '', 
                            role: u.role, 
                            company_name: u.company_name || '', 
-                           company_logo: u.company_logo || '',
-                           nome_completo: u.nome_completo || '',
-                           primeiro_nome: u.primeiro_nome || '',
-                           data_nascimento: u.data_nascimento || '',
-                           telegram: u.telegram || '',
-                           melhor_horario: u.melhor_horario || '',
-                           interesses: u.interesses || '',
-                           senha_mestre: u.senha_mestre || '',
-                           convite: u.convite || ''
+                           company_logo: u.company_logo || ''
                          }); 
                          setShowAddForm(true); 
                        }} className="text-[10px] uppercase font-bold text-[#007AFF] px-2 bg-blue-50 rounded-xl hover:bg-blue-100 transition-colors">Editar</button>
-                       <button onClick={() => handleToggleBlock(u)} className="p-2 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
+                       <button onClick={() => handleToggleBlock(u, 'team')} className="p-2 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
                          {u.role === 'blocked' ? <Unlock className="w-4 h-4 text-green-600" /> : <Lock className="w-4 h-4 text-orange-500" />}
                        </button>
-                       <button onClick={() => handleDelete(u)} className="p-2 bg-red-50 rounded-xl hover:bg-red-100 transition-colors">
+                       <button onClick={() => handleDelete(u, 'team')} className="p-2 bg-red-50 rounded-xl hover:bg-red-100 transition-colors">
                          <Trash2 className="w-4 h-4 text-red-500" />
                        </button>
                      </>
                    )}
+                 </div>
+              </div>
+            ))}
+
+            {activeTab === 'clients' && clients.map(c => (
+              <div key={c.id} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex justify-between items-center">
+                 <div className="flex items-center gap-4">
+                   <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center text-gray-400">
+                     <User className="w-5 h-5" />
+                   </div>
+                   <div>
+                     <p className="font-bold text-sm text-[#1D1D1F] flex items-center gap-2">
+                       {c.nome_completo || c.primeiro_nome || 'Sem nome'} (ID: {c.id})
+                       {c.role === 'blocked' && <span className="bg-red-100 text-red-700 text-[9px] uppercase font-bold px-1.5 py-0.5 rounded">Block</span>}
+                     </p>
+                     <p className="text-xs text-[#86868B] mt-0.5">
+                       {c.email} {c.telegram ? `• Telegram: ${c.telegram}` : ''}
+                     </p>
+                   </div>
+                 </div>
+                 <div className="flex gap-2">
+                   <button onClick={() => { 
+                     setEditingUser(c); 
+                     setFormData({ 
+                       email: c.email,
+                       nome_completo: c.nome_completo || '',
+                       primeiro_nome: c.primeiro_nome || '',
+                       data_nascimento: c.data_nascimento || '',
+                       telegram: c.telegram || '',
+                       melhor_horario: c.melhor_horario || '',
+                       interesses: c.interesses || '',
+                       senha_mestre: c.senha_mestre || '',
+                       convite: c.convite || ''
+                     }); 
+                     setShowAddForm(true); 
+                   }} className="text-[10px] uppercase font-bold text-[#007AFF] px-2 bg-blue-50 rounded-xl hover:bg-blue-100 transition-colors">Editar</button>
+                   <button onClick={() => handleToggleBlock(c, 'client')} className="p-2 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
+                     {c.role === 'blocked' ? <Unlock className="w-4 h-4 text-green-600" /> : <Lock className="w-4 h-4 text-orange-500" />}
+                   </button>
+                   <button onClick={() => handleDelete(c, 'client')} className="p-2 bg-red-50 rounded-xl hover:bg-red-100 transition-colors">
+                     <Trash2 className="w-4 h-4 text-red-500" />
+                   </button>
                  </div>
               </div>
             ))}
@@ -1053,82 +1131,94 @@ function AdminUsers() {
               className="bg-white w-full max-w-md rounded-t-[32px] sm:rounded-[32px] shadow-2xl flex flex-col max-h-[90vh] overflow-hidden"
             >
                <div className="flex items-center justify-between p-6 border-b border-gray-100">
-                  <h3 className="text-xl font-bold tracking-tight">{editingUser ? 'Editar Usuário' : 'Novo Usuário'}</h3>
+                  <h3 className="text-xl font-bold tracking-tight">{editingUser ? 'Editar' : 'Novo'} {activeTab === 'team' ? 'Usuário' : 'Cliente'}</h3>
                   <button onClick={() => setShowAddForm(false)} className="w-8 h-8 flex items-center justify-center bg-gray-100 rounded-full hover:bg-gray-200">
                     <X className="w-4 h-4" />
                   </button>
                </div>
                
                <form onSubmit={handleAdd} className="p-6 space-y-4 overflow-y-auto max-h-[70vh]">
-                 <div>
-                   <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Nome de Usuário</label>
-                   <input required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                 </div>
-                 <div className="grid grid-cols-2 gap-4">
-                   <div>
-                     <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Nome Completo</label>
-                     <input value={formData.nome_completo} onChange={e => setFormData({...formData, nome_completo: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                   </div>
-                   <div>
-                     <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Primeiro Nome</label>
-                     <input value={formData.primeiro_nome} onChange={e => setFormData({...formData, primeiro_nome: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                   </div>
-                   <div>
-                     <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Data Nascimento</label>
-                     <input type="date" value={formData.data_nascimento} onChange={e => setFormData({...formData, data_nascimento: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                   </div>
-                   <div>
-                     <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Telegram</label>
-                     <input value={formData.telegram} onChange={e => setFormData({...formData, telegram: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                   </div>
-                 </div>
-                 <div>
-                   <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Melhor Horário</label>
-                   <input value={formData.melhor_horario} onChange={e => setFormData({...formData, melhor_horario: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                 </div>
-                 <div>
-                   <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Interesses</label>
-                   <textarea rows={3} value={formData.interesses} onChange={e => setFormData({...formData, interesses: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
-                 </div>
-                 <div className="grid grid-cols-2 gap-4">
-                   <div>
-                     <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Senha Mestre</label>
-                     <input value={formData.senha_mestre} onChange={e => setFormData({...formData, senha_mestre: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                   </div>
-                   <div>
-                     <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Convite</label>
-                     <input value={formData.convite} onChange={e => setFormData({...formData, convite: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                   </div>
-                 </div>
-                 <div>
-                   <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Empresa (Opcional)</label>
-                   <input value={formData.company_name} onChange={e => setFormData({...formData, company_name: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                 </div>
-                 <div>
-                   <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Foto da Empresa</label>
-                   <div className="flex flex-col gap-2">
-                     <input type="file" accept="image/*" onChange={handleLogoUpload} disabled={uploadingLogo} className="text-xs file:mr-2 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-[11px] file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer" />
-                     {uploadingLogo && <span className="text-[10px] text-blue-600 font-bold">Enviando...</span>}
-                     {formData.company_logo && <img src={formData.company_logo} alt="Logo" className="h-10 w-10 object-cover rounded-md" />}
-                   </div>
-                 </div>
-                 <div>
-                   <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Email</label>
-                   <input required type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                 </div>
-                 <div>
-                   <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Senha {editingUser ? '(deixe em branco para ignorar)' : ''}</label>
-                   <input required={!editingUser} type="password" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                 </div>
-                 <div>
-                   <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Permissão</label>
-                   <select value={formData.role} onChange={e => setFormData({...formData, role: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                     <option value="user">Usuário Comum</option>
-                     <option value="admin">Administrador</option>
-                   </select>
-                 </div>
+                 {activeTab === 'team' ? (
+                   <>
+                     <div>
+                       <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Nome de Usuário</label>
+                       <input required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                     </div>
+                     <div>
+                       <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Empresa (Opcional)</label>
+                       <input value={formData.company_name} onChange={e => setFormData({...formData, company_name: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                     </div>
+                     <div>
+                       <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Foto da Empresa</label>
+                       <div className="flex flex-col gap-2">
+                         <input type="file" accept="image/*" onChange={handleLogoUpload} disabled={uploadingLogo} className="text-xs file:mr-2 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-[11px] file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer" />
+                         {uploadingLogo && <span className="text-[10px] text-blue-600 font-bold">Enviando...</span>}
+                         {formData.company_logo && <img src={formData.company_logo} alt="Logo" className="h-10 w-10 object-cover rounded-md" />}
+                       </div>
+                     </div>
+                     <div>
+                       <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Email</label>
+                       <input required type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                     </div>
+                     <div>
+                       <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Senha {editingUser ? '(deixe em branco para ignorar)' : ''}</label>
+                       <input required={!editingUser} type="password" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                     </div>
+                     <div>
+                       <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Permissão</label>
+                       <select value={formData.role} onChange={e => setFormData({...formData, role: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                         <option value="user">Usuário Comum</option>
+                         <option value="admin">Administrador</option>
+                       </select>
+                     </div>
+                   </>
+                 ) : (
+                   <>
+                     <div>
+                       <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Email</label>
+                       <input required type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                     </div>
+                     <div className="grid grid-cols-2 gap-4">
+                       <div>
+                         <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Nome Completo</label>
+                         <input value={formData.nome_completo} onChange={e => setFormData({...formData, nome_completo: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                       </div>
+                       <div>
+                         <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Primeiro Nome</label>
+                         <input value={formData.primeiro_nome} onChange={e => setFormData({...formData, primeiro_nome: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                       </div>
+                       <div>
+                         <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Data Nascimento</label>
+                         <input type="date" value={formData.data_nascimento} onChange={e => setFormData({...formData, data_nascimento: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                       </div>
+                       <div>
+                         <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Telegram</label>
+                         <input value={formData.telegram} onChange={e => setFormData({...formData, telegram: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                       </div>
+                     </div>
+                     <div>
+                       <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Melhor Horário</label>
+                       <input value={formData.melhor_horario} onChange={e => setFormData({...formData, melhor_horario: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                     </div>
+                     <div>
+                       <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Interesses</label>
+                       <textarea rows={3} value={formData.interesses} onChange={e => setFormData({...formData, interesses: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
+                     </div>
+                     <div className="grid grid-cols-2 gap-4">
+                       <div>
+                         <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Senha Mestre</label>
+                         <input required={!editingUser} value={formData.senha_mestre} onChange={e => setFormData({...formData, senha_mestre: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                       </div>
+                       <div>
+                         <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Convite</label>
+                         <input value={formData.convite} onChange={e => setFormData({...formData, convite: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                       </div>
+                     </div>
+                   </>
+                 )}
+
                  <button type="submit" disabled={loading} className="w-full bg-[#007AFF] text-white font-semibold rounded-2xl py-4 mt-6 disabled:opacity-70">
-                   {loading ? 'Salvando...' : 'Salvar Usuário'}
+                   {loading ? 'Salvando...' : `Salvar ${activeTab === 'team' ? 'Usuário' : 'Cliente'}`}
                  </button>
                </form>
             </motion.div>
