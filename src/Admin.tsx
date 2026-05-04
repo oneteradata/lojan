@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { ShoppingBag, EyeOff, ChevronRight, RefreshCw, LogOut, TrendingUp, Package, ShoppingCart, Heart, Activity, Plus, X, Trash2, Home, Users, User, Lock, Unlock } from 'lucide-react';
+import { ShoppingBag, EyeOff, ChevronRight, RefreshCw, LogOut, TrendingUp, Package, ShoppingCart, Heart, Activity, Plus, X, Trash2, Home, Users, User, Lock, Unlock, Search, Copy, Check } from 'lucide-react';
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 
@@ -872,6 +872,8 @@ export function AdminUsers() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [searchText, setSearchText] = useState('');
+  const [copiedId, setCopiedId] = useState<number | null>(null);
   
   const defaultTeamFormState = { name: '', email: '', password: '', role: 'user', company_name: '', company_logo: '' };
   const defaultClientFormState = { 
@@ -993,6 +995,24 @@ export function AdminUsers() {
     } catch (e) {}
   };
 
+  const handleCopyId = (id: number) => {
+    navigator.clipboard.writeText(String(id));
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const filteredUsers = users.filter(u => {
+    const search = searchText.toLowerCase();
+    const idStr = String(u.id);
+    return idStr.includes(search) || (u.email && u.email.toLowerCase().includes(search)) || (u.name && u.name.toLowerCase().includes(search));
+  });
+
+  const filteredClients = clients.filter(c => {
+    const search = searchText.toLowerCase();
+    const idStr = String(c.id);
+    return idStr.includes(search) || (c.email && c.email.toLowerCase().includes(search)) || (c.nome_completo && c.nome_completo.toLowerCase().includes(search)) || (c.primeiro_nome && c.primeiro_nome.toLowerCase().includes(search));
+  });
+
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-4 md:p-8 h-full flex flex-col relative">
        <div className="mb-6">
@@ -1007,53 +1027,73 @@ export function AdminUsers() {
                   setFormData(activeTab === 'team' ? defaultTeamFormState : defaultClientFormState); 
                   setShowAddForm(true); 
               }}
-              className="w-10 h-10 bg-black text-white rounded-full flex items-center justify-center hover:scale-105 transition-transform shadow-lg shadow-black/20"
+              className="w-10 h-10 bg-black text-white rounded-full flex items-center justify-center hover:scale-105 transition-transform shadow-lg shadow-black/20 shrink-0"
            >
               <Plus className="w-5 h-5" />
            </button>
          </div>
          
-         {/* Tabs */}
-         <div className="flex gap-2">
-            <button 
-               onClick={() => setActiveTab('team')} 
-               className={`px-4 py-2 text-xs font-bold uppercase tracking-widest rounded-full transition-colors ${activeTab === 'team' ? 'bg-[#1D1D1F] text-white' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}
-            >
-               Gerenciar Equipe
-            </button>
-            <button 
-               onClick={() => setActiveTab('clients')} 
-               className={`px-4 py-2 text-xs font-bold uppercase tracking-widest rounded-full transition-colors ${activeTab === 'clients' ? 'bg-[#1D1D1F] text-white' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}
-            >
-               Gerenciar Clientes
-            </button>
+         <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
+             {/* Tabs */}
+             <div className="flex gap-2">
+                <button 
+                   onClick={() => setActiveTab('team')} 
+                   className={`px-4 py-2 text-xs font-bold uppercase tracking-widest rounded-full transition-colors whitespace-nowrap ${activeTab === 'team' ? 'bg-[#1D1D1F] text-white' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}
+                >
+                   Gerenciar Equipe <span className="ml-1 bg-white/20 px-1.5 py-0.5 rounded-full">{users.length}</span>
+                </button>
+                <button 
+                   onClick={() => setActiveTab('clients')} 
+                   className={`px-4 py-2 text-xs font-bold uppercase tracking-widest rounded-full transition-colors whitespace-nowrap ${activeTab === 'clients' ? 'bg-[#1D1D1F] text-white' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}
+                >
+                   Gerenciar Clientes <span className="ml-1 bg-black/10 px-1.5 py-0.5 rounded-full">{clients.length}</span>
+                </button>
+             </div>
+             
+             {/* Search */}
+             <div className="relative w-full sm:w-auto">
+               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                 <Search className="h-4 w-4 text-gray-400" />
+               </div>
+               <input
+                 type="text"
+                 placeholder="Buscar id, nome, email..."
+                 value={searchText}
+                 onChange={(e) => setSearchText(e.target.value)}
+                 className="block w-full sm:w-64 pl-10 pr-3 py-2 border border-gray-200 rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:border-[#007AFF] focus:ring-1 focus:ring-[#007AFF] bg-white transition-colors"
+               />
+             </div>
          </div>
        </div>
 
        <div className="bg-[#F5F5F7] rounded-[32px] flex-1 flex flex-col p-6 overflow-hidden relative">
           <div className="space-y-4 overflow-y-auto w-full">
-            {activeTab === 'team' && users.map(u => (
-              <div key={u.id} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex justify-between items-center">
-                 <div className="flex items-center gap-4">
+            {activeTab === 'team' && filteredUsers.map(u => (
+              <div key={u.id} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                 <div className="flex items-center gap-4 min-w-0">
                    {u.company_logo ? (
-                     <img src={u.company_logo} alt={u.company_name || 'Logo'} className="w-10 h-10 object-cover rounded-xl border border-gray-100 bg-gray-50" />
+                     <img src={u.company_logo} alt={u.company_name || 'Logo'} className="w-10 h-10 object-cover rounded-xl border border-gray-100 bg-gray-50 flex-shrink-0" />
                    ) : (
-                     <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center text-gray-400">
+                     <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center text-gray-400 flex-shrink-0">
                        <User className="w-5 h-5" />
                      </div>
                    )}
-                   <div>
-                     <p className="font-bold text-sm text-[#1D1D1F] flex items-center gap-2">
-                       {u.name} (ID: {u.id})
+                   <div className="min-w-0">
+                     <p className="font-bold text-sm text-[#1D1D1F] flex flex-wrap items-center gap-2">
+                       <span className="truncate">{u.name}</span>
+                       <button onClick={() => handleCopyId(u.id)} className="flex items-center gap-1 bg-gray-100 hover:bg-gray-200 text-gray-600 text-[10px] uppercase font-bold px-1.5 py-0.5 rounded transition-colors" title="Copiar ID">
+                         {copiedId === u.id ? <Check className="w-3 h-3 text-green-600" /> : <Copy className="w-3 h-3" />}
+                         ID: {u.id}
+                       </button>
                        {u.role === 'admin' && <span className="bg-blue-100 text-blue-700 text-[9px] uppercase font-bold px-1.5 py-0.5 rounded">Admin</span>}
                        {u.role === 'blocked' && <span className="bg-red-100 text-red-700 text-[9px] uppercase font-bold px-1.5 py-0.5 rounded">Block</span>}
                      </p>
-                     <p className="text-xs text-[#86868B] mt-0.5">
+                     <p className="text-xs text-[#86868B] mt-0.5 truncate">
                        {u.company_name ? `${u.company_name} • ${u.email}` : u.email}
                      </p>
                    </div>
                  </div>
-                 <div className="flex gap-2">
+                 <div className="flex gap-2 flex-wrap sm:flex-nowrap shrink-0 border-t border-gray-100 sm:border-0 pt-3 sm:pt-0">
                    {u.email !== 'admin@valentina.com' && (
                      <>
                        <button onClick={() => { 
@@ -1067,11 +1107,11 @@ export function AdminUsers() {
                            company_logo: u.company_logo || ''
                          }); 
                          setShowAddForm(true); 
-                       }} className="text-[10px] uppercase font-bold text-[#007AFF] px-2 bg-blue-50 rounded-xl hover:bg-blue-100 transition-colors">Editar</button>
-                       <button onClick={() => handleToggleBlock(u, 'team')} className="p-2 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
+                       }} className="text-[10px] uppercase font-bold text-[#007AFF] px-4 py-2 sm:px-2 sm:py-0 bg-blue-50 rounded-xl hover:bg-blue-100 transition-colors flex-1 sm:flex-none">Editar</button>
+                       <button onClick={() => handleToggleBlock(u, 'team')} className="p-2 sm:p-2 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors flex-1 sm:flex-none flex items-center justify-center">
                          {u.role === 'blocked' ? <Unlock className="w-4 h-4 text-green-600" /> : <Lock className="w-4 h-4 text-orange-500" />}
                        </button>
-                       <button onClick={() => handleDelete(u, 'team')} className="p-2 bg-red-50 rounded-xl hover:bg-red-100 transition-colors">
+                       <button onClick={() => handleDelete(u, 'team')} className="p-2 sm:p-2 bg-red-50 rounded-xl hover:bg-red-100 transition-colors flex-1 sm:flex-none flex items-center justify-center">
                          <Trash2 className="w-4 h-4 text-red-500" />
                        </button>
                      </>
@@ -1080,23 +1120,27 @@ export function AdminUsers() {
               </div>
             ))}
 
-            {activeTab === 'clients' && clients.map(c => (
-              <div key={c.id} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex justify-between items-center">
-                 <div className="flex items-center gap-4">
-                   <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center text-gray-400">
+            {activeTab === 'clients' && filteredClients.map(c => (
+              <div key={c.id} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                 <div className="flex items-center gap-4 min-w-0">
+                   <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center text-gray-400 flex-shrink-0">
                      <User className="w-5 h-5" />
                    </div>
-                   <div>
-                     <p className="font-bold text-sm text-[#1D1D1F] flex items-center gap-2">
-                       {c.nome_completo || c.primeiro_nome || 'Sem nome'} (ID: {c.id})
+                   <div className="min-w-0">
+                     <p className="font-bold text-sm text-[#1D1D1F] flex flex-wrap items-center gap-2">
+                       <span className="truncate">{c.nome_completo || c.primeiro_nome || 'Sem nome'}</span>
+                       <button onClick={() => handleCopyId(c.id)} className="flex items-center gap-1 bg-gray-100 hover:bg-gray-200 text-gray-600 text-[10px] uppercase font-bold px-1.5 py-0.5 rounded transition-colors" title="Copiar ID">
+                         {copiedId === c.id ? <Check className="w-3 h-3 text-green-600" /> : <Copy className="w-3 h-3" />}
+                         ID: {c.id}
+                       </button>
                        {c.role === 'blocked' && <span className="bg-red-100 text-red-700 text-[9px] uppercase font-bold px-1.5 py-0.5 rounded">Block</span>}
                      </p>
-                     <p className="text-xs text-[#86868B] mt-0.5">
+                     <p className="text-xs text-[#86868B] mt-0.5 truncate">
                        {c.email} {c.telegram ? `• Telegram: ${c.telegram}` : ''}
                      </p>
                    </div>
                  </div>
-                 <div className="flex gap-2">
+                 <div className="flex gap-2 flex-wrap sm:flex-nowrap shrink-0 border-t border-gray-100 sm:border-0 pt-3 sm:pt-0">
                    <button onClick={() => { 
                      setEditingUser(c); 
                      setFormData({ 
@@ -1111,11 +1155,11 @@ export function AdminUsers() {
                        convite: c.convite || ''
                      }); 
                      setShowAddForm(true); 
-                   }} className="text-[10px] uppercase font-bold text-[#007AFF] px-2 bg-blue-50 rounded-xl hover:bg-blue-100 transition-colors">Editar</button>
-                   <button onClick={() => handleToggleBlock(c, 'client')} className="p-2 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
+                   }} className="text-[10px] uppercase font-bold text-[#007AFF] px-4 py-2 sm:px-2 sm:py-0 bg-blue-50 rounded-xl hover:bg-blue-100 transition-colors flex-1 sm:flex-none">Editar</button>
+                   <button onClick={() => handleToggleBlock(c, 'client')} className="p-2 sm:p-2 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors flex-1 sm:flex-none flex items-center justify-center">
                      {c.role === 'blocked' ? <Unlock className="w-4 h-4 text-green-600" /> : <Lock className="w-4 h-4 text-orange-500" />}
                    </button>
-                   <button onClick={() => handleDelete(c, 'client')} className="p-2 bg-red-50 rounded-xl hover:bg-red-100 transition-colors">
+                   <button onClick={() => handleDelete(c, 'client')} className="p-2 sm:p-2 bg-red-50 rounded-xl hover:bg-red-100 transition-colors flex-1 sm:flex-none flex items-center justify-center">
                      <Trash2 className="w-4 h-4 text-red-500" />
                    </button>
                  </div>

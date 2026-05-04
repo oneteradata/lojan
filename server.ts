@@ -538,6 +538,9 @@ async function startServer() {
 
       if (dbResult.rows.length > 0) {
         const user = dbResult.rows[0];
+        if (user.role === 'blocked') {
+          return res.status(403).json({ success: false, error: 'Usuário bloqueado pelo administrador.' });
+        }
         const token = jwt.sign(user, JWT_SECRET, { expiresIn: '1d' });
         res.json({ success: true, user, token });
       } else {
