@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { ShoppingBag, EyeOff, ChevronRight, RefreshCw, LogOut, TrendingUp, Package, ShoppingCart, Heart, Activity, Plus, X, Trash2, Home, Users, User, Lock, Unlock, Search, Copy, Check } from 'lucide-react';
+import { ShoppingBag, EyeOff, ChevronRight, RefreshCw, LogOut, TrendingUp, Package, ShoppingCart, Heart, Activity, Plus, X, Trash2, Home, Users, User, Lock, Unlock, Search, Copy, Check, Pickaxe, Landmark, List } from 'lucide-react';
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { AdminCredits } from "./AdminCredits";
+import { AdminLogs } from "./AdminLogs";
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -308,7 +310,7 @@ function AdminOverview({ user, onLogout }: { user: any, onLogout: () => void }) 
 }
 
 // -- Products Component --
-function AdminProducts() {
+function AdminProducts({ user }: { user: any }) {
   const [products, setProducts] = useState<any[]>([]);
   const [modalItem, setModalItem] = useState<any | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -362,7 +364,10 @@ function AdminProducts() {
                  const displayUrl = firstImg || (p.media && p.media.length > 0 ? p.media[0].url : '');
 
                  return (
-                 <div key={p.id} onClick={() => { setModalItem(p); setIsModalOpen(true); }} className="border border-gray-100 rounded-2xl overflow-hidden hover:shadow-md transition-all cursor-pointer">
+                 <div key={p.id} onClick={() => { setModalItem(p); setIsModalOpen(true); }} className="border border-gray-100 rounded-2xl overflow-hidden hover:shadow-md transition-all cursor-pointer relative">
+                    {!p.is_available && (
+                      <div className="absolute top-2 right-2 bg-amber-100 text-amber-700 text-[10px] font-bold px-2 py-1 rounded shadow-sm z-10 uppercase tracking-widest">Pendente</div>
+                    )}
                     {isVideo ? (
                        <video src={displayUrl} className="w-full aspect-square object-cover bg-gray-100" muted loop autoPlay playsInline />
                     ) : (
@@ -386,14 +391,14 @@ function AdminProducts() {
 
        <AnimatePresence>
          {isModalOpen && (
-           <ProductModal item={modalItem} onClose={() => { setIsModalOpen(false); fetchProducts(); }} />
+           <ProductModal item={modalItem} user={user} onClose={() => { setIsModalOpen(false); fetchProducts(); }} />
          )}
        </AnimatePresence>
     </motion.div>
   );
 }
 
-function ProductModal({ item, onClose }: { item?: any, onClose: () => void }) {
+function ProductModal({ item, user, onClose }: { item?: any, user?: any, onClose: () => void }) {
   const [formData, setFormData] = useState({
     name: item?.name || '', 
     category: item?.category || 'Beleza feminina', 
@@ -403,7 +408,8 @@ function ProductModal({ item, onClose }: { item?: any, onClose: () => void }) {
     stock: item?.stock || '', 
     details: item?.details || '',
     tables: item?.tables || '',
-    seats_per_table: item?.seats_per_table || '2'
+    seats_per_table: item?.seats_per_table || '2',
+    is_available: item?.is_available || false
   });
   const [media, setMedia] = useState<{type: string, url: string, fileName?: string}[]>(item?.media || []);
   const [variations, setVariations] = useState<{type: string, options: string[], multiple?: boolean, multipleCount?: boolean, optionPrices?: string[]}[]>(item?.variations || [{ type: 'cor', options: [] }]);
@@ -584,7 +590,20 @@ function ProductModal({ item, onClose }: { item?: any, onClose: () => void }) {
 
             {/* Identificação */}
             <div>
-              <label className="text-[11px] font-bold text-[#86868B] tracking-wide mb-2 block">IDENTIFICAÇÃO (NOME)</label>
+              <div className="flex justify-between items-end mb-2">
+                 <label className="text-[11px] font-bold text-[#86868B] tracking-wide block">IDENTIFICAÇÃO (NOME)</label>
+                 {user?.role === 'admin' && item && (
+                    <label className="flex items-center gap-2 text-[11px] font-bold text-[#1D1D1F] cursor-pointer bg-gray-50 px-2 py-1 rounded-md border border-gray-200">
+                      <input 
+                        type="checkbox" 
+                        checked={formData.is_available} 
+                        onChange={e => setFormData({...formData, is_available: e.target.checked})} 
+                        className="accent-blue-600 w-3 h-3"
+                      />
+                      Produto Aprovado / Disponível
+                    </label>
+                 )}
+              </div>
               <input 
                 type="text" placeholder="Nome do produto" 
                 value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})}
@@ -1114,6 +1133,20 @@ export function AdminUsers() {
                      <p className="text-xs text-[#86868B] mt-0.5 truncate">
                        {u.company_name ? `${u.company_name} • ${u.email}` : u.email}
                      </p>
+                     {u.wallet && u.wallet.tokens && Array.isArray(u.wallet.tokens) && u.wallet.tokens.length > 0 && (
+                       <div className="mt-1 flex flex-wrap gap-1">
+                         {Object.entries(
+                           u.wallet.tokens.reduce((acc: any, val: string) => {
+                             acc[val.length] = (acc[val.length] || 0) + 1;
+                             return acc;
+                           }, {})
+                         ).map(([len, count]) => (
+                           <span key={len} className="bg-green-100 text-green-800 text-[10px] font-bold px-1.5 py-0.5 rounded uppercase box-border border-b border-green-200">
+                             e{len}: {String(count)}
+                           </span>
+                         ))}
+                       </div>
+                     )}
                    </div>
                  </div>
                  <div className="grid grid-cols-3 gap-2 shrink-0 border-t border-gray-100 pt-3 mt-3 w-full sm:w-auto sm:border-0 sm:pt-0 sm:mt-0 sm:flex sm:flex-nowrap">
@@ -1301,6 +1334,16 @@ export default function AdminApp() {
   const location = useLocation();
   const navigate = useNavigate();
 
+  useEffect(() => {
+    if (user && user.id) {
+      apiFetch('/api/me').then(r => r.json()).then(data => {
+         if (data.success && data.user) {
+            setUser((prev: any) => ({ ...prev, ...data.user }));
+         }
+      }).catch(e => console.error("Erro ao atualizar user", e));
+    }
+  }, [location.pathname]); // Refresh user data when navigating to different pages
+
   if (!user) {
     return <AdminLogin onLogin={setUser} />;
   }
@@ -1310,8 +1353,10 @@ export default function AdminApp() {
       <div className="flex-1 overflow-x-hidden overflow-y-auto pb-20">
         <Routes>
           <Route path="/" element={<AdminOverview user={user} onLogout={() => { localStorage.removeItem('token'); setUser(null); }} />} />
-          <Route path="/products" element={<AdminProducts />} />
+          <Route path="/products" element={<AdminProducts user={user} />} />
           <Route path="/orders" element={<AdminOrders />} />
+          <Route path="/credits" element={<AdminCredits user={user} />} />
+          <Route path="/logs" element={<AdminLogs user={user} />} />
           <Route path="/users" element={user.role === 'admin' ? <AdminUsers /> : <div className="p-8 text-center text-gray-500">Acesso negado. Apenas administradores.</div>} />
         </Routes>
       </div>
@@ -1339,14 +1384,30 @@ export default function AdminApp() {
           <ShoppingCart className={cn("w-6 h-6", location.pathname === '/orders' && "fill-current")} />
           <span className="text-[10px] font-semibold">Vendas</span>
         </button>
+        <button 
+          onClick={() => navigate('/credits')}
+          className={cn("flex flex-col items-center gap-1", location.pathname === '/credits' ? "text-[#007AFF]" : "text-[#86868B]")}
+        >
+          <Landmark className={cn("w-6 h-6", location.pathname === '/credits' && "fill-current")} />
+          <span className="text-[10px] font-semibold">Pedidos</span>
+        </button>
         {user.role === 'admin' && (
-          <button 
-            onClick={() => navigate('/users')}
-            className={cn("flex flex-col items-center gap-1", location.pathname === '/users' ? "text-[#007AFF]" : "text-[#86868B]")}
-          >
-            <Users className={cn("w-6 h-6", location.pathname === '/users' && "fill-current")} />
-            <span className="text-[10px] font-semibold">Equipe</span>
-          </button>
+          <>
+            <button 
+              onClick={() => navigate('/users')}
+              className={cn("flex flex-col items-center gap-1", location.pathname === '/users' ? "text-[#007AFF]" : "text-[#86868B]")}
+            >
+              <Users className={cn("w-6 h-6", location.pathname === '/users' && "fill-current")} />
+              <span className="text-[10px] font-semibold">Equipe</span>
+            </button>
+            <button 
+              onClick={() => navigate('/logs')}
+              className={cn("flex flex-col items-center gap-1", location.pathname === '/logs' ? "text-[#007AFF]" : "text-[#86868B]")}
+            >
+              <List className={cn("w-6 h-6", location.pathname === '/logs' && "fill-current")} />
+              <span className="text-[10px] font-semibold">Logs</span>
+            </button>
+          </>
         )}
       </div>
     </div>
