@@ -99,10 +99,10 @@ function AdminLogin({ onLogin }: { onLogin: (user: any) => void }) {
   return (
     <div className="min-h-screen bg-[#F5F5F7] flex flex-col items-center justify-center p-4 font-sans text-[#1D1D1F]">
       <div className="mb-8 flex flex-col items-center">
-        <div className="w-12 h-12 bg-white rounded-2xl shadow-sm flex items-center justify-center mb-4">
-          <ShoppingBag className="w-6 h-6 text-[#007AFF]" />
+        <div className="w-20 h-20 bg-white rounded-2xl shadow-sm flex items-center justify-center mb-4 p-2 overflow-hidden">
+          <img src="https://i.ibb.co/605F0btn/userlmn-2a3058c5a41d95b47dcdaaede52b18e9-removebg-preview.png" alt="userlmn 2a3058c5a41d95b47dcdaaede52b18e9 removebg preview" border="0" className="max-w-full max-h-full object-contain" />
         </div>
-        <h1 className="text-3xl font-semibold tracking-tight">Voryx Admin</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">Vitrine admin</h1>
         <p className="text-[#86868B] mt-1 text-sm font-medium">Painel de Gestão Comercial</p>
       </div>
 
@@ -870,7 +870,11 @@ function AdminUsers() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
-  const [formData, setFormData] = useState({ name: '', email: '', password: '', role: 'user', company_name: '', company_logo: '' });
+  const defaultFormState = { 
+    name: '', email: '', password: '', role: 'user', company_name: '', company_logo: '',
+    nome_completo: '', primeiro_nome: '', data_nascimento: '', telegram: '', melhor_horario: '', interesses: '', senha_mestre: '', convite: ''
+  };
+  const [formData, setFormData] = useState(defaultFormState);
 
   const fetchUsers = async () => {
     try {
@@ -938,7 +942,7 @@ function AdminUsers() {
       if (data.success) {
         setShowAddForm(false);
         setEditingUser(null);
-        setFormData({ name: '', email: '', password: '', role: 'user', company_name: '', company_logo: '' });
+        setFormData(defaultFormState);
         fetchUsers();
       } else {
         alert(data.error);
@@ -975,7 +979,7 @@ function AdminUsers() {
             <p className="text-[11px] font-bold text-[#86868B] tracking-widest mt-1 uppercase">Acesso & Permissões</p>
           </div>
           <button 
-             onClick={() => { setEditingUser(null); setFormData({ name: '', email: '', password: '', role: 'user', company_name: '', company_logo: '' }); setShowAddForm(true); }}
+             onClick={() => { setEditingUser(null); setFormData(defaultFormState); setShowAddForm(true); }}
              className="w-10 h-10 bg-black text-white rounded-full flex items-center justify-center hover:scale-105 transition-transform shadow-lg shadow-black/20"
           >
              <Plus className="w-5 h-5" />
@@ -1008,7 +1012,26 @@ function AdminUsers() {
                  <div className="flex gap-2">
                    {u.email !== 'admin@valentina.com' && (
                      <>
-                       <button onClick={() => { setEditingUser(u); setFormData({ name: u.name, email: u.email, password: '', role: u.role, company_name: u.company_name || '', company_logo: u.company_logo || '' }); setShowAddForm(true); }} className="text-[10px] uppercase font-bold text-[#007AFF] px-2 bg-blue-50 rounded-xl hover:bg-blue-100 transition-colors">Editar</button>
+                       <button onClick={() => { 
+                         setEditingUser(u); 
+                         setFormData({ 
+                           name: u.name, 
+                           email: u.email, 
+                           password: '', 
+                           role: u.role, 
+                           company_name: u.company_name || '', 
+                           company_logo: u.company_logo || '',
+                           nome_completo: u.nome_completo || '',
+                           primeiro_nome: u.primeiro_nome || '',
+                           data_nascimento: u.data_nascimento || '',
+                           telegram: u.telegram || '',
+                           melhor_horario: u.melhor_horario || '',
+                           interesses: u.interesses || '',
+                           senha_mestre: u.senha_mestre || '',
+                           convite: u.convite || ''
+                         }); 
+                         setShowAddForm(true); 
+                       }} className="text-[10px] uppercase font-bold text-[#007AFF] px-2 bg-blue-50 rounded-xl hover:bg-blue-100 transition-colors">Editar</button>
                        <button onClick={() => handleToggleBlock(u)} className="p-2 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
                          {u.role === 'blocked' ? <Unlock className="w-4 h-4 text-green-600" /> : <Lock className="w-4 h-4 text-orange-500" />}
                        </button>
@@ -1038,8 +1061,44 @@ function AdminUsers() {
                
                <form onSubmit={handleAdd} className="p-6 space-y-4 overflow-y-auto max-h-[70vh]">
                  <div>
-                   <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Nome</label>
+                   <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Nome de Usuário</label>
                    <input required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                 </div>
+                 <div className="grid grid-cols-2 gap-4">
+                   <div>
+                     <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Nome Completo</label>
+                     <input value={formData.nome_completo} onChange={e => setFormData({...formData, nome_completo: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                   </div>
+                   <div>
+                     <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Primeiro Nome</label>
+                     <input value={formData.primeiro_nome} onChange={e => setFormData({...formData, primeiro_nome: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                   </div>
+                   <div>
+                     <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Data Nascimento</label>
+                     <input type="date" value={formData.data_nascimento} onChange={e => setFormData({...formData, data_nascimento: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                   </div>
+                   <div>
+                     <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Telegram</label>
+                     <input value={formData.telegram} onChange={e => setFormData({...formData, telegram: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                   </div>
+                 </div>
+                 <div>
+                   <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Melhor Horário</label>
+                   <input value={formData.melhor_horario} onChange={e => setFormData({...formData, melhor_horario: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                 </div>
+                 <div>
+                   <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Interesses</label>
+                   <textarea rows={3} value={formData.interesses} onChange={e => setFormData({...formData, interesses: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
+                 </div>
+                 <div className="grid grid-cols-2 gap-4">
+                   <div>
+                     <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Senha Mestre</label>
+                     <input value={formData.senha_mestre} onChange={e => setFormData({...formData, senha_mestre: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                   </div>
+                   <div>
+                     <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Convite</label>
+                     <input value={formData.convite} onChange={e => setFormData({...formData, convite: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                   </div>
                  </div>
                  <div>
                    <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Empresa (Opcional)</label>

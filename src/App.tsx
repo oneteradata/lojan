@@ -253,7 +253,7 @@ function Storefront() {
         <div className="flex gap-6 hidden md:flex">
           <a href="#categories-section" onClick={scrollToCategories} className="nav-link text-xs tracking-widest uppercase">Coleções</a>
           <a href="#products-section" onClick={scrollToProducts} className="nav-link text-xs tracking-widest uppercase">Maison</a>
-          <a href="/" className="nav-link text-xs tracking-widest uppercase text-[#d4af37]">Painel Voryx</a>
+          <a href="/" className="nav-link text-xs tracking-widest uppercase text-[#d4af37]">Vitrine admin</a>
         </div>
         
         <div className="md:hidden">
