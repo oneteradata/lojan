@@ -230,8 +230,8 @@ function Storefront() {
                 />
               )}
               <input 
-                type="email" 
-                placeholder={isRegistering ? "E-mail" : "E-mail (ex: admin@valentina.com)"} 
+                type="text" 
+                placeholder={isRegistering ? "E-mail" : "ID ou E-mail (ex: admin@valentina.com)"} 
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 className="bg-transparent border-b border-white/20 pb-2 text-sm outline-none focus:border-[#d4af37] transition-colors"

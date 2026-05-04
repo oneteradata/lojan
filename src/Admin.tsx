@@ -88,12 +88,12 @@ function AdminLogin({ onLogin }: { onLogin: (user: any) => void }) {
             </div>
           )}
           <div>
-            <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">E-MAIL</label>
+            <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">{isRegistering ? 'E-MAIL' : 'ID OU E-MAIL'}</label>
             <input 
-              type="email" 
+              type="text" 
               value={email}
               onChange={e => setEmail(e.target.value)}
-              placeholder="email@exemplo.com"
+              placeholder={isRegistering ? "email@exemplo.com" : "Seu ID ou E-mail"}
               className="w-full bg-[#F5F5F7] border border-transparent focus:border-[#007AFF]/30 focus:bg-white rounded-2xl px-4 py-3.5 text-sm outline-none transition-all"
               required
             />

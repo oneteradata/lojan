@@ -455,7 +455,13 @@ async function startServer() {
         return res.status(401).json({ success: false, error: 'Credenciais inválidas. Tente admin@valentina.com e admin' });
       }
 
-      const dbResult = await pool.query('SELECT id, name, email, role FROM users WHERE email = $1 AND password = $2', [email, password]);
+      let dbResult;
+      if (!isNaN(Number(email))) {
+        dbResult = await pool.query('SELECT id, name, email, role FROM users WHERE (email = $1 OR id = $2) AND password = $3', [email, Number(email), password]);
+      } else {
+        dbResult = await pool.query('SELECT id, name, email, role FROM users WHERE email = $1 AND password = $2', [email, password]);
+      }
+
       if (dbResult.rows.length > 0) {
         const user = dbResult.rows[0];
         const token = jwt.sign(user, JWT_SECRET, { expiresIn: '1d' });
