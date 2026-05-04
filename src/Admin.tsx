@@ -175,7 +175,23 @@ function AdminLogin({ onLogin }: { onLogin: (user: any) => void }) {
               />
               <EyeOff className="w-5 h-5 text-[#86868B] absolute right-4 top-1/2 -translate-y-1/2 cursor-pointer" />
             </div>
-            {error && <p className="text-[#FF3B30] text-xs mt-2 px-2">{error}</p>}
+            {error && error === 'Usuário bloqueado pelo administrador.' ? (
+              <div className="mt-4 p-4 bg-red-50 border border-red-100 rounded-2xl">
+                <p className="text-[#FF3B30] text-xs font-medium text-center">
+                  Seu cadastro possui uma irregularidade. Entre em contato para resolver aqui.
+                </p>
+                <a 
+                  href={`https://wa.me/5512981311773?text=${encodeURIComponent(`Olá, meu email é ${email} e meu cadastro consta com irregularidade.`)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-3 w-full bg-[#25D366] hover:bg-[#1DA851] text-white flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold transition-colors"
+                >
+                  Falar no WhatsApp
+                </a>
+              </div>
+            ) : error ? (
+              <p className="text-[#FF3B30] text-xs mt-2 px-2">{error}</p>
+            ) : null}
           </div>
 
           <button 
@@ -1093,7 +1109,7 @@ export function AdminUsers() {
                      </p>
                    </div>
                  </div>
-                 <div className="flex gap-2 flex-wrap sm:flex-nowrap shrink-0 border-t border-gray-100 sm:border-0 pt-3 sm:pt-0">
+                 <div className="grid grid-cols-3 gap-2 shrink-0 border-t border-gray-100 pt-3 mt-3 w-full sm:w-auto sm:border-0 sm:pt-0 sm:mt-0 sm:flex sm:flex-nowrap">
                    {u.email !== 'admin@valentina.com' && (
                      <>
                        <button onClick={() => { 
@@ -1107,11 +1123,11 @@ export function AdminUsers() {
                            company_logo: u.company_logo || ''
                          }); 
                          setShowAddForm(true); 
-                       }} className="text-[10px] uppercase font-bold text-[#007AFF] px-4 py-2 sm:px-2 sm:py-0 bg-blue-50 rounded-xl hover:bg-blue-100 transition-colors flex-1 sm:flex-none">Editar</button>
-                       <button onClick={() => handleToggleBlock(u, 'team')} className="p-2 sm:p-2 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors flex-1 sm:flex-none flex items-center justify-center">
+                       }} className="text-[10px] uppercase font-bold text-[#007AFF] py-3 sm:px-3 sm:py-2 bg-blue-50 rounded-xl hover:bg-blue-100 transition-colors flex items-center justify-center">Editar</button>
+                       <button onClick={() => handleToggleBlock(u, 'team')} className="py-3 sm:px-3 sm:py-2 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors flex items-center justify-center">
                          {u.role === 'blocked' ? <Unlock className="w-4 h-4 text-green-600" /> : <Lock className="w-4 h-4 text-orange-500" />}
                        </button>
-                       <button onClick={() => handleDelete(u, 'team')} className="p-2 sm:p-2 bg-red-50 rounded-xl hover:bg-red-100 transition-colors flex-1 sm:flex-none flex items-center justify-center">
+                       <button onClick={() => handleDelete(u, 'team')} className="py-3 sm:px-3 sm:py-2 bg-red-50 rounded-xl hover:bg-red-100 transition-colors flex items-center justify-center">
                          <Trash2 className="w-4 h-4 text-red-500" />
                        </button>
                      </>
@@ -1140,7 +1156,7 @@ export function AdminUsers() {
                      </p>
                    </div>
                  </div>
-                 <div className="flex gap-2 flex-wrap sm:flex-nowrap shrink-0 border-t border-gray-100 sm:border-0 pt-3 sm:pt-0">
+                 <div className="grid grid-cols-3 gap-2 shrink-0 border-t border-gray-100 pt-3 mt-3 w-full sm:w-auto sm:border-0 sm:pt-0 sm:mt-0 sm:flex sm:flex-nowrap">
                    <button onClick={() => { 
                      setEditingUser(c); 
                      setFormData({ 
@@ -1155,11 +1171,11 @@ export function AdminUsers() {
                        convite: c.convite || ''
                      }); 
                      setShowAddForm(true); 
-                   }} className="text-[10px] uppercase font-bold text-[#007AFF] px-4 py-2 sm:px-2 sm:py-0 bg-blue-50 rounded-xl hover:bg-blue-100 transition-colors flex-1 sm:flex-none">Editar</button>
-                   <button onClick={() => handleToggleBlock(c, 'client')} className="p-2 sm:p-2 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors flex-1 sm:flex-none flex items-center justify-center">
+                   }} className="text-[10px] uppercase font-bold text-[#007AFF] py-3 sm:px-3 sm:py-2 bg-blue-50 rounded-xl hover:bg-blue-100 transition-colors flex items-center justify-center">Editar</button>
+                   <button onClick={() => handleToggleBlock(c, 'client')} className="py-3 sm:px-3 sm:py-2 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors flex items-center justify-center">
                      {c.role === 'blocked' ? <Unlock className="w-4 h-4 text-green-600" /> : <Lock className="w-4 h-4 text-orange-500" />}
                    </button>
-                   <button onClick={() => handleDelete(c, 'client')} className="p-2 sm:p-2 bg-red-50 rounded-xl hover:bg-red-100 transition-colors flex-1 sm:flex-none flex items-center justify-center">
+                   <button onClick={() => handleDelete(c, 'client')} className="py-3 sm:px-3 sm:py-2 bg-red-50 rounded-xl hover:bg-red-100 transition-colors flex items-center justify-center">
                      <Trash2 className="w-4 h-4 text-red-500" />
                    </button>
                  </div>

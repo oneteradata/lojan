@@ -340,7 +340,23 @@ function Storefront() {
                 className="bg-transparent border-b border-white/20 pb-2 text-sm outline-none focus:border-[#d4af37] transition-colors"
                 required
               />
-              {authError && <p className="text-red-400 text-xs mt-1 text-center">{authError}</p>}
+              {authError && authError === 'Usuário bloqueado pelo administrador.' ? (
+                <div className="mt-4 p-4 bg-red-900/40 border border-red-500/30 rounded-xl backdrop-blur-sm">
+                  <p className="text-red-300 text-xs text-center font-medium">
+                    Seu cadastro possui uma irregularidade. Entre em contato para resolver aqui.
+                  </p>
+                  <a 
+                    href={`https://wa.me/5512981311773?text=${encodeURIComponent(`Olá, meu email é ${email} e meu cadastro consta com irregularidade.`)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-3 w-full bg-[#25D366] hover:bg-[#1DA851] text-white flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-bold transition-colors"
+                  >
+                    Falar no WhatsApp
+                  </a>
+                </div>
+              ) : authError ? (
+                <p className="text-red-400 text-xs mt-1 text-center">{authError}</p>
+              ) : null}
               
               <button type="submit" className="bg-white text-black mt-6 py-3 text-xs uppercase tracking-widest font-semibold hover:bg-[#d4af37] hover:text-white transition-colors">
                 {isRegistering ? 'Registrar' : 'Entrar'}
