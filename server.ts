@@ -83,6 +83,7 @@ async function initDB() {
     // Atualiza a tabela existente caso já exista, para evitar erros (Fallback agressivo para dev)
     try { await pool.query(`ALTER TABLE products ADD COLUMN user_id INTEGER;`); } catch (e) {}
     try { await pool.query(`ALTER TABLE products ADD COLUMN user_name VARCHAR(255);`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE products ADD COLUMN business_model VARCHAR(50) DEFAULT 'Venda por unidade';`); } catch (e) {}
     try { await pool.query(`ALTER TABLE products ADD COLUMN category VARCHAR(100);`); } catch (e) {}
     try { await pool.query(`ALTER TABLE products ADD COLUMN tokens INTEGER DEFAULT 0;`); } catch (e) {}
     try { await pool.query(`ALTER TABLE products ADD COLUMN stock INTEGER DEFAULT 0;`); } catch (e) {}
@@ -194,18 +195,18 @@ async function startServer() {
 
   // Criação de produto
   app.post('/api/products', requireAuth, async (req: any, res) => {
-    const { name, category, price, tokens, stock, details, media, variations } = req.body;
+    const { name, category, price, tokens, stock, details, media, variations, business_model } = req.body;
     try {
       if (!dbConnected) throw new Error("DB offline");
       const userId = req.user.id;
       const userName = req.user.name;
       const imagesString = (media || []).map((m: any) => m.url).join(',');
       const result = await pool.query(`
-        INSERT INTO products (name, category, price, tokens, stock, details, media, variations, image, user_id, user_name)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *
+        INSERT INTO products (name, category, price, tokens, stock, details, media, variations, image, user_id, user_name, business_model)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *
       `, [
         name, category, String(price || '0'), parseInt(tokens) || 0, parseInt(stock) || 0, details, 
-        JSON.stringify(media || []), JSON.stringify(variations || []), imagesString, userId, userName
+        JSON.stringify(media || []), JSON.stringify(variations || []), imagesString, userId, userName, business_model || 'Venda por unidade'
       ]);
       res.json({ success: true, product: result.rows[0] });
     } catch (err: any) {
@@ -233,7 +234,7 @@ async function startServer() {
 
   // Editar produto
   app.put('/api/products/:id', requireAuth, async (req: any, res) => {
-    const { name, category, price, tokens, stock, details, media, variations } = req.body;
+    const { name, category, price, tokens, stock, details, media, variations, business_model } = req.body;
     try {
       if (!dbConnected) throw new Error("DB offline");
       
@@ -247,11 +248,11 @@ async function startServer() {
       const imagesString = (media || []).map((m: any) => m.url).join(',');
       const result = await pool.query(`
         UPDATE products 
-        SET name = $1, category = $2, price = $3, tokens = $4, stock = $5, details = $6, media = $7, variations = $8, image = $9
-        WHERE id = $10 RETURNING *
+        SET name = $1, category = $2, price = $3, tokens = $4, stock = $5, details = $6, media = $7, variations = $8, image = $9, business_model = $10
+        WHERE id = $11 RETURNING *
       `, [
         name, category, String(price || '0'), parseInt(tokens) || 0, parseInt(stock) || 0, details, 
-        JSON.stringify(media || []), JSON.stringify(variations || []), imagesString,
+        JSON.stringify(media || []), JSON.stringify(variations || []), imagesString, business_model || 'Venda por unidade',
         req.params.id
       ]);
       res.json({ success: true, product: result.rows[0] });

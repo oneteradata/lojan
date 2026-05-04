@@ -260,7 +260,9 @@ function AdminProducts() {
                     <div className="p-4">
                        <h4 className="font-semibold text-sm truncate">{p.name}</h4>
                        <div className="flex justify-between items-center mt-1">
-                         <p className="text-xs text-[#007AFF] font-medium">R$ {parseFloat(p.price).toLocaleString('pt-BR')}</p>
+                         <p className="text-xs text-[#007AFF] font-medium">
+                           {Number(p.price) === 0 ? 'A consultar' : `R$ ${parseFloat(p.price).toLocaleString('pt-BR')}${p.business_model === 'Venda por kg' ? ' / kg' : (p.business_model && p.business_model !== 'Venda por unidade' ? ` (${p.business_model})` : '')}`}
+                         </p>
                          {p.user_name && <p className="text-[9px] text-[#86868B] uppercase font-bold truncate max-w-[80px]">By {p.user_name}</p>}
                        </div>
                     </div>
@@ -284,6 +286,7 @@ function ProductModal({ item, onClose }: { item?: any, onClose: () => void }) {
   const [formData, setFormData] = useState({
     name: item?.name || '', 
     category: item?.category || 'Geral', 
+    business_model: item?.business_model || 'Venda por unidade',
     price: item?.price || '', 
     tokens: item?.tokens || '', 
     stock: item?.stock || '', 
@@ -481,18 +484,31 @@ function ProductModal({ item, onClose }: { item?: any, onClose: () => void }) {
             </div>
 
             {/* Categoria */}
-            <div>
-              <label className="text-[11px] font-bold text-[#86868B] tracking-wide mb-2 block">CATEGORIA PRINCIPAL</label>
-              <select 
-                value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})}
-                className="w-full bg-white border border-gray-200 focus:border-[#007AFF] rounded-2xl px-4 py-3.5 text-sm outline-none transition-all shadow-sm appearance-none"
-              >
-                <option>Geral</option>
-                <option>Roupas</option>
-                <option>Moda</option>
-                <option>Eletrônicos</option>
-                <option>Acessórios</option>
-              </select>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[11px] font-bold text-[#86868B] tracking-wide mb-2 block">CATEGORIA PRINCIPAL</label>
+                <select 
+                  value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})}
+                  className="w-full bg-white border border-gray-200 focus:border-[#007AFF] rounded-2xl px-4 py-3.5 text-sm outline-none transition-all shadow-sm appearance-none"
+                >
+                  <option>Geral</option>
+                  <option>Roupas</option>
+                  <option>Moda</option>
+                  <option>Eletrônicos</option>
+                  <option>Acessórios</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-[11px] font-bold text-[#86868B] tracking-wide mb-2 block">MODELO DE NEGÓCIO</label>
+                <select 
+                  value={formData.business_model} onChange={e => setFormData({...formData, business_model: e.target.value})}
+                  className="w-full bg-white border border-gray-200 focus:border-[#007AFF] rounded-2xl px-4 py-3.5 text-sm outline-none transition-all shadow-sm appearance-none"
+                >
+                  <option value="Venda por unidade">Venda por unidade</option>
+                  <option value="Venda por kg">Venda por kg</option>
+                  <option value="Agendamento">Agendamento</option>
+                </select>
+              </div>
             </div>
 
             {/* Valores e Estoque */}
@@ -637,6 +653,7 @@ function AdminUsers() {
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [editingUser, setEditingUser] = useState<any>(null);
   const [formData, setFormData] = useState({ name: '', email: '', password: '', role: 'user' });
 
   const fetchUsers = async () => {
@@ -655,14 +672,18 @@ function AdminUsers() {
     e.preventDefault();
     setLoading(true);
     try {
-      const res = await apiFetch('/api/users', {
-        method: 'POST',
+      const url = editingUser ? `/api/users/${editingUser.id}` : '/api/users';
+      const method = editingUser ? 'PUT' : 'POST';
+
+      const res = await apiFetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)
       });
       const data = await res.json();
       if (data.success) {
         setShowAddForm(false);
+        setEditingUser(null);
         setFormData({ name: '', email: '', password: '', role: 'user' });
         fetchUsers();
       } else {
@@ -700,7 +721,7 @@ function AdminUsers() {
             <p className="text-[11px] font-bold text-[#86868B] tracking-widest mt-1 uppercase">Acesso & Permissões</p>
           </div>
           <button 
-             onClick={() => setShowAddForm(true)}
+             onClick={() => { setEditingUser(null); setFormData({ name: '', email: '', password: '', role: 'user' }); setShowAddForm(true); }}
              className="w-10 h-10 bg-black text-white rounded-full flex items-center justify-center hover:scale-105 transition-transform shadow-lg shadow-black/20"
           >
              <Plus className="w-5 h-5" />
@@ -713,7 +734,7 @@ function AdminUsers() {
               <div key={u.id} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex justify-between items-center">
                  <div>
                    <p className="font-bold text-sm text-[#1D1D1F] flex items-center gap-2">
-                     {u.name}
+                     {u.name} (ID: {u.id})
                      {u.role === 'admin' && <span className="bg-blue-100 text-blue-700 text-[9px] uppercase font-bold px-1.5 py-0.5 rounded">Admin</span>}
                      {u.role === 'blocked' && <span className="bg-red-100 text-red-700 text-[9px] uppercase font-bold px-1.5 py-0.5 rounded">Block</span>}
                    </p>
@@ -722,6 +743,7 @@ function AdminUsers() {
                  <div className="flex gap-2">
                    {u.email !== 'admin@valentina.com' && (
                      <>
+                       <button onClick={() => { setEditingUser(u); setFormData({ name: u.name, email: u.email, password: '', role: u.role }); setShowAddForm(true); }} className="text-[10px] uppercase font-bold text-[#007AFF] px-2 bg-blue-50 rounded-xl hover:bg-blue-100 transition-colors">Editar</button>
                        <button onClick={() => handleToggleBlock(u)} className="p-2 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
                          {u.role === 'blocked' ? <Unlock className="w-4 h-4 text-green-600" /> : <Lock className="w-4 h-4 text-orange-500" />}
                        </button>
@@ -743,7 +765,7 @@ function AdminUsers() {
               className="bg-white w-full max-w-md rounded-t-[32px] sm:rounded-[32px] shadow-2xl flex flex-col max-h-[90vh] overflow-hidden"
             >
                <div className="flex items-center justify-between p-6 border-b border-gray-100">
-                  <h3 className="text-xl font-bold tracking-tight">Novo Usuário</h3>
+                  <h3 className="text-xl font-bold tracking-tight">{editingUser ? 'Editar Usuário' : 'Novo Usuário'}</h3>
                   <button onClick={() => setShowAddForm(false)} className="w-8 h-8 flex items-center justify-center bg-gray-100 rounded-full hover:bg-gray-200">
                     <X className="w-4 h-4" />
                   </button>
@@ -759,8 +781,8 @@ function AdminUsers() {
                    <input required type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                  </div>
                  <div>
-                   <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Senha</label>
-                   <input required type="password" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                   <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Senha {editingUser ? '(deixe em branco para ignorar)' : ''}</label>
+                   <input required={!editingUser} type="password" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                  </div>
                  <div>
                    <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Permissão</label>
@@ -770,7 +792,7 @@ function AdminUsers() {
                    </select>
                  </div>
                  <button type="submit" disabled={loading} className="w-full bg-[#007AFF] text-white font-semibold rounded-2xl py-4 mt-6 disabled:opacity-70">
-                   {loading ? 'Salvando...' : 'Adicionar Usuário'}
+                   {loading ? 'Salvando...' : 'Salvar Usuário'}
                  </button>
                </form>
             </motion.div>
