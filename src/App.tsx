@@ -38,6 +38,7 @@ function Storefront() {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [cartItems, setCartItems] = useState<any[]>([]);
   const [orderStatus, setOrderStatus] = useState<string | null>(null);
+  const [selectedVariations, setSelectedVariations] = useState<{[varIdx: number]: {[optIdx: number]: number}}>({});
 
   // Busca produtos do DB
   useEffect(() => {
@@ -129,11 +130,44 @@ function Storefront() {
   };
 
   const handleAddToCart = (product: any) => {
-    const existing = cartItems.find(item => item.id === product.id);
+    let addedPrice = 0;
+    const chosenOptions: string[] = [];
+    if (product.variations && typeof product.variations !== 'string') {
+        product.variations.forEach((v: any, vIdx: number) => {
+           if (!selectedVariations[vIdx]) return;
+           v.options.forEach((opt: string, optIdx: number) => {
+              const count = selectedVariations[vIdx][optIdx] || 0;
+              if (count > 0) {
+                 const extraP = parseFloat(v.optionPrices?.[optIdx]) || 0;
+                 if (v.multipleCount) {
+                    chosenOptions.push(`${count}x ${opt}`);
+                    addedPrice += extraP * count;
+                 } else {
+                    chosenOptions.push(opt);
+                    addedPrice += extraP;
+                 }
+              }
+           });
+        });
+    }
+
+    const cartItemId = product.id + '-' + chosenOptions.join('-');
+    let basePriceStr = product.price;
+    if (typeof basePriceStr === 'string') {
+       const m = basePriceStr.match(/R\$\s*([\d\.,]+)/);
+       if (m) basePriceStr = m[1];
+    }
+    
+    let numericPrice = parseFloat(String(basePriceStr).replace(/\./g, '').replace(',', '.'));
+    if (isNaN(numericPrice)) numericPrice = 0;
+    
+    const finalPrice = numericPrice + addedPrice;
+
+    const existing = cartItems.find(item => item.cartItemId === cartItemId);
     if (existing) {
-       setCartItems(cartItems.map(item => item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item));
+       setCartItems(cartItems.map(item => item.cartItemId === cartItemId ? { ...item, quantity: item.quantity + 1 } : item));
     } else {
-       setCartItems([...cartItems, { ...product, quantity: 1 }]);
+       setCartItems([...cartItems, { ...product, cartItemId, finalPrice, chosenOptions, quantity: 1 }]);
     }
     setSelectedProduct(null);
     setIsCartOpen(true);
@@ -142,13 +176,7 @@ function Storefront() {
 
   const calculateTotal = () => {
     const rawTotal = cartItems.reduce((acc, item) => {
-      let numericPrice = 0;
-      if (typeof item.price === 'string') {
-        numericPrice = parseFloat(item.price.replace(/[R$\s\.]/g, '').replace(',', '.'));
-      } else {
-        numericPrice = Number(item.price);
-      }
-      return acc + (numericPrice * item.quantity);
+      return acc + (item.finalPrice * item.quantity);
     }, 0);
     return `R$ ${rawTotal.toLocaleString('pt-BR')}`;
   };
@@ -165,7 +193,12 @@ function Storefront() {
       const payload = {
          userId: user.id,
          total: calculateTotal(),
-         items: cartItems.map(item => ({ id: item.id, quantity: item.quantity }))
+         items: cartItems.map(item => ({ 
+             id: item.id, 
+             quantity: item.quantity, 
+             chosenOptions: item.chosenOptions, 
+             finalPrice: item.finalPrice 
+         }))
       };
       
       const res = await apiFetch('/api/orders', {
@@ -461,7 +494,10 @@ function Storefront() {
                 viewport={{ once: true }}
                 transition={{ duration: 0.6, delay: i * 0.1 }}
                 className="group cursor-pointer"
-                onClick={() => setSelectedProduct({ ...product, image: imgSrc, isVideo, price: priceLabel })}
+                onClick={() => {
+                   setSelectedProduct({ ...product, image: imgSrc, isVideo, price: priceLabel });
+                   setSelectedVariations({});
+                }}
               >
                 <div className="overflow-hidden mb-4 relative aspect-[3/4]">
                   {isVideo ? (
@@ -543,6 +579,68 @@ function Storefront() {
               <p className="text-gray-400 text-sm leading-relaxed mb-10">
                 {selectedProduct.details || selectedProduct.description || 'Uma peça exclusiva da coleção Valentina. Confeccionada com os mais altos padrões de luxo em nosso ateliê, pensada para trazer elegância e sofisticação instantânea ao seu guarda-roupa.'}
               </p>
+
+              {selectedProduct.variations && selectedProduct.variations.length > 0 && typeof selectedProduct.variations !== 'string' && (
+                <div className="flex flex-col gap-6 mb-10">
+                  {selectedProduct.variations.map((v: any, vIdx: number) => (
+                    <div key={vIdx}>
+                      <span className="text-xs uppercase tracking-widest text-[#d4af37] mb-3 block">{v.type}</span>
+                      <div className="flex flex-wrap gap-2">
+                        {v.options.map((opt: string, optIdx: number) => {
+                           const priceAdd = v.optionPrices && v.optionPrices[optIdx] ? `(+R$ ${v.optionPrices[optIdx]})` : '';
+                           if (v.multiple) {
+                              const count = selectedVariations[vIdx]?.[optIdx] || 0;
+                              if (v.multipleCount) {
+                                  return (
+                                     <div key={optIdx} className="flex items-center gap-3 border border-white/20 p-2 text-sm text-white">
+                                       <span className="text-xs">{opt} <span className="text-xs text-gray-400">{priceAdd}</span></span>
+                                       <div className="flex items-center ml-auto">
+                                          <button onClick={() => {
+                                             const curr = {...selectedVariations};
+                                             if(!curr[vIdx]) curr[vIdx] = {};
+                                             curr[vIdx][optIdx] = Math.max(0, (curr[vIdx][optIdx] || 0) - 1);
+                                             setSelectedVariations(curr);
+                                          }} className="text-gray-400 hover:text-white px-2">-</button>
+                                          <span className="text-xs w-4 text-center">{count}</span>
+                                          <button onClick={() => {
+                                             const curr = {...selectedVariations};
+                                             if(!curr[vIdx]) curr[vIdx] = {};
+                                             curr[vIdx][optIdx] = (curr[vIdx][optIdx] || 0) + 1;
+                                             setSelectedVariations(curr);
+                                          }} className="text-gray-400 hover:text-white px-2">+</button>
+                                       </div>
+                                     </div>
+                                  );
+                              } else {
+                                  return (
+                                     <button key={optIdx} onClick={() => {
+                                        const curr = {...selectedVariations};
+                                        if(!curr[vIdx]) curr[vIdx] = {};
+                                        curr[vIdx][optIdx] = curr[vIdx][optIdx] ? 0 : 1;
+                                        setSelectedVariations(curr);
+                                     }} className={`border px-4 py-2 text-xs transition-colors ${count ? 'border-[#d4af37] text-[#d4af37]' : 'border-white/20 text-white hover:border-white/50'}`}>
+                                       {opt} {priceAdd}
+                                     </button>
+                                  );
+                              }
+                           } else {
+                              const isSelected = selectedVariations[vIdx]?.[optIdx] === 1;
+                              return (
+                                <button key={optIdx} onClick={() => {
+                                   const curr = {...selectedVariations};
+                                   curr[vIdx] = { [optIdx]: 1 };
+                                   setSelectedVariations(curr);
+                                }} className={`border px-4 py-2 text-xs transition-colors ${isSelected ? 'border-[#d4af37] text-[#d4af37]' : 'border-white/20 text-white hover:border-white/50'}`}>
+                                  {opt} {priceAdd}
+                                </button>
+                              );
+                           }
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
               
               <div className="flex flex-col gap-4 mt-auto">
                 <button onClick={() => handleAddToCart(selectedProduct)} className="w-full bg-white text-black py-4 uppercase text-xs tracking-[0.15em] font-bold hover:bg-[#d4af37] hover:text-white transition-all duration-300">
@@ -578,15 +676,18 @@ function Storefront() {
                   <p className="text-gray-500 text-sm italic">Sua sacola de compras está vazia.</p>
                 ) : (
                   cartItems.map(item => (
-                    <div key={item.id} className="flex gap-4 border-b border-white/10 pb-4">
+                    <div key={item.cartItemId} className="flex gap-4 border-b border-white/10 pb-4">
                        <img src={item.image} alt={item.name} className="w-20 h-28 object-cover" />
                        <div className="flex-1 flex flex-col justify-center">
                           <h6 className="font-serif text-white line-clamp-1">{item.name}</h6>
+                          {item.chosenOptions && item.chosenOptions.length > 0 && (
+                            <p className="text-[10px] text-gray-400 my-0.5 line-clamp-2">{item.chosenOptions.join(', ')}</p>
+                          )}
                           <span className="font-sans text-xs text-gray-500 my-1">Qtd: {item.quantity}</span>
-                          <span className="font-sans text-[#d4af37]">{item.price}</span>
+                          <span className="font-sans text-[#d4af37]">R$ {item.finalPrice.toLocaleString('pt-BR')}</span>
                        </div>
                        <button 
-                         onClick={() => setCartItems(cartItems.filter(i => i.id !== item.id))}
+                         onClick={() => setCartItems(cartItems.filter(i => i.cartItemId !== item.cartItemId))}
                          className="text-[10px] text-gray-600 hover:text-red-400 self-start mt-2 transition-colors uppercase tracking-widest"
                        >
                          Remover

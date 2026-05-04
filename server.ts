@@ -84,6 +84,8 @@ async function initDB() {
     try { await pool.query(`ALTER TABLE products ADD COLUMN user_id INTEGER;`); } catch (e) {}
     try { await pool.query(`ALTER TABLE products ADD COLUMN user_name VARCHAR(255);`); } catch (e) {}
     try { await pool.query(`ALTER TABLE products ADD COLUMN business_model VARCHAR(50) DEFAULT 'Venda';`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE products ADD COLUMN tables TEXT;`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE products ADD COLUMN seats_per_table VARCHAR(50);`); } catch (e) {}
     try { await pool.query(`ALTER TABLE products ADD COLUMN category VARCHAR(100);`); } catch (e) {}
     try { await pool.query(`ALTER TABLE products ADD COLUMN tokens INTEGER DEFAULT 0;`); } catch (e) {}
     try { await pool.query(`ALTER TABLE products ADD COLUMN stock INTEGER DEFAULT 0;`); } catch (e) {}
@@ -136,6 +138,10 @@ async function initDB() {
         quantity INTEGER NOT NULL
       );
     `);
+    
+    // Atualiza tabela para suportar opções selecionadas (fallback dev)
+    try { await pool.query(`ALTER TABLE order_items ADD COLUMN chosen_options JSONB DEFAULT '[]';`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE order_items ADD COLUMN final_price NUMERIC;`); } catch (e) {}
 
     // Inserção de um usuário admin teste se não existir
     const userResult = await pool.query('SELECT COUNT(*) FROM users');
@@ -195,18 +201,18 @@ async function startServer() {
 
   // Criação de produto
   app.post('/api/products', requireAuth, async (req: any, res) => {
-    const { name, category, price, tokens, stock, details, media, variations, business_model } = req.body;
+    const { name, category, price, tokens, stock, details, media, variations, business_model, tables, seats_per_table } = req.body;
     try {
       if (!dbConnected) throw new Error("DB offline");
       const userId = req.user.id;
       const userName = req.user.name;
       const imagesString = (media || []).map((m: any) => m.url).join(',');
       const result = await pool.query(`
-        INSERT INTO products (name, category, price, tokens, stock, details, media, variations, image, user_id, user_name, business_model)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *
+        INSERT INTO products (name, category, price, tokens, stock, details, media, variations, image, user_id, user_name, business_model, tables, seats_per_table)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING *
       `, [
         name, category, String(price || '0'), parseInt(tokens) || 0, parseInt(stock) || 0, details, 
-        JSON.stringify(media || []), JSON.stringify(variations || []), imagesString, userId, userName, business_model || 'Venda'
+        JSON.stringify(media || []), JSON.stringify(variations || []), imagesString, userId, userName, business_model || 'Venda', tables || null, seats_per_table || null
       ]);
       res.json({ success: true, product: result.rows[0] });
     } catch (err: any) {
@@ -234,25 +240,25 @@ async function startServer() {
 
   // Editar produto
   app.put('/api/products/:id', requireAuth, async (req: any, res) => {
-    const { name, category, price, tokens, stock, details, media, variations, business_model } = req.body;
+    const { name, category, price, tokens, stock, details, media, variations, business_model, tables, seats_per_table } = req.body;
     try {
       if (!dbConnected) throw new Error("DB offline");
       
       if (req.user.role !== 'admin') {
          const product = await pool.query('SELECT user_id FROM products WHERE id = $1', [req.params.id]);
          if (product.rows.length === 0 || product.rows[0].user_id !== req.user.id) {
-            return res.status(403).json({ success: false, error: 'Sem permissão para editar este produto.' });
+            return res.status(403).json({ success: false, error: 'Sem permissão para editar este produto' });
          }
       }
 
       const imagesString = (media || []).map((m: any) => m.url).join(',');
       const result = await pool.query(`
         UPDATE products 
-        SET name = $1, category = $2, price = $3, tokens = $4, stock = $5, details = $6, media = $7, variations = $8, image = $9, business_model = $10
-        WHERE id = $11 RETURNING *
+        SET name = $1, category = $2, price = $3, tokens = $4, stock = $5, details = $6, media = $7, variations = $8, image = $9, business_model = $10, tables = $11, seats_per_table = $12
+        WHERE id = $13 RETURNING *
       `, [
         name, category, String(price || '0'), parseInt(tokens) || 0, parseInt(stock) || 0, details, 
-        JSON.stringify(media || []), JSON.stringify(variations || []), imagesString, business_model || 'Venda',
+        JSON.stringify(media || []), JSON.stringify(variations || []), imagesString, business_model || 'Venda', tables || null, seats_per_table || null,
         req.params.id
       ]);
       res.json({ success: true, product: result.rows[0] });
@@ -535,8 +541,8 @@ async function startServer() {
       for (const item of items) {
          try {
            await pool.query(
-             'INSERT INTO order_items (order_id, product_id, quantity) VALUES ($1, $2, $3)',
-             [orderId, parseInt(item.id), parseInt(item.quantity)]
+             'INSERT INTO order_items (order_id, product_id, quantity, chosen_options, final_price) VALUES ($1, $2, $3, $4, $5)',
+             [orderId, parseInt(item.id), parseInt(item.quantity), JSON.stringify(item.chosenOptions || []), item.finalPrice || 0]
            );
          } catch (itemErr: any) {
            console.warn(`Erro ao inserir item ${item.id} no pedido ${orderId}. Produto pode ter sido deletado do banco ou o tipo de dado está errado. Msg: ${itemErr.message}`);

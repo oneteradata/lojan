@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { ShoppingBag, EyeOff, ChevronRight, RefreshCw, LogOut, TrendingUp, Package, ShoppingCart, Heart, Activity, Plus, X, Trash2, Home, Users, Lock, Unlock } from 'lucide-react';
+import { ShoppingBag, EyeOff, ChevronRight, RefreshCw, LogOut, TrendingUp, Package, ShoppingCart, Heart, Activity, Plus, X, Trash2, Home, Users, User, Lock, Unlock } from 'lucide-react';
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 
@@ -385,11 +385,14 @@ function ProductModal({ item, onClose }: { item?: any, onClose: () => void }) {
     price: item?.price || '', 
     tokens: item?.tokens || '', 
     stock: item?.stock || '', 
-    details: item?.details || ''
+    details: item?.details || '',
+    tables: item?.tables || '',
+    seats_per_table: item?.seats_per_table || '2'
   });
   const [media, setMedia] = useState<{type: string, url: string, fileName?: string}[]>(item?.media || []);
-  const [variations, setVariations] = useState<{type: string, options: string[], multiple?: boolean, multipleCount?: boolean}[]>(item?.variations || [{ type: 'cor', options: [] }]);
+  const [variations, setVariations] = useState<{type: string, options: string[], multiple?: boolean, multipleCount?: boolean, optionPrices?: string[]}[]>(item?.variations || [{ type: 'cor', options: [] }]);
   const [newOptionTexts, setNewOptionTexts] = useState<{[key: number]: string}>({});
+  const [newOptionPrices, setNewOptionPrices] = useState<{[key: number]: string}>({});
 
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -498,6 +501,9 @@ function ProductModal({ item, onClose }: { item?: any, onClose: () => void }) {
   const removeVariationOption = (idx: number, optIdx: number) => {
     const newVars = [...variations];
     newVars[idx].options.splice(optIdx, 1);
+    if (newVars[idx].optionPrices) {
+      newVars[idx].optionPrices!.splice(optIdx, 1);
+    }
     setVariations(newVars);
   }
 
@@ -599,6 +605,30 @@ function ProductModal({ item, onClose }: { item?: any, onClose: () => void }) {
               </div>
             </div>
 
+            {formData.business_model === 'Reserva' && (
+               <div className="grid grid-cols-2 gap-4 mt-4 p-4 bg-[#F5F5F7] rounded-2xl border border-gray-100">
+                 <div>
+                   <label className="text-[11px] font-bold text-[#86868B] tracking-wide mb-2 block">MESAS (SEPARADAS POR VÍRGULA)</label>
+                   <input 
+                     type="text" placeholder="Ex: Mesa 1, Mesa 2, Mesa Externa"
+                     value={formData.tables} onChange={e => setFormData({...formData, tables: e.target.value})}
+                     className="w-full bg-white border border-gray-200 focus:border-[#007AFF] rounded-2xl px-4 py-3.5 text-sm outline-none transition-all shadow-sm"
+                   />
+                 </div>
+                 <div>
+                   <label className="text-[11px] font-bold text-[#86868B] tracking-wide mb-2 block">CADEIRAS POR MESA</label>
+                   <select 
+                     value={formData.seats_per_table} onChange={e => setFormData({...formData, seats_per_table: e.target.value})}
+                     className="w-full bg-white border border-gray-200 focus:border-[#007AFF] rounded-2xl px-4 py-3.5 text-sm outline-none transition-all shadow-sm appearance-none"
+                   >
+                     <option value="2">2 cadeiras</option>
+                     <option value="4">4 cadeiras</option>
+                     <option value="6">6 cadeiras</option>
+                   </select>
+                 </div>
+               </div>
+            )}
+
             {/* Valores e Estoque */}
             <div className="grid grid-cols-3 gap-3">
                <div>
@@ -665,7 +695,9 @@ function ProductModal({ item, onClose }: { item?: any, onClose: () => void }) {
                         <div className="flex gap-2 flex-wrap items-center">
                            {v.options.map((opt, optIdx) => (
                              <span key={optIdx} className="bg-white border border-gray-200 rounded-full pl-3 pr-1 py-1 text-xs font-semibold flex items-center gap-1 shadow-sm">
-                               {opt} 
+                               {opt} {v.optionPrices && v.optionPrices[optIdx] && (
+                                   <span className="text-[10px] text-green-600 font-bold ml-1">(+ R$ {v.optionPrices[optIdx]})</span>
+                               )}
                                <button onClick={(e) => { e.preventDefault(); removeVariationOption(idx, optIdx); }} className="w-5 h-5 rounded-full hover:bg-gray-100 flex justify-center items-center"><X className="w-3 h-3 text-gray-500" /></button>
                              </span>
                            ))}
@@ -680,12 +712,36 @@ function ProductModal({ item, onClose }: { item?: any, onClose: () => void }) {
                                      if (newOptionTexts[idx]) {
                                          const newVars = [...variations];
                                          newVars[idx].options.push(newOptionTexts[idx]);
+                                         if (!newVars[idx].optionPrices) newVars[idx].optionPrices = [];
+                                         newVars[idx].optionPrices!.push(newOptionPrices[idx] || '');
                                          setVariations(newVars);
                                          setNewOptionTexts({...newOptionTexts, [idx]: ''});
+                                         setNewOptionPrices({...newOptionPrices, [idx]: ''});
                                      }
                                  }
                                }}
                                placeholder="+ Nova opção"
+                               className="text-xs bg-transparent border-none outline-none font-medium w-20 text-gray-600 placeholder-gray-400"
+                             />
+                             <input 
+                               type="number" 
+                               value={newOptionPrices[idx] || ''} 
+                               onChange={e => setNewOptionPrices({...newOptionPrices, [idx]: e.target.value})} 
+                               onKeyDown={e => {
+                                 if (e.key === 'Enter') {
+                                     e.preventDefault();
+                                     if (newOptionTexts[idx]) {
+                                         const newVars = [...variations];
+                                         newVars[idx].options.push(newOptionTexts[idx]);
+                                         if (!newVars[idx].optionPrices) newVars[idx].optionPrices = [];
+                                         newVars[idx].optionPrices!.push(newOptionPrices[idx] || '');
+                                         setVariations(newVars);
+                                         setNewOptionTexts({...newOptionTexts, [idx]: ''});
+                                         setNewOptionPrices({...newOptionPrices, [idx]: ''});
+                                     }
+                                 }
+                               }}
+                               placeholder="+ R$ (opcional)"
                                className="text-xs bg-transparent border-none outline-none font-medium w-24 text-gray-600 placeholder-gray-400"
                              />
                              <button 
@@ -694,8 +750,11 @@ function ProductModal({ item, onClose }: { item?: any, onClose: () => void }) {
                                   if (newOptionTexts[idx]) {
                                       const newVars = [...variations];
                                       newVars[idx].options.push(newOptionTexts[idx]);
+                                      if (!newVars[idx].optionPrices) newVars[idx].optionPrices = [];
+                                      newVars[idx].optionPrices!.push(newOptionPrices[idx] || '');
                                       setVariations(newVars);
                                       setNewOptionTexts({...newOptionTexts, [idx]: ''});
+                                      setNewOptionPrices({...newOptionPrices, [idx]: ''});
                                   }
                                 }}
                                 className="text-[#007AFF] hover:bg-blue-50 rounded-full px-2 py-0.5 text-[10px] font-bold transition-colors"
