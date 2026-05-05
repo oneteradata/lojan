@@ -391,6 +391,11 @@ async function startServer() {
         JSON.stringify(media || []), JSON.stringify(variations || []), imagesString, userId, userName, business_model || 'Venda', tables || null, seats_per_table || null, requiredAmount, requiredTypeLength, duration
       ]);
       await logAction(userId, userEmail, 'produto_adicionado', `Produto ${result.rows[0].name} criado (pendente) para ${duration} dias e debitou ${requiredAmount} tokens do tipo ${requiredTypeLength}`);
+      
+      try {
+        fetch('https://system.voryx.com.br/webhook/pagamentodetokenemcadastro').catch(e => console.error("Erro webhook:", e));
+      } catch (e) {}
+
       res.json({ success: true, product: result.rows[0] });
     } catch (err: any) {
       console.error('Erro ao criar:', err);
