@@ -60,7 +60,10 @@ let dbConnected = false;
 
 function normalizeUserWallet(user: any) {
   if (!user) return;
-  const rawWallet = user.wallet || {};
+  let rawWallet = user.wallet || {};
+  if (typeof rawWallet === 'string') {
+    try { rawWallet = JSON.parse(rawWallet); } catch (e) {}
+  }
   let userTokens: string[] = [];
 
   if (Array.isArray(rawWallet)) {
@@ -334,7 +337,10 @@ async function startServer() {
 
       // Check user wallet
       const userRes = await pool.query('SELECT wallet FROM users WHERE id = $1', [userId]);
-      const rawWallet = userRes.rows[0].wallet || {};
+      let rawWallet = userRes.rows[0].wallet || {};
+      if (typeof rawWallet === 'string') {
+        try { rawWallet = JSON.parse(rawWallet); } catch (e) {}
+      }
       
       let userTokens: string[] = [];
       let walletFormat = 'unknown'; // 'array_of_objects', 'object_with_key', 'tokens_array'
