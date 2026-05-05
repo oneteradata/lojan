@@ -223,13 +223,14 @@ function AdminLogin({ onLogin }: { onLogin: (user: any) => void }) {
 }
 
 // -- Overview Component --
-function AdminOverview({ user, onLogout }: { user: any, onLogout: () => void }) {
+function AdminOverview({ user, onLogout, onRefreshUser }: { user: any, onLogout: () => void, onRefreshUser?: () => void }) {
   const [stats, setStats] = useState({ products: 0, orders: 0, stock: 0, likes: 0 });
   const [loading, setLoading] = useState(true);
 
   const fetchStats = async () => {
     setLoading(true);
     try {
+      if (onRefreshUser) onRefreshUser();
       const res = await apiFetch('/api/stats');
       const data = await res.json();
       if (data.success) setStats(data.stats);
@@ -310,13 +311,14 @@ function AdminOverview({ user, onLogout }: { user: any, onLogout: () => void }) 
 }
 
 // -- Products Component --
-function AdminProducts({ user }: { user: any }) {
+function AdminProducts({ user, onRefreshUser }: { user: any, onRefreshUser?: () => void }) {
   const [products, setProducts] = useState<any[]>([]);
   const [modalItem, setModalItem] = useState<any | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const fetchProducts = async () => {
     try {
+       if (onRefreshUser) onRefreshUser();
        const res = await apiFetch('/api/admin/products');
        const data = await res.json();
        // Parse arrays back from Postgres payload if they were stringified instead of JSONB
@@ -1348,13 +1350,21 @@ export default function AdminApp() {
   const location = useLocation();
   const navigate = useNavigate();
 
+  const refreshUser = async () => {
+    try {
+      const r = await apiFetch('/api/me');
+      const data = await r.json();
+      if (data.success && data.user) {
+        setUser((prev: any) => ({ ...prev, ...data.user }));
+      }
+    } catch (e) {
+      console.error("Erro ao atualizar user", e);
+    }
+  };
+
   useEffect(() => {
     if (user && user.id) {
-      apiFetch('/api/me').then(r => r.json()).then(data => {
-         if (data.success && data.user) {
-            setUser((prev: any) => ({ ...prev, ...data.user }));
-         }
-      }).catch(e => console.error("Erro ao atualizar user", e));
+      refreshUser();
     }
   }, [location.pathname]); // Refresh user data when navigating to different pages
 
@@ -1366,10 +1376,10 @@ export default function AdminApp() {
     <div className="flex flex-col h-screen bg-white font-sans text-[#1D1D1F]">
       <div className="flex-1 overflow-x-hidden overflow-y-auto pb-20">
         <Routes>
-          <Route path="/" element={<AdminOverview user={user} onLogout={() => { localStorage.removeItem('token'); setUser(null); }} />} />
-          <Route path="/products" element={<AdminProducts user={user} />} />
+          <Route path="/" element={<AdminOverview user={user} onRefreshUser={refreshUser} onLogout={() => { localStorage.removeItem('token'); setUser(null); }} />} />
+          <Route path="/products" element={<AdminProducts user={user} onRefreshUser={refreshUser} />} />
           <Route path="/orders" element={<AdminOrders />} />
-          <Route path="/credits" element={<AdminCredits user={user} />} />
+          <Route path="/credits" element={<AdminCredits user={user} onRefreshUser={refreshUser} />} />
           <Route path="/logs" element={<AdminLogs user={user} />} />
           <Route path="/users" element={user.role === 'admin' ? <AdminUsers /> : <div className="p-8 text-center text-gray-500">Acesso negado. Apenas administradores.</div>} />
         </Routes>

@@ -9,7 +9,7 @@ function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function AdminCredits({ user }: { user: any }) {
+export function AdminCredits({ user, onRefreshUser }: { user: any, onRefreshUser?: () => void }) {
   const [requests, setRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
@@ -20,6 +20,7 @@ export function AdminCredits({ user }: { user: any }) {
   const fetchRequests = async () => {
     setLoading(true);
     try {
+      if (onRefreshUser) onRefreshUser();
       const res = await apiFetch('/api/credit-requests');
       const data = await res.json();
       setRequests(data);
