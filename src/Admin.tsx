@@ -6,6 +6,8 @@ import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { AdminCredits } from "./AdminCredits";
 import { AdminLogs } from "./AdminLogs";
+import { AdminWallet } from "./AdminWallet";
+import { Wallet } from "lucide-react";
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -435,6 +437,7 @@ function ProductModal({ item, user, onClose }: { item?: any, user?: any, onClose
       const data = await res.json();
       if (!data.success) {
         alert(data.error || 'Erro ao salvar produto');
+        if (data.product) onClose(); // se o produto foi criado, feche o modal
       } else {
         onClose();
       }
@@ -867,7 +870,7 @@ function ProductModal({ item, user, onClose }: { item?: any, user?: any, onClose
               onClick={handleSubmit} disabled={loading || uploading}
               className="w-full bg-[#007AFF] hover:bg-[#0066CC] active:scale-[0.99] transition-all text-white font-semibold rounded-2xl py-4 flex items-center justify-center shadow-lg shadow-blue-500/20 disabled:opacity-70 disabled:cursor-not-allowed"
             >
-              {loading ? 'Salvando...' : <><RefreshCw className="w-4 h-4 mr-2" /> Salvar Produto</>}
+              {loading ? 'Processando pagamento...' : <><RefreshCw className="w-4 h-4 mr-2" /> Salvar Produto</>}
             </button>
          </div>
        </motion.div>
@@ -1379,6 +1382,7 @@ export default function AdminApp() {
           <Route path="/" element={<AdminOverview user={user} onRefreshUser={refreshUser} onLogout={() => { localStorage.removeItem('token'); setUser(null); }} />} />
           <Route path="/products" element={<AdminProducts user={user} onRefreshUser={refreshUser} />} />
           <Route path="/orders" element={<AdminOrders />} />
+          <Route path="/wallet" element={<AdminWallet user={user} onRefreshUser={refreshUser} />} />
           <Route path="/credits" element={<AdminCredits user={user} onRefreshUser={refreshUser} />} />
           <Route path="/logs" element={<AdminLogs user={user} />} />
           <Route path="/users" element={user.role === 'admin' ? <AdminUsers /> : <div className="p-8 text-center text-gray-500">Acesso negado. Apenas administradores.</div>} />
@@ -1400,6 +1404,13 @@ export default function AdminApp() {
         >
           <Package className={cn("w-6 h-6", location.pathname === '/products' && "fill-current")} />
           <span className="text-[10px] font-semibold">Produtos</span>
+        </button>
+        <button 
+          onClick={() => navigate('/wallet')}
+          className={cn("flex flex-col items-center gap-1", location.pathname === '/wallet' ? "text-[#007AFF]" : "text-[#86868B]")}
+        >
+          <Wallet className={cn("w-6 h-6", location.pathname === '/wallet' && "fill-current")} />
+          <span className="text-[10px] font-semibold">Carteira</span>
         </button>
         <button 
           onClick={() => navigate('/orders')}

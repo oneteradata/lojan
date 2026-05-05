@@ -439,10 +439,44 @@ async function startServer() {
       await logAction(userId, userEmail, 'produto_adicionado', `Produto ${result.rows[0].name} criado (pendente) para ${duration} dias e debitou ${requiredAmount} tokens do tipo ${requiredTypeLength}`);
       
       try {
-        fetch('https://system.voryx.com.br/webhook/pagamentodetokenemcadastro').catch(e => console.error("Erro webhook:", e));
-      } catch (e) {}
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 seconds
+        const webhookUrl = 'https://system.voryx.com.br/webhook/pagamentodetokenemcadastro';
+        console.log(`Iniciando webhook: ${webhookUrl} para produto ${result.rows[0].id}`);
+        const webhookRes = await fetch(webhookUrl, { 
+          method: 'GET',
+          signal: controller.signal 
+        });
+        clearTimeout(timeoutId);
+        
+        const status = webhookRes.status;
+        const text = await webhookRes.text();
+        console.log(`Webhook retorno: STATUS ${status}, BODY ${text}`);
+        
+        let paymentSuccess = false;
+        if (status === 200 && !text.includes('100')) {
+           paymentSuccess = true;
+        } else if (status === 200 && text.includes('100')) {
+           paymentSuccess = false;
+        } else if (status === 200) {
+           paymentSuccess = true;
+        }
 
-      res.json({ success: true, product: result.rows[0] });
+        if (paymentSuccess) {
+           await pool.query('UPDATE products SET is_available = true WHERE id = $1', [result.rows[0].id]);
+           result.rows[0].is_available = true;
+           await pool.query(`UPDATE logs SET status = true WHERE event_name = 'produto_adicionado' AND details LIKE $1`, [`%${result.rows[0].name}%`]).catch(()=>null);
+           await logAction(userId, userEmail, 'pagamento_aprovado', `Pagamento do produto ${result.rows[0].name} aprovado.`);
+           res.json({ success: true, product: result.rows[0] });
+        } else {
+           await logAction(userId, userEmail, 'pagamento_recusado', `Pagamento do produto ${result.rows[0].name} recusado ou falhou no webhook. STATUS: ${status}`);
+           res.json({ success: false, error: 'Ocorreu um erro no pagamento. Tente novamente mais tarde.', product: result.rows[0] });
+        }
+      } catch (e: any) {
+         console.error("Erro webhook:", e);
+         await logAction(userId, userEmail, 'pagamento_timeout', `Pagamento do produto ${result.rows[0].name} excedeu o tempo limite.`);
+         res.json({ success: false, error: 'Aguardou muito tempo e o pagamento não foi confirmado. O produto ficou pendente.', product: result.rows[0] });
+      }
     } catch (err: any) {
       console.error('Erro ao criar:', err);
       res.status(500).json({ success: false, error: 'Erro ao criar produto: ' + err.message });
@@ -701,6 +735,17 @@ async function startServer() {
       }
     } catch (err) {
       res.status(500).json({ success: false, error: 'Erro ao buscar dados.' });
+    }
+  });
+
+  // GET /api/my-logs
+  app.get('/api/my-logs', requireAuth, async (req: any, res) => {
+    try {
+      if (!dbConnected) throw new Error("DB offline");
+      const dbResult = await pool.query('SELECT * FROM logs WHERE user_id = $1 ORDER BY id DESC LIMIT 200', [req.user.id]);
+      res.json(dbResult.rows);
+    } catch (err) {
+      res.status(500).json({ error: 'Erro de conexão.' });
     }
   });
 
