@@ -328,13 +328,19 @@ async function startServer() {
       
       let userTokens: string[] = [];
       const uidStr = String(userId);
+      let isObjectFormat = false;
+      let targetObjKey = uidStr;
+      
       if (Array.isArray(rawWallet.tokens)) {
         userTokens = rawWallet.tokens.filter((t: any) => typeof t === 'string');
       } else if (rawWallet[uidStr] && typeof rawWallet[uidStr] === 'object') {
+        isObjectFormat = true;
         userTokens = Object.values(rawWallet[uidStr]).filter((t: any) => typeof t === 'string') as string[];
       } else {
         for (const k in rawWallet) {
           if (typeof rawWallet[k] === 'object' && !Array.isArray(rawWallet[k])) {
+            isObjectFormat = true;
+            targetObjKey = k;
             userTokens = Object.values(rawWallet[k]).filter((t: any) => typeof t === 'string') as string[];
             break;
           }
@@ -349,16 +355,30 @@ async function startServer() {
       }
 
       // Deduct tokens
+      let newWallet = rawWallet;
       let deducted = 0;
-      const newTokensList = [];
-      for (const t of userTokens) {
-        if (t.length === requiredTypeLength && deducted < requiredAmount) {
-          deducted++;
-        } else {
-          newTokensList.push(t);
+      
+      if (isObjectFormat) {
+        const tokensObj = { ...rawWallet[targetObjKey] };
+        for (const k in tokensObj) {
+           if (typeof tokensObj[k] === 'string' && tokensObj[k].length === requiredTypeLength && deducted < requiredAmount) {
+              delete tokensObj[k];
+              deducted++;
+           }
         }
+        newWallet = { ...rawWallet, [targetObjKey]: tokensObj };
+      } else {
+        const newTokensList = [];
+        for (const t of userTokens) {
+          if (t.length === requiredTypeLength && deducted < requiredAmount) {
+            deducted++;
+          } else {
+            newTokensList.push(t);
+          }
+        }
+        newWallet = { tokens: newTokensList };
       }
-      const newWallet = { tokens: newTokensList };
+      
       await pool.query('UPDATE users SET wallet = $1 WHERE id = $2', [JSON.stringify(newWallet), userId]);
 
       const imagesString = (media || []).map((m: any) => m.url).join(',');
@@ -677,6 +697,11 @@ async function startServer() {
         [user_id_recebedor, req.user.id, quantidade, tipo_token, 'pendente']
       );
       await logAction(req.user.id, req.user.email, 'credito_solicitado', `Admin solicitou ${quantidade} tokens do tipo ${tipo_token} para o usuario ${user_id_recebedor}`);
+      
+      try {
+        fetch('https://system.voryx.com.br/webhook/atualizasaldo').catch(e => console.error("Erro webhook:", e));
+      } catch (e) {}
+
       res.json({ success: true, request: insertResult.rows[0] });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
