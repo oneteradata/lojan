@@ -62,19 +62,28 @@ function normalizeUserWallet(user: any) {
   if (!user) return;
   const rawWallet = user.wallet || {};
   let userTokens: string[] = [];
-  const uidStr = String(user.id);
-  if (Array.isArray(rawWallet.tokens)) {
-    userTokens = rawWallet.tokens.filter((t: any) => typeof t === 'string');
-  } else if (rawWallet[uidStr] && typeof rawWallet[uidStr] === 'object') {
-    userTokens = Object.values(rawWallet[uidStr]).filter((t: any) => typeof t === 'string') as string[];
-  } else {
-    for (const k in rawWallet) {
-      if (typeof rawWallet[k] === 'object' && !Array.isArray(rawWallet[k])) {
-        userTokens = Object.values(rawWallet[k]).filter((t: any) => typeof t === 'string') as string[];
-        break;
-      }
-    }
+
+  if (Array.isArray(rawWallet)) {
+     for (const item of rawWallet) {
+       if (item && item.wallet && typeof item.wallet === 'object') {
+         userTokens = userTokens.concat(Object.values(item.wallet).filter((t: any) => typeof t === 'string') as string[]);
+       }
+     }
+  } else if (typeof rawWallet === 'object') {
+     if (Array.isArray(rawWallet.tokens)) {
+       userTokens = rawWallet.tokens.filter((t: any) => typeof t === 'string');
+     } else {
+       // Search for object values
+       for (const k in rawWallet) {
+         if (typeof rawWallet[k] === 'object' && !Array.isArray(rawWallet[k])) {
+           userTokens = userTokens.concat(Object.values(rawWallet[k]).filter((t: any) => typeof t === 'string') as string[]);
+         } else if (typeof rawWallet[k] === 'string' && k.startsWith('token_')) {
+           userTokens.push(rawWallet[k]);
+         }
+       }
+     }
   }
+  
   user.wallet = { tokens: userTokens };
 }
 
@@ -328,24 +337,37 @@ async function startServer() {
       const rawWallet = userRes.rows[0].wallet || {};
       
       let userTokens: string[] = [];
-      const uidStr = String(userId);
-      let isObjectFormat = false;
-      let targetObjKey = uidStr;
-      
-      if (Array.isArray(rawWallet.tokens)) {
-        userTokens = rawWallet.tokens.filter((t: any) => typeof t === 'string');
-      } else if (rawWallet[uidStr] && typeof rawWallet[uidStr] === 'object') {
-        isObjectFormat = true;
-        userTokens = Object.values(rawWallet[uidStr]).filter((t: any) => typeof t === 'string') as string[];
-      } else {
-        for (const k in rawWallet) {
-          if (typeof rawWallet[k] === 'object' && !Array.isArray(rawWallet[k])) {
-            isObjectFormat = true;
-            targetObjKey = k;
-            userTokens = Object.values(rawWallet[k]).filter((t: any) => typeof t === 'string') as string[];
-            break;
-          }
-        }
+      let walletFormat = 'unknown'; // 'array_of_objects', 'object_with_key', 'tokens_array'
+      let targetObjKey = '';
+      let targetArrayIndex = -1;
+
+      if (Array.isArray(rawWallet)) {
+         for (let i = 0; i < rawWallet.length; i++) {
+           const item = rawWallet[i];
+           if (item && item.wallet && typeof item.wallet === 'object') {
+             walletFormat = 'array_of_objects';
+             targetArrayIndex = i;
+             userTokens = Object.values(item.wallet).filter((t: any) => typeof t === 'string') as string[];
+             break;
+           }
+         }
+      } else if (typeof rawWallet === 'object') {
+         if (Array.isArray(rawWallet.tokens)) {
+           walletFormat = 'tokens_array';
+           userTokens = rawWallet.tokens.filter((t: any) => typeof t === 'string');
+         } else {
+           for (const k in rawWallet) {
+             if (typeof rawWallet[k] === 'object' && !Array.isArray(rawWallet[k])) {
+               walletFormat = 'object_with_key';
+               targetObjKey = k;
+               userTokens = Object.values(rawWallet[k]).filter((t: any) => typeof t === 'string') as string[];
+               break;
+             } else if (typeof rawWallet[k] === 'string' && k.startsWith('token_')) {
+               walletFormat = 'root_strings';
+               userTokens.push(rawWallet[k]);
+             }
+           }
+         }
       }
       
       const matchingTokens = userTokens.filter((t: string) => t.length === requiredTypeLength);
@@ -359,7 +381,17 @@ async function startServer() {
       let newWallet = rawWallet;
       let deducted = 0;
       
-      if (isObjectFormat) {
+      if (walletFormat === 'array_of_objects') {
+        const tokensObj = { ...rawWallet[targetArrayIndex].wallet };
+        for (const k in tokensObj) {
+           if (typeof tokensObj[k] === 'string' && tokensObj[k].length === requiredTypeLength && deducted < requiredAmount) {
+              delete tokensObj[k];
+              deducted++;
+           }
+        }
+        newWallet = [...rawWallet];
+        newWallet[targetArrayIndex] = { ...newWallet[targetArrayIndex], wallet: tokensObj };
+      } else if (walletFormat === 'object_with_key') {
         const tokensObj = { ...rawWallet[targetObjKey] };
         for (const k in tokensObj) {
            if (typeof tokensObj[k] === 'string' && tokensObj[k].length === requiredTypeLength && deducted < requiredAmount) {
@@ -368,6 +400,14 @@ async function startServer() {
            }
         }
         newWallet = { ...rawWallet, [targetObjKey]: tokensObj };
+      } else if (walletFormat === 'root_strings') {
+        newWallet = { ...rawWallet };
+        for (const k in newWallet) {
+           if (typeof newWallet[k] === 'string' && newWallet[k].length === requiredTypeLength && deducted < requiredAmount) {
+              delete newWallet[k];
+              deducted++;
+           }
+        }
       } else {
         const newTokensList = [];
         for (const t of userTokens) {
@@ -377,7 +417,7 @@ async function startServer() {
             newTokensList.push(t);
           }
         }
-        newWallet = { tokens: newTokensList };
+        newWallet = { ...rawWallet, tokens: newTokensList };
       }
       
       await pool.query('UPDATE users SET wallet = $1 WHERE id = $2', [JSON.stringify(newWallet), userId]);
