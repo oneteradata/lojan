@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'motion/react';
-import { Search, ShoppingBag, User, Menu, ArrowRight } from 'lucide-react';
+import { Search, ShoppingBag, User, Menu, ArrowRight, Eye, EyeOff, LogOut } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import AdminApp from './Admin';
@@ -22,9 +22,20 @@ function Storefront() {
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
   
   const [showLogin, setShowLogin] = useState(false);
+  const [showWallet, setShowWallet] = useState(true);
   const [isRegistering, setIsRegistering] = useState(false);
   const [user, setUser] = useState<any>(null);
   
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      apiFetch('/api/me').then(r => r.json()).then(data => {
+        if (data.success && data.user) setUser(data.user);
+        else localStorage.removeItem('token');
+      }).catch(e => console.error(e));
+    }
+  }, []);
+
   // Auth state
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -261,8 +272,55 @@ function Storefront() {
 
   return (
     <div className="min-h-screen flex flex-col bg-[var(--color-brand-bg)] overflow-x-hidden">
+      {/* Logged in Top Bar */}
+      {user && (
+        <div className="fixed top-0 left-0 right-0 z-[60] bg-[#111] text-white border-b border-white/10 px-4 py-2 flex items-center justify-between text-[10px] md:text-xs">
+          <div className="flex items-center gap-3">
+            <button onClick={() => { localStorage.removeItem('token'); setUser(null); }} className="flex items-center gap-1 hover:text-[#d4af37] transition-colors" title="Sair">
+              <LogOut className="w-3 h-3" />
+              <span className="hidden sm:inline uppercase">Sair</span>
+            </button>
+            <div className="w-px h-4 bg-white/20"></div>
+            {user.company_logo && (
+              <img src={user.company_logo} alt="Logo" className="w-5 h-5 md:w-6 md:h-6 object-cover rounded-full border border-white/20" />
+            )}
+            <span className="font-bold uppercase tracking-wider hidden sm:inline">{user.company_name || 'Usuário'}</span>
+          </div>
+          
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-1 cursor-help" title="Produtos Ativos">
+               <ShoppingBag className="w-3 h-3 text-[#d4af37]" />
+               <span className="font-bold">{user.active_products_count || 0}</span>
+               <span className="uppercase text-gray-400 hidden sm:inline">Produtos</span>
+            </div>
+            <div className="w-px h-4 bg-white/20"></div>
+            
+            <div className="flex items-center gap-2">
+               <button onClick={() => setShowWallet(!showWallet)} className="hover:text-[#d4af37] transition-colors" title="Ocultar/Mostrar Saldo">
+                  {showWallet ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+               </button>
+               {showWallet && user.wallet?.tokens && Array.isArray(user.wallet.tokens) ? (
+                 <div className="flex items-center gap-2">
+                   {Object.entries(user.wallet.tokens.reduce((acc: any, t: string) => { acc[t] = (acc[t]||0)+1; return acc; }, {})).map(([tipo, qty]: any) => (
+                      <div key={tipo} className="flex gap-1 items-center bg-white/10 rounded px-1.5 py-0.5">
+                         <span className="font-bold text-[#d4af37]">{qty}</span>
+                         <span className="uppercase">{tipo}</span>
+                      </div>
+                   ))}
+                   {user.wallet.tokens.length === 0 && <span className="text-gray-400 uppercase">Sem Tokens</span>}
+                 </div>
+               ) : showWallet ? (
+                 <span className="text-gray-400 uppercase">Sem Tokens</span>
+               ) : (
+                 <span className="text-gray-500 uppercase tracking-widest hidden sm:inline">Oculto</span>
+               )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Navigation */}
-      <header className={`fixed w-full top-0 z-50 p-6 flex justify-between items-center transition-all duration-300 ${isScrolled ? 'bg-[var(--color-brand-bg)] text-[var(--color-brand-ink)] border-b border-white/10' : 'text-white border-b border-transparent'}`}>
+      <header className={`fixed w-full z-50 p-6 flex justify-between items-center transition-all duration-300 ${isScrolled ? 'bg-[var(--color-brand-bg)] text-[var(--color-brand-ink)] border-b border-white/10' : 'text-white border-b border-transparent'} ${user ? 'top-[40px] md:top-[44px]' : 'top-0'}`}>
         <div className="flex gap-6 hidden md:flex">
           <a href="#categories-section" onClick={scrollToCategories} className="nav-link text-xs tracking-widest uppercase">Coleções</a>
           <a href="#products-section" onClick={scrollToProducts} className="nav-link text-xs tracking-widest uppercase">Maison</a>

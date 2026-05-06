@@ -1061,7 +1061,7 @@ export function AdminUsers() {
   const [searchText, setSearchText] = useState('');
   const [copiedId, setCopiedId] = useState<number | null>(null);
   
-  const defaultTeamFormState = { name: '', email: '', password: '', role: 'user', company_name: '', company_logo: '' };
+  const defaultTeamFormState = { name: '', email: '', password: '', role: 'user', company_name: '', company_logo: '', is_approved: false };
   const defaultClientFormState = { 
     email: '', senha_mestre: '', nome_completo: '', primeiro_nome: '', data_nascimento: '', telegram: '', melhor_horario: '', interesses: '', convite: ''
   };
@@ -1312,7 +1312,8 @@ export function AdminUsers() {
                            password: '', 
                            role: u.role, 
                            company_name: u.company_name || '', 
-                           company_logo: u.company_logo || ''
+                           company_logo: u.company_logo || '',
+                           is_approved: u.is_approved
                          }); 
                          setShowAddForm(true); 
                        }} className="text-[10px] uppercase font-bold text-[#007AFF] py-3 sm:px-3 sm:py-2 bg-blue-50 rounded-xl hover:bg-blue-100 transition-colors flex items-center justify-center">Editar</button>
@@ -1425,6 +1426,20 @@ export function AdminUsers() {
                          <option value="user">Usuário Comum</option>
                          <option value="admin">Administrador</option>
                        </select>
+                     </div>
+                     <div className="pt-2">
+                       <label className="flex items-center gap-3 cursor-pointer p-4 border border-gray-200 rounded-xl bg-gray-50">
+                         <input 
+                           type="checkbox" 
+                           checked={formData.is_approved} 
+                           onChange={e => setFormData({...formData, is_approved: e.target.checked})} 
+                           className="accent-green-500 w-5 h-5"
+                         />
+                         <div className="flex flex-col">
+                           <span className="text-sm font-bold text-[#1D1D1F]">Conta Aprovada para Login</span>
+                           <span className="text-[10px] text-gray-500 uppercase tracking-widest mt-0.5">Permite que o usuário faça login na vitrine e gerencie produtos</span>
+                         </div>
+                       </label>
                      </div>
                    </>
                  ) : (

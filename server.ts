@@ -725,8 +725,15 @@ async function startServer() {
       if (!dbConnected) throw new Error("DB offline");
       const dbResult = await pool.query('SELECT id, name, email, role, company_name, company_logo, wallet, is_approved FROM users WHERE id = $1', [req.user.id]);
       if (dbResult.rows.length > 0) {
-        normalizeUserWallet(dbResult.rows[0]);
-        res.json({ success: true, user: dbResult.rows[0] });
+        const user = dbResult.rows[0];
+        normalizeUserWallet(user);
+        let activeProducts = 0;
+        try {
+           const prodRes = await pool.query('SELECT COUNT(*) FROM products WHERE user_id = $1 AND is_available = true', [user.id]);
+           activeProducts = parseInt(prodRes.rows[0].count) || 0;
+        } catch(e) {}
+        user.active_products_count = activeProducts;
+        res.json({ success: true, user: user });
       } else {
         res.status(404).json({ success: false, error: 'Usuário não encontrado' });
       }
@@ -938,9 +945,9 @@ async function startServer() {
 
       let dbResult;
       if (!isNaN(Number(email))) {
-        dbResult = await pool.query('SELECT id, name, email, role, is_approved FROM users WHERE (email = $1 OR id = $2) AND password = $3', [email, Number(email), password]);
+        dbResult = await pool.query('SELECT id, name, email, role, is_approved, company_name, company_logo, wallet FROM users WHERE (email = $1 OR id = $2) AND password = $3', [email, Number(email), password]);
       } else {
-        dbResult = await pool.query('SELECT id, name, email, role, is_approved FROM users WHERE email = $1 AND password = $2', [email, password]);
+        dbResult = await pool.query('SELECT id, name, email, role, is_approved, company_name, company_logo, wallet FROM users WHERE email = $1 AND password = $2', [email, password]);
       }
 
       if (dbResult.rows.length > 0) {
@@ -953,6 +960,16 @@ async function startServer() {
            await logAction(user.id, user.email, 'login_falhou', 'Usuário não aprovado tentou acessar');
            return res.status(403).json({ success: false, error: 'Seu cadastro está aguardando aprovação do administrador.' });
         }
+        normalizeUserWallet(user);
+        
+        // Obter qtde de produtos ativos
+        let activeProducts = 0;
+        try {
+           const prodRes = await pool.query('SELECT COUNT(*) FROM products WHERE user_id = $1 AND is_available = true', [user.id]);
+           activeProducts = parseInt(prodRes.rows[0].count) || 0;
+        } catch(e) {}
+        user.active_products_count = activeProducts;
+
         await logAction(user.id, user.email, 'login', 'Login efetuado com sucesso');
         const token = jwt.sign(user, JWT_SECRET, { expiresIn: '1d' });
         res.json({ success: true, user, token });
