@@ -693,12 +693,12 @@ async function startServer() {
       let u;
       if (password) {
         u = await pool.query(
-          'UPDATE users SET name = $1, email = $2, role = $3, password = $4, company_name = $5, company_logo = $6, is_approved = $8 WHERE id = $7 RETURNING id, name, email, role, company_name, company_logo, is_approved',
+          'UPDATE users SET name = $1, email = $2, role = $3, password = $4, company_name = $5, company_logo = $6, is_approved = COALESCE($8, is_approved) WHERE id = $7 RETURNING id, name, email, role, company_name, company_logo, is_approved',
           [name, email, role, password, company_name || null, company_logo || null, req.params.id, is_approved]
         );
       } else {
         u = await pool.query(
-          'UPDATE users SET name = $1, email = $2, role = $3, company_name = $4, company_logo = $5, is_approved = $7 WHERE id = $6 RETURNING id, name, email, role, company_name, company_logo, is_approved',
+          'UPDATE users SET name = $1, email = $2, role = $3, company_name = $4, company_logo = $5, is_approved = COALESCE($7, is_approved) WHERE id = $6 RETURNING id, name, email, role, company_name, company_logo, is_approved',
           [name, email, role, company_name || null, company_logo || null, req.params.id, is_approved]
         );
       }

@@ -297,98 +297,128 @@ function Storefront() {
 
       {/* Modal de Autenticação */}
       {showLogin && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm">
-          <div className="bg-[#0a0a0a] border border-white/20 p-10 max-w-sm w-full relative">
-            <button onClick={() => setShowLogin(false)} className="absolute top-4 right-4 text-gray-500 hover:text-white">✕</button>
-            <h2 className="font-serif text-3xl mb-2 text-center">{isRegistering ? 'Criar Conta' : 'Login'}</h2>
-            <p className="text-[0.65rem] text-center text-gray-500 mb-8 uppercase tracking-widest">
-              {isRegistering ? 'Junte-se à Maison Valentina' : 'Acesso à conta'}
-            </p>
-            
-            <form onSubmit={handleAuth} className="flex flex-col gap-4">
-              {isRegistering && (
-                <>
+        <AnimatePresence>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-0">
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-md" onClick={() => setShowLogin(false)} />
+            <motion.div initial={{ scale: 0.95, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} className="bg-[#0a0a0a] border border-[#d4af37]/20 p-8 sm:p-12 w-full max-w-[420px] relative rounded-3xl shadow-2xl overflow-hidden shadow-[#d4af37]/10 z-10">
+              {/* Decorative elements */}
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-[#d4af37] to-transparent opacity-50" />
+              <div className="absolute top-[-50px] left-1/2 -translate-x-1/2 w-[100px] h-[100px] bg-[#d4af37] rounded-full blur-[80px] opacity-20 pointer-events-none" />
+
+              <button onClick={() => setShowLogin(false)} className="absolute top-5 right-5 w-8 h-8 flex items-center justify-center bg-white/5 rounded-full text-gray-400 hover:text-white hover:bg-white/10 transition-colors z-20">
+                 ✕
+              </button>
+              
+              <div className="text-center mb-8 relative z-10">
+                <h2 className="font-serif text-3xl mb-2 text-white">{isRegistering ? 'Criar Conta' : 'Acesso Exclusivo'}</h2>
+                <p className="text-[10px] text-[#d4af37] uppercase tracking-[0.2em] font-medium">
+                  {isRegistering ? 'Junte-se à Maison Valentina' : 'Faça login para continuar'}
+                </p>
+              </div>
+              
+              <form onSubmit={handleAuth} className="flex flex-col gap-5 relative z-10">
+                {isRegistering && (
+                  <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="flex flex-col gap-5">
+                    <div className="relative group">
+                      <input 
+                        type="text" 
+                        placeholder="Nome Completo" 
+                        value={name}
+                        onChange={e => setName(e.target.value)}
+                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 pt-5 pb-2 text-sm text-white peer focus:border-[#d4af37]/50 focus:bg-white/10 transition-all outline-none"
+                        required
+                      />
+                      <label className="absolute text-[10px] uppercase tracking-wider text-gray-500 top-2 left-4 peer-focus:text-[#d4af37] transition-colors">Nome</label>
+                    </div>
+                    <div className="relative group">
+                      <input 
+                        type="text" 
+                        placeholder="Nome da Empresa (opcional)" 
+                        value={companyName}
+                        onChange={e => setCompanyName(e.target.value)}
+                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 pt-5 pb-2 text-sm text-white peer focus:border-[#d4af37]/50 focus:bg-white/10 transition-all outline-none"
+                      />
+                      <label className="absolute text-[10px] uppercase tracking-wider text-gray-500 top-2 left-4 peer-focus:text-[#d4af37] transition-colors">Empresa</label>
+                    </div>
+                    <div className="flex border border-white/10 rounded-xl px-4 py-3 bg-white/5 items-center justify-between">
+                      <span className="text-xs text-gray-500 uppercase tracking-wider font-medium">Logo da Empresa</span>
+                      <input 
+                        type="file" 
+                        accept="image/*"
+                        onChange={handleLogoUpload}
+                        disabled={uploadingLogo}
+                        className="text-[10px] max-w-[140px] file:mr-2 file:py-1 file:px-3 file:rounded-full file:border-0 file:text-[10px] file:bg-white file:text-black file:font-semibold hover:file:bg-[#d4af37] hover:file:text-white file:transition-colors cursor-pointer text-gray-400"
+                      />
+                    </div>
+                    {uploadingLogo && <span className="text-[10px] text-[#d4af37] flex items-center gap-2"><RefreshCw className="w-3 h-3 animate-spin"/> Enviando logo...</span>}
+                    {companyLogo && <img src={companyLogo} alt="Logo" className="h-12 w-12 object-cover rounded-full border border-white/20 self-center" />}
+                  </motion.div>
+                )}
+                
+                <div className="relative group">
                   <input 
                     type="text" 
-                    placeholder="Nome Completo" 
-                    value={name}
-                    onChange={e => setName(e.target.value)}
-                    className="bg-transparent border-b border-white/20 pb-2 text-sm outline-none focus:border-[#d4af37] transition-colors"
+                    placeholder={isRegistering ? "seu@email.com" : "admin@valentina.com"}  
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 pt-5 pb-2 text-sm text-white peer focus:border-[#d4af37]/50 focus:bg-white/10 transition-all outline-none"
                     required
                   />
-                  <input 
-                    type="text" 
-                    placeholder="Nome da Empresa (opcional)" 
-                    value={companyName}
-                    onChange={e => setCompanyName(e.target.value)}
-                    className="bg-transparent border-b border-white/20 pb-2 text-sm outline-none focus:border-[#d4af37] transition-colors"
-                  />
-                  <div className="flex border-b border-white/20 pb-2 items-center justify-between">
-                    <span className="text-sm text-gray-400">Foto da Empresa</span>
-                    <input 
-                      type="file" 
-                      accept="image/*"
-                      onChange={handleLogoUpload}
-                      disabled={uploadingLogo}
-                      className="text-xs max-w-[150px] file:mr-2 file:py-1 file:px-2 file:rounded-full file:border-0 file:text-[10px] file:bg-white file:text-black hover:file:bg-[#d4af37] cursor-pointer"
-                    />
-                  </div>
-                  {uploadingLogo && <span className="text-[10px] text-[#d4af37]">Enviando logo...</span>}
-                  {companyLogo && <img src={companyLogo} alt="Logo" className="h-10 object-contain self-center" />}
-                </>
-              )}
-              <input 
-                type="text" 
-                placeholder={isRegistering ? "E-mail" : "ID ou E-mail (ex: admin@valentina.com)"}  
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                className="bg-transparent border-b border-white/20 pb-2 text-sm outline-none focus:border-[#d4af37] transition-colors"
-                required
-              />
-              <input 
-                type="password" 
-                placeholder={isRegistering ? "Defina uma senha" : "Senha"} 
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                className="bg-transparent border-b border-white/20 pb-2 text-sm outline-none focus:border-[#d4af37] transition-colors"
-                required
-              />
-              {authError && authError === 'Usuário bloqueado pelo administrador.' ? (
-                <div className="mt-4 p-4 bg-red-900/40 border border-red-500/30 rounded-xl backdrop-blur-sm">
-                  <p className="text-red-300 text-xs text-center font-medium">
-                    Seu cadastro possui uma irregularidade. Entre em contato para resolver aqui.
-                  </p>
-                  <a 
-                    href={`https://wa.me/5512981311773?text=${encodeURIComponent(`Olá, meu email é ${email} e meu cadastro consta com irregularidade.`)}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-3 w-full bg-[#25D366] hover:bg-[#1DA851] text-white flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-bold transition-colors"
-                  >
-                    Falar no WhatsApp
-                  </a>
+                  <label className="absolute text-[10px] uppercase tracking-wider text-gray-500 top-2 left-4 peer-focus:text-[#d4af37] transition-colors">Email ou ID</label>
                 </div>
-              ) : authError ? (
-                <p className="text-red-400 text-xs mt-1 text-center">{authError}</p>
-              ) : null}
-              
-              <button type="submit" className="bg-white text-black mt-6 py-3 text-xs uppercase tracking-widest font-semibold hover:bg-[#d4af37] hover:text-white transition-colors">
-                {isRegistering ? 'Registrar' : 'Entrar'}
-              </button>
-            </form>
 
-            <div className="mt-6 text-center">
-              <button 
-                onClick={() => {
-                   setIsRegistering(!isRegistering);
-                   setAuthError('');
-                }} 
-                className="text-xs text-gray-400 hover:text-[#d4af37] transition-colors"
-              >
-                {isRegistering ? 'Já tem uma conta? Faça login' : 'Ainda não tem conta? Criar agora'}
-              </button>
-            </div>
-          </div>
-        </div>
+                <div className="relative group">
+                  <input 
+                    type="password" 
+                    placeholder="••••••••" 
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 pt-5 pb-2 text-sm text-white peer focus:border-[#d4af37]/50 focus:bg-white/10 transition-all outline-none"
+                    required
+                  />
+                  <label className="absolute text-[10px] uppercase tracking-wider text-gray-500 top-2 left-4 peer-focus:text-[#d4af37] transition-colors">Senha</label>
+                </div>
+
+                <AnimatePresence>
+                  {authError && authError === 'Usuário bloqueado pelo administrador.' ? (
+                    <motion.div initial={{opacity:0, height:0}} animate={{opacity:1, height:'auto'}} exit={{opacity:0, height:0}} className="p-4 bg-red-950/40 border border-red-500/30 rounded-xl backdrop-blur-sm">
+                      <p className="text-red-300 text-[11px] text-center font-medium leading-relaxed">
+                        Seu cadastro possui uma irregularidade. Entre em contato para resolver aqui.
+                      </p>
+                      <a 
+                        href={`https://wa.me/5512981311773?text=${encodeURIComponent(`Olá, meu email é ${email} e meu cadastro consta com irregularidade.`)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-3 w-full bg-[#25D366] hover:bg-[#1DA851] text-white flex items-center justify-center gap-2 py-2.5 rounded-lg text-[11px] uppercase tracking-widest font-bold transition-colors"
+                      >
+                        Falar no WhatsApp
+                      </a>
+                    </motion.div>
+                  ) : authError ? (
+                    <motion.p initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="text-red-400 text-xs text-center p-3 bg-red-500/10 rounded-xl border border-red-500/20">{authError}</motion.p>
+                  ) : null}
+                </AnimatePresence>
+                
+                <button type="submit" className="w-full bg-[#d4af37] text-white mt-4 py-4 rounded-xl text-xs uppercase tracking-[0.2em] font-bold hover:bg-white hover:text-black transition-all duration-300 shadow-[0_0_20px_rgba(212,175,55,0.3)] hover:shadow-[0_0_30px_rgba(255,255,255,0.5)]">
+                  {isRegistering ? 'Criar Minha Conta' : 'Entrar na Plataforma'}
+                </button>
+              </form>
+
+              <div className="mt-8 text-center relative z-10">
+                <button 
+                  type="button"
+                  onClick={() => {
+                     setIsRegistering(!isRegistering);
+                     setAuthError('');
+                  }} 
+                  className="text-[11px] font-medium text-gray-400 hover:text-white transition-colors border-b border-transparent hover:border-white pb-0.5 uppercase tracking-wider"
+                >
+                  {isRegistering ? 'Já tem uma conta? Faça login' : 'Ainda não tem conta? Criar agora'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        </AnimatePresence>
       )}
 
       {/* Hero Section */}
