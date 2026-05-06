@@ -16,6 +16,10 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+.admin-theme {
+  font-family: 'Manrope', sans-serif;
+}
+
 .font-serif {
   font-family: var(--font-serif);
 }

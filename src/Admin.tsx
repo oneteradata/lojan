@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { ShoppingBag, EyeOff, ChevronRight, RefreshCw, LogOut, TrendingUp, Package, ShoppingCart, Heart, Activity, Plus, X, Trash2, Home, Users, User, Lock, Unlock, Search, Copy, Check, Pickaxe, Landmark, List } from 'lucide-react';
+import { LayoutDashboard, Bell, ShoppingBag, EyeOff, ChevronRight, RefreshCw, LogOut, TrendingUp, Package, ShoppingCart, Heart, Activity, Plus, X, Trash2, Home, Users, User, Lock, Unlock, Search, Copy, Check, Pickaxe, Landmark, List } from 'lucide-react';
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { AdminCredits } from "./AdminCredits";
@@ -227,7 +227,7 @@ function AdminLogin({ onLogin }: { onLogin: (user: any) => void }) {
 import { BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
 // -- Overview Component --
-function AdminOverview({ user, onLogout, onRefreshUser }: { user: any, onLogout: () => void, onRefreshUser?: () => void }) {
+function AdminOverview({ user, onRefreshUser }: { user: any, onLogout?: () => void, onRefreshUser?: () => void }) {
   const [stats, setStats] = useState({ products: 0, orders: 0, stock: 0, likes: 0, monthlySales: [] });
   const [loading, setLoading] = useState(true);
 
@@ -247,75 +247,144 @@ function AdminOverview({ user, onLogout, onRefreshUser }: { user: any, onLogout:
   const isAdmin = user?.role === 'admin';
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-4 md:p-8 space-y-6">
-      <div className="flex justify-between items-end">
-        <div>
-          <h2 className="text-3xl font-bold text-[#1D1D1F] tracking-tight">{isAdmin ? 'Dashboard Admin' : 'Minha Loja'}</h2>
-          <p className="text-[11px] font-bold text-[#86868B] tracking-widest mt-1 uppercase">ID: {user?.id} • Visão Geral</p>
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-4 md:p-8 space-y-10">
+      {/* Statistics Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="bg-white p-7 rounded-[2rem] shadow-[0_10px_40px_-10px_rgba(0,0,0,0.04),_0_2px_10px_-2px_rgba(0,0,0,0.02)] hover:shadow-2xl hover:scale-[1.02] transition-all duration-300 group">
+            <div className="flex justify-between items-start mb-6">
+                <div className="p-3 bg-[#0058bc]/10 text-[#0058bc] rounded-2xl group-hover:bg-[#0058bc] group-hover:text-white transition-colors">
+                    <Package className="w-6 h-6" />
+                </div>
+            </div>
+            <p className="text-[#414755] text-[10px] font-extrabold uppercase tracking-widest opacity-60">Produtos Ativos</p>
+            <h3 className="text-3xl font-extrabold mt-2 tracking-tight">{stats.products}</h3>
         </div>
-        <div className="flex gap-3">
-          <button onClick={fetchStats} className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-sm hover:bg-gray-50 transition-colors text-[#1D1D1F]">
-            <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
-          </button>
-          <button onClick={onLogout} className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-sm hover:bg-gray-50 transition-colors text-[#FF3B30]">
-            <LogOut className="w-4 h-4" />
-          </button>
+        <div className="bg-white p-7 rounded-[2rem] shadow-[0_10px_40px_-10px_rgba(0,0,0,0.04),_0_2px_10px_-2px_rgba(0,0,0,0.02)] hover:shadow-2xl hover:scale-[1.02] transition-all duration-300 group">
+            <div className="flex justify-between items-start mb-6">
+                <div className="p-3 bg-[#0058bc]/10 text-[#0058bc] rounded-2xl group-hover:bg-[#0058bc] group-hover:text-white transition-colors">
+                    <ShoppingCart className="w-6 h-6" />
+                </div>
+            </div>
+            <p className="text-[#414755] text-[10px] font-extrabold uppercase tracking-widest opacity-60">Total de Pedidos</p>
+            <h3 className="text-3xl font-extrabold mt-2 tracking-tight">{stats.orders}</h3>
         </div>
-      </div>
-
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white border border-gray-100 rounded-[24px] p-6 shadow-sm flex flex-col justify-center">
-          <span className="text-[10px] font-bold text-[#86868B] tracking-widest uppercase mb-2">Produtos Ativos</span>
-          <div className="flex items-baseline gap-2">
-            <span className="text-4xl font-bold text-[#1D1D1F]">{stats.products}</span>
-            <span className="text-xs font-bold text-[#007AFF] uppercase">Itens</span>
-          </div>
+        <div className="bg-white p-7 rounded-[2rem] shadow-[0_10px_40px_-10px_rgba(0,0,0,0.04),_0_2px_10px_-2px_rgba(0,0,0,0.02)] hover:shadow-2xl hover:scale-[1.02] transition-all duration-300 group">
+            <div className="flex justify-between items-start mb-6">
+                <div className="p-3 bg-[#0058bc]/10 text-[#0058bc] rounded-2xl group-hover:bg-[#0058bc] group-hover:text-white transition-colors">
+                    <ShoppingBag className="w-6 h-6" />
+                </div>
+            </div>
+            <p className="text-[#414755] text-[10px] font-extrabold uppercase tracking-widest opacity-60">Inventário</p>
+            <h3 className="text-3xl font-extrabold mt-2 tracking-tight">{stats.stock}</h3>
         </div>
-        <div className="bg-white border border-gray-100 rounded-[24px] p-6 shadow-sm flex flex-col justify-center">
-          <span className="text-[10px] font-bold text-[#86868B] tracking-widest uppercase mb-2">Total Pedidos</span>
-          <div className="flex items-baseline gap-2">
-            <span className="text-4xl font-bold text-[#1D1D1F]">{stats.orders}</span>
-            <span className="text-xs font-bold text-[#34C759] uppercase">Pedidos</span>
-          </div>
-        </div>
-        <div className="bg-white border border-gray-100 rounded-[24px] p-6 shadow-sm flex flex-col justify-center">
-          <span className="text-[10px] font-bold text-[#86868B] tracking-widest uppercase mb-2">Inventário</span>
-          <div className="flex items-baseline gap-2">
-            <span className="text-4xl font-bold text-[#1D1D1F]">{stats.stock}</span>
-            <span className="text-xs font-bold text-[#007AFF] uppercase">Unidades</span>
-          </div>
-        </div>
-        <div className="bg-white border border-gray-100 rounded-[24px] p-6 shadow-sm flex flex-col justify-center">
-          <span className="text-[10px] font-bold text-[#86868B] tracking-widest uppercase mb-2">Interações</span>
-          <div className="flex items-baseline gap-2">
-            <span className="text-4xl font-bold text-[#1D1D1F]">{stats.likes}</span>
-            <span className="text-xs font-bold text-[#FF3B30] uppercase">Likes</span>
-          </div>
+        <div className="bg-white p-7 rounded-[2rem] shadow-[0_10px_40px_-10px_rgba(0,0,0,0.04),_0_2px_10px_-2px_rgba(0,0,0,0.02)] hover:shadow-2xl hover:scale-[1.02] transition-all duration-300 group">
+            <div className="flex justify-between items-start mb-6">
+                <div className="p-3 bg-[#0058bc]/10 text-[#0058bc] rounded-2xl group-hover:bg-[#0058bc] group-hover:text-white transition-colors">
+                    <Heart className="w-6 h-6" />
+                </div>
+            </div>
+            <p className="text-[#414755] text-[10px] font-extrabold uppercase tracking-widest opacity-60">Interações</p>
+            <h3 className="text-3xl font-extrabold mt-2 tracking-tight">{stats.likes}</h3>
         </div>
       </div>
 
-      <div className="bg-white rounded-[32px] p-6 shadow-sm border border-gray-100 mt-6">
-         <div className="flex justify-between items-center mb-6">
-           <div>
-             <h3 className="text-xl font-bold text-[#1D1D1F]">Vendas Mensais</h3>
-             <p className="text-[#86868B] text-sm">Histórico dos últimos meses</p>
+      {/* Main Chart Area */}
+      <div className="bg-white p-8 md:p-10 rounded-[2.5rem] shadow-[0_10px_40px_-10px_rgba(0,0,0,0.04),_0_2px_10px_-2px_rgba(0,0,0,0.02)]">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-4">
+            <div>
+                <h4 className="text-2xl font-extrabold tracking-tight">Vendas Mensais</h4>
+                <p className="text-sm text-[#414755] font-medium mt-1">Performance financeira consolidada dos últimos meses.</p>
+            </div>
+            <div className="flex gap-3">
+                <button onClick={fetchStats} className="px-6 py-3 text-xs font-extrabold bg-[#e9e7ed] text-[#1a1b1f] rounded-2xl hover:bg-[#e3e2e7] transition-all flex items-center gap-2">
+                  ATUALIZAR <RefreshCw className={cn("w-3 h-3 text-[#414755]", loading && "animate-spin")} />
+                </button>
+            </div>
+        </div>
+        <div className="relative w-full h-64 md:aspect-[21/9] md:h-auto rounded-[2rem] overflow-hidden bg-[#faf9fe]">
+           {stats.monthlySales && stats.monthlySales.length > 0 ? (
+             <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={stats.monthlySales}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fill: '#86868B', fontSize: 12}} />
+                  <YAxis axisLine={false} tickLine={false} tick={{fill: '#86868B', fontSize: 12}} />
+                  <RechartsTooltip cursor={{fill: '#f5f5f7'}} contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)'}} />
+                  <Bar dataKey="count" fill="#0058bc" radius={[4, 4, 0, 0]} barSize={40} />
+                </BarChart>
+             </ResponsiveContainer>
+           ) : (
+             <div className="flex w-full h-full justify-center items-center text-gray-400 text-sm">Nenhum dado de vendas disponível</div>
+           )}
+        </div>
+      </div>
+      
+      {/* Active eTokens / Security Area */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+        <div className="lg:col-span-2 bg-white p-8 md:p-10 rounded-[2.5rem] shadow-[0_10px_40px_-10px_rgba(0,0,0,0.04),_0_2px_10px_-2px_rgba(0,0,0,0.02)]">
+           <div className="flex justify-between items-center mb-8">
+             <h4 className="text-xl font-extrabold tracking-tight">Pedidos Recentes</h4>
+             <a className="text-[#0058bc] text-sm font-bold hover:opacity-70 transition-opacity" href="#/orders">Ver todos</a>
            </div>
-         </div>
-         <div className="h-64 w-full">
-            {stats.monthlySales && stats.monthlySales.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                 <BarChart data={stats.monthlySales}>
-                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-                   <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fill: '#86868B', fontSize: 12}} />
-                   <YAxis axisLine={false} tickLine={false} tick={{fill: '#86868B', fontSize: 12}} />
-                   <RechartsTooltip cursor={{fill: '#f5f5f7'}} contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)'}} />
-                   <Bar dataKey="count" fill="#007AFF" radius={[4, 4, 0, 0]} barSize={40} />
-                 </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="flex w-full h-full justify-center items-center text-gray-400 text-sm">Nenhum dado de vendas disponível</div>
-            )}
-         </div>
+           <div className="overflow-x-auto">
+             <table className="w-full text-left">
+               <thead>
+                 <tr className="text-[10px] uppercase text-[#414755] font-extrabold tracking-widest opacity-60 border-b border-[#c1c6d7]/10">
+                   <th className="pb-5">ID Pedido</th>
+                   <th className="pb-5">Cliente</th>
+                   <th className="pb-5">Data</th>
+                   <th className="pb-5">Valor</th>
+                   <th className="pb-5">Status</th>
+                 </tr>
+               </thead>
+               <tbody className="text-sm">
+                 <tr className="group hover:bg-[#faf9fe]/50 transition-colors">
+                   <td className="py-5 font-mono text-xs font-bold text-[#414755]">#NB-8821</td>
+                   <td className="py-5 font-bold">Carlos Oliveira</td>
+                   <td className="py-5 font-medium text-[#414755]">12 Out, 2023</td>
+                   <td className="py-5 font-extrabold">R$ 840,00</td>
+                   <td className="py-5"><span className="bg-[#ffdbcc] text-[#7c2e00] px-3 py-1.5 rounded-xl text-[10px] font-extrabold uppercase">Concluído</span></td>
+                 </tr>
+                 <tr className="group hover:bg-[#faf9fe]/50 transition-colors">
+                   <td className="py-5 font-mono text-xs font-bold text-[#414755]">#NB-8819</td>
+                   <td className="py-5 font-bold">Ana Souza</td>
+                   <td className="py-5 font-medium text-[#414755]">12 Out, 2023</td>
+                   <td className="py-5 font-extrabold">R$ 1.250,00</td>
+                   <td className="py-5"><span className="bg-[#e2dfff] text-[#3631b4] px-3 py-1.5 rounded-xl text-[10px] font-extrabold uppercase">Pendente</span></td>
+                 </tr>
+                 <tr className="group hover:bg-[#faf9fe]/50 transition-colors">
+                   <td className="py-5 font-mono text-xs font-bold text-[#414755]">#NB-8815</td>
+                   <td className="py-5 font-bold">Marcos Lima</td>
+                   <td className="py-5 font-medium text-[#414755]">11 Out, 2023</td>
+                   <td className="py-5 font-extrabold">R$ 432,10</td>
+                   <td className="py-5"><span className="bg-[#ffdad6] text-[#93000a] px-3 py-1.5 rounded-xl text-[10px] font-extrabold uppercase">Cancelado</span></td>
+                 </tr>
+               </tbody>
+             </table>
+           </div>
+        </div>
+        
+        {/* Active eTokens / Security */}
+        <div className="bg-white p-8 md:p-10 rounded-[2.5rem] shadow-[0_10px_40px_-10px_rgba(0,0,0,0.04),_0_2px_10px_-2px_rgba(0,0,0,0.02)] flex flex-col">
+          <h4 className="text-xl font-extrabold mb-10 tracking-tight">Segurança eTokens</h4>
+          <div className="space-y-6 flex-grow">
+             <div className="p-6 bg-[#faf9fe] rounded-3xl border border-white/50">
+                <div className="flex items-center gap-3 mb-4">
+                   <div className="p-2 bg-[#0058bc]/10 text-[#0058bc] rounded-xl">
+                      <Lock className="w-4 h-4" />
+                   </div>
+                   <span className="text-[11px] font-extrabold uppercase tracking-widest opacity-60">Acesso Atual</span>
+                </div>
+                <div className="flex justify-between items-end">
+                   <div>
+                      <p className="text-2xl font-mono font-extrabold tracking-[0.2em] text-[#0058bc]">ATIVA</p>
+                      <p className="text-[10px] text-[#414755] font-medium mt-1">Status da conta</p>
+                   </div>
+                   <Wallet className="w-5 h-5 text-[#0058bc] opacity-50" />
+                </div>
+             </div>
+          </div>
+          <button className="w-full mt-10 py-4 bg-[#1a1b1f] text-white rounded-2xl font-extrabold text-[11px] uppercase tracking-widest hover:opacity-90 shadow-xl transition-all">Token Validação</button>
+        </div>
       </div>
 
     </motion.div>
@@ -1573,75 +1642,133 @@ export default function AdminApp() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-white font-sans text-[#1D1D1F]">
-      <div className="flex-1 overflow-x-hidden overflow-y-auto pb-20">
-        <Routes>
-          <Route path="/" element={<AdminOverview user={user} onRefreshUser={refreshUser} onLogout={() => { localStorage.removeItem('token'); setUser(null); }} />} />
-          <Route path="/products" element={<AdminProducts user={user} onRefreshUser={refreshUser} />} />
-          <Route path="/orders" element={<AdminOrders />} />
-          <Route path="/etoken" element={<AdminWallet user={user} onRefreshUser={refreshUser} />} />
-          <Route path="/credits" element={<AdminCredits user={user} onRefreshUser={refreshUser} />} />
-          <Route path="/logs" element={<AdminLogs user={user} />} />
-          <Route path="/users" element={user.role === 'admin' ? <AdminUsers /> : <div className="p-8 text-center text-gray-500">Acesso negado. Apenas administradores.</div>} />
-        </Routes>
-      </div>
+    <div className="admin-theme min-h-screen bg-[#faf9fe] text-[#1a1b1f] antialiased flex selection:bg-[#0058bc]/10 font-sans">
+      {/* SideNavBar Component */}
+      <aside className="hidden md:flex h-[calc(100vh-32px)] w-72 fixed left-4 top-4 z-40 bg-white/60 backdrop-blur-xl flex-col py-8 rounded-[2rem] shadow-[0_10px_40px_-10px_rgba(0,0,0,0.04),_0_2px_10px_-2px_rgba(0,0,0,0.02)] border border-white/50">
+        <div className="px-8 mb-12">
+          <h1 className="text-2xl font-extrabold text-[#0058bc] tracking-tighter">NovaBank</h1>
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#414755] opacity-60">Premium Banking</p>
+        </div>
+        <nav className="flex-grow space-y-1.5 px-3">
+          <button onClick={() => navigate('/')} className={cn("flex w-full items-center gap-4 px-5 py-3.5 rounded-2xl transition-all", location.pathname === '/' ? "bg-[#0058bc] text-white shadow-lg shadow-[#0058bc]/20" : "text-[#414755] hover:bg-white hover:shadow-sm")}>
+            <LayoutDashboard className="w-5 h-5" />
+            <span className={cn("text-sm", location.pathname === '/' ? "font-bold" : "font-semibold")}>Início</span>
+          </button>
+          
+          <button onClick={() => navigate('/products')} className={cn("flex w-full items-center gap-4 px-5 py-3.5 rounded-2xl transition-all", location.pathname === '/products' ? "bg-[#0058bc] text-white shadow-lg shadow-[#0058bc]/20" : "text-[#414755] hover:bg-white hover:shadow-sm")}>
+            <Package className="w-5 h-5" />
+            <span className={cn("text-sm", location.pathname === '/products' ? "font-bold" : "font-semibold")}>Produtos</span>
+          </button>
+          
+          <button onClick={() => navigate('/etoken')} className={cn("flex w-full items-center gap-4 px-5 py-3.5 rounded-2xl transition-all", location.pathname === '/etoken' ? "bg-[#0058bc] text-white shadow-lg shadow-[#0058bc]/20" : "text-[#414755] hover:bg-white hover:shadow-sm")}>
+            <Wallet className="w-5 h-5" />
+            <span className={cn("text-sm", location.pathname === '/etoken' ? "font-bold" : "font-semibold")}>eToken</span>
+          </button>
+          
+          <button onClick={() => navigate('/orders')} className={cn("flex w-full items-center gap-4 px-5 py-3.5 rounded-2xl transition-all", location.pathname === '/orders' ? "bg-[#0058bc] text-white shadow-lg shadow-[#0058bc]/20" : "text-[#414755] hover:bg-white hover:shadow-sm")}>
+            <ShoppingCart className="w-5 h-5" />
+            <span className={cn("text-sm", location.pathname === '/orders' ? "font-bold" : "font-semibold")}>Vendas</span>
+          </button>
 
-      {/* Bottom Apple-style Tab Bar */}
-      <div className="fixed bottom-0 left-0 right-0 h-[84px] bg-white/90 backdrop-blur-xl border-t border-gray-100 flex justify-around items-center px-6 pb-4 pt-2">
-        <button 
-          onClick={() => navigate('/')}
-          className={cn("flex flex-col items-center gap-1", location.pathname === '/' ? "text-[#007AFF]" : "text-[#86868B]")}
-        >
-          <Home className={cn("w-6 h-6", location.pathname === '/' && "fill-current")} />
-          <span className="text-[10px] font-semibold">Início</span>
-        </button>
-        <button 
-          onClick={() => navigate('/products')}
-          className={cn("flex flex-col items-center gap-1", location.pathname === '/products' ? "text-[#007AFF]" : "text-[#86868B]")}
-        >
-          <Package className={cn("w-6 h-6", location.pathname === '/products' && "fill-current")} />
-          <span className="text-[10px] font-semibold">Produtos</span>
-        </button>
-        <button 
-          onClick={() => navigate('/etoken')}
-          className={cn("flex flex-col items-center gap-1", location.pathname === '/etoken' ? "text-[#007AFF]" : "text-[#86868B]")}
-        >
-          <Wallet className={cn("w-6 h-6", location.pathname === '/etoken' && "fill-current")} />
-          <span className="text-[10px] font-semibold">eToken</span>
-        </button>
-        <button 
-          onClick={() => navigate('/orders')}
-          className={cn("flex flex-col items-center gap-1", location.pathname === '/orders' ? "text-[#007AFF]" : "text-[#86868B]")}
-        >
-          <ShoppingCart className={cn("w-6 h-6", location.pathname === '/orders' && "fill-current")} />
-          <span className="text-[10px] font-semibold">Vendas</span>
-        </button>
-        <button 
-          onClick={() => navigate('/credits')}
-          className={cn("flex flex-col items-center gap-1", location.pathname === '/credits' ? "text-[#007AFF]" : "text-[#86868B]")}
-        >
-          <Landmark className={cn("w-6 h-6", location.pathname === '/credits' && "fill-current")} />
-          <span className="text-[10px] font-semibold">Pedidos</span>
-        </button>
-        {user.role === 'admin' && (
-          <>
-            <button 
-              onClick={() => navigate('/users')}
-              className={cn("flex flex-col items-center gap-1", location.pathname === '/users' ? "text-[#007AFF]" : "text-[#86868B]")}
-            >
-              <Users className={cn("w-6 h-6", location.pathname === '/users' && "fill-current")} />
-              <span className="text-[10px] font-semibold">Equipe</span>
-            </button>
-            <button 
-              onClick={() => navigate('/logs')}
-              className={cn("flex flex-col items-center gap-1", location.pathname === '/logs' ? "text-[#007AFF]" : "text-[#86868B]")}
-            >
-              <List className={cn("w-6 h-6", location.pathname === '/logs' && "fill-current")} />
-              <span className="text-[10px] font-semibold">Logs</span>
-            </button>
-          </>
-        )}
-      </div>
+          <button onClick={() => navigate('/credits')} className={cn("flex w-full items-center gap-4 px-5 py-3.5 rounded-2xl transition-all", location.pathname === '/credits' ? "bg-[#0058bc] text-white shadow-lg shadow-[#0058bc]/20" : "text-[#414755] hover:bg-white hover:shadow-sm")}>
+            <Landmark className="w-5 h-5" />
+            <span className={cn("text-sm", location.pathname === '/credits' ? "font-bold" : "font-semibold")}>Pedidos</span>
+          </button>
+
+          {user.role === 'admin' && (
+            <>
+              <button onClick={() => navigate('/users')} className={cn("flex w-full items-center gap-4 px-5 py-3.5 rounded-2xl transition-all", location.pathname === '/users' ? "bg-[#0058bc] text-white shadow-lg shadow-[#0058bc]/20" : "text-[#414755] hover:bg-white hover:shadow-sm")}>
+                 <Users className="w-5 h-5" />
+                 <span className={cn("text-sm", location.pathname === '/users' ? "font-bold" : "font-semibold")}>Equipe</span>
+              </button>
+              <button onClick={() => navigate('/logs')} className={cn("flex w-full items-center gap-4 px-5 py-3.5 rounded-2xl transition-all", location.pathname === '/logs' ? "bg-[#0058bc] text-white shadow-lg shadow-[#0058bc]/20" : "text-[#414755] hover:bg-white hover:shadow-sm")}>
+                 <List className="w-5 h-5" />
+                 <span className={cn("text-sm", location.pathname === '/logs' ? "font-bold" : "font-semibold")}>Logs</span>
+              </button>
+            </>
+          )}
+
+        </nav>
+
+        <div className="px-4 mt-auto space-y-2">
+          {/* Suporte block */}
+          <div className="p-5 mb-6 bg-[#0058bc]/5 rounded-[1.5rem] border border-[#0058bc]/5">
+            <p className="text-xs font-bold text-[#0058bc] mb-3">Precisa de ajuda?</p>
+            <button className="w-full text-[11px] bg-[#0058bc] text-white py-2.5 rounded-xl font-extrabold uppercase tracking-widest shadow-md shadow-[#0058bc]/10 hover:shadow-lg transition-all">Suporte 24h</button>
+          </div>
+          <button className="w-full flex items-center justify-start gap-4 text-[#ba1a1a] hover:bg-[#ba1a1a]/5 px-5 py-3 rounded-2xl transition-all" onClick={() => { localStorage.removeItem('token'); setUser(null); navigate('/'); }}>
+             <LogOut className="w-5 h-5" />
+             <span className="font-semibold text-sm">Sair</span>
+          </button>
+        </div>
+      </aside>
+
+      {/* Main Content Area */}
+      <main className="flex-grow md:ml-[312px] min-h-screen pr-4 flex flex-col">
+        <header className="bg-[#faf9fe]/80 backdrop-blur-md sticky top-0 z-50 w-full h-20 flex justify-between items-center px-4 md:px-8">
+            <div className="flex items-center gap-4">
+                <h2 className="text-2xl font-extrabold text-[#1a1b1f] tracking-tight">{location.pathname === '/' ? 'Dashboard' : location.pathname === '/products' ? 'Produtos' : location.pathname === '/etoken' ? 'eToken' : location.pathname === '/orders' ? 'Vendas' : location.pathname === '/credits' ? 'Pedidos' : location.pathname === '/users' ? 'Equipe' : 'Minha Loja'}</h2>
+            </div>
+            <div className="flex items-center gap-4 md:gap-8 justify-end">
+                <div className="relative hidden lg:block">
+                   <input type="text" placeholder="Pesquisar transações..." className="bg-white border-none h-11 w-72 pl-12 pr-4 rounded-2xl text-sm focus:ring-2 focus:ring-[#0058bc]/20 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.04),_0_2px_10px_-2px_rgba(0,0,0,0.02)] transition-all outline-none text-[#1a1b1f]" />
+                   <Search className="w-5 h-5 absolute left-4 top-3 text-[#414755] opacity-40" />
+                </div>
+                <div className="flex items-center gap-2 md:gap-4">
+                   <button className="p-2 text-[#414755] hover:bg-white hover:shadow-sm rounded-xl transition-all">
+                      <Bell className="w-5 h-5" />
+                   </button>
+                   <div className="h-8 w-px bg-[#c1c6d7]/30 mx-0 md:mx-2"></div>
+                   <div className="flex items-center gap-3 bg-white pl-4 pr-1 py-1 rounded-2xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.04),_0_2px_10px_-2px_rgba(0,0,0,0.02)]">
+                      <div className="text-right hidden sm:block">
+                         <p className="text-xs font-extrabold leading-tight text-[#1a1b1f]">{user.name}</p>
+                         <p className="text-[10px] text-[#414755] font-medium capitalize">{user.role}</p>
+                      </div>
+                      <img src={user.company_logo || "https://i.ibb.co/605F0btn/userlmn-2a3058c5a41d95b47dcdaaede52b18e9-removebg-preview.png"} alt="User" className="h-9 w-9 rounded-xl bg-[#eeedf3] object-cover" />
+                   </div>
+                </div>
+            </div>
+        </header>
+        
+        <div className="flex-1 pb-24 md:pb-8">
+          <Routes>
+            <Route path="/" element={<AdminOverview user={user} onRefreshUser={refreshUser} onLogout={() => { localStorage.removeItem('token'); setUser(null); }} />} />
+            <Route path="/products" element={<AdminProducts user={user} onRefreshUser={refreshUser} />} />
+            <Route path="/orders" element={<AdminOrders />} />
+            <Route path="/etoken" element={<AdminWallet user={user} onRefreshUser={refreshUser} />} />
+            <Route path="/credits" element={<AdminCredits user={user} onRefreshUser={refreshUser} />} />
+            <Route path="/logs" element={<AdminLogs user={user} />} />
+            <Route path="/users" element={user.role === 'admin' ? <AdminUsers /> : <div className="p-8 text-center text-gray-500">Acesso negado. Apenas administradores.</div>} />
+          </Routes>
+        </div>
+      </main>
+
+      {/* Mobile Bottom Nav */}
+      <nav className="md:hidden fixed bottom-6 left-6 right-6 h-18 bg-white/80 backdrop-blur-2xl rounded-3xl flex items-center justify-around z-50 shadow-2xl border border-white/50 px-2">
+         <button onClick={() => navigate('/')} className={cn("flex flex-col items-center gap-1", location.pathname === '/' ? "text-[#0058bc]" : "text-[#414755] opacity-60")}>
+             <LayoutDashboard className="w-5 h-5" />
+             <span className="text-[10px] font-extrabold">Início</span>
+         </button>
+         <button onClick={() => navigate('/products')} className={cn("flex flex-col items-center gap-1", location.pathname === '/products' ? "text-[#0058bc]" : "text-[#414755] opacity-60")}>
+             <Package className="w-5 h-5" />
+             <span className="text-[10px] font-extrabold">Produtos</span>
+         </button>
+         <button onClick={() => navigate('/orders')} className={cn("flex flex-col items-center gap-1", location.pathname === '/orders' ? "text-[#0058bc]" : "text-[#414755] opacity-60")}>
+             <ShoppingCart className="w-5 h-5" />
+             <span className="text-[10px] font-extrabold">Vendas</span>
+         </button>
+         {user.role === 'admin' ? (
+           <button onClick={() => navigate('/users')} className={cn("flex flex-col items-center gap-1", location.pathname === '/users' ? "text-[#0058bc]" : "text-[#414755] opacity-60")}>
+               <Users className="w-5 h-5" />
+               <span className="text-[10px] font-extrabold">Conta</span>
+           </button>
+         ) : (
+           <button onClick={() => navigate('/etoken')} className={cn("flex flex-col items-center gap-1", location.pathname === '/etoken' ? "text-[#0058bc]" : "text-[#414755] opacity-60")}>
+               <Wallet className="w-5 h-5" />
+               <span className="text-[10px] font-extrabold">Conta</span>
+           </button>
+         )}
+      </nav>
     </div>
   );
 }
