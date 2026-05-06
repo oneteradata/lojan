@@ -753,6 +753,89 @@ async function startServer() {
     }
   });
 
+  // POST /api/transfer_tokens
+  app.post('/api/transfer_tokens', requireAuth, async (req: any, res) => {
+    try {
+      if (!dbConnected) throw new Error("DB offline");
+      const { receiver_id, amount, token_length } = req.body;
+      const amountInt = parseInt(amount);
+      const tokenLenInt = parseInt(token_length);
+      const senderId = req.user.id;
+
+      if (!receiver_id || !amountInt || !tokenLenInt || amountInt <= 0) {
+        return res.status(400).json({ success: false, error: 'Parâmetros inválidos.' });
+      }
+      if (senderId.toString() === receiver_id.toString()) {
+        return res.status(400).json({ success: false, error: 'Não é possível transferir para si mesmo.' });
+      }
+
+      // Check sender limits
+      const senderRes = await pool.query('SELECT wallet, name, email FROM users WHERE id = $1', [senderId]);
+      if (senderRes.rows.length === 0) return res.status(404).json({ success: false, error: 'Remetente não encontrado.' });
+      const sender = senderRes.rows[0];
+      
+      let rawWallet = sender.wallet || {};
+      if (typeof rawWallet === 'string') {
+        try { rawWallet = JSON.parse(rawWallet); } catch (e) {}
+      }
+      
+      let userTokens: string[] = [];
+      if (Array.isArray(rawWallet?.tokens)) {
+        userTokens = rawWallet.tokens;
+      } else if (rawWallet?.tokens) {
+        userTokens = Object.values(rawWallet.tokens).filter(t => typeof t === 'string') as string[];
+      } // Minimal check, assuming standardized wallet format
+
+      const matchingIndices = [];
+      for (let i = 0; i < userTokens.length; i++) {
+        if (userTokens[i].length === tokenLenInt) {
+          matchingIndices.push(i);
+        }
+      }
+
+      if (matchingIndices.length < amountInt) {
+        return res.status(400).json({ success: false, error: `Saldo insuficiente de eTokens do tipo E${tokenLenInt}. Você tem ${matchingIndices.length}.` });
+      }
+
+      // Transfer Process
+      const tokensToTransfer: string[] = [];
+      for (let i = 0; i < amountInt; i++) {
+         const idxToRemove = matchingIndices.pop();
+         if (idxToRemove !== undefined) {
+           tokensToTransfer.push(userTokens[idxToRemove]);
+           userTokens[idxToRemove] = null as any; // mark for deletion
+         }
+      }
+      
+      const newSenderTokens = userTokens.filter(t => t !== null);
+      rawWallet.tokens = newSenderTokens;
+
+      // Receiver
+      const receiverRes = await pool.query('SELECT wallet, email FROM users WHERE id = $1', [receiver_id]);
+      if (receiverRes.rows.length === 0) return res.status(404).json({ success: false, error: 'Destinatário não encontrado.' });
+      const receiver = receiverRes.rows[0];
+      
+      let recWallet = receiver.wallet || {};
+      if (typeof recWallet === 'string') {
+        try { recWallet = JSON.parse(recWallet); } catch (e) {}
+      }
+      if (!Array.isArray(recWallet.tokens)) recWallet.tokens = [];
+      recWallet.tokens = recWallet.tokens.concat(tokensToTransfer);
+
+      // Save
+      await pool.query('UPDATE users SET wallet = $1 WHERE id = $2', [JSON.stringify(rawWallet), senderId]);
+      await pool.query('UPDATE users SET wallet = $1 WHERE id = $2', [JSON.stringify(recWallet), receiver_id]);
+
+      await logAction(senderId, sender.email, 'transferencia', \`Enviou \${amountInt} eToken(s) E\${tokenLenInt} para ID \${receiver_id}\`);
+      await logAction(receiver_id, receiver.email, 'recebimento_transferencia', \`Recebeu \${amountInt} eToken(s) E\${tokenLenInt} do ID \${senderId}\`);
+
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error(err);
+      res.status(500).json({ success: false, error: 'Erro interno ao transferir.' });
+    }
+  });
+
   // GET /api/logs
   app.get('/api/logs', requireAuth, requireAdmin, async (req: any, res) => {
     try {

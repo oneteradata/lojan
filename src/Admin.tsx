@@ -449,6 +449,7 @@ function ProductModal({ item, user, onClose }: { item?: any, user?: any, onClose
 
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [showConfirmation, setShowConfirmation] = useState(false);
 
   const handleSubmit = async () => {
     setLoading(true);
@@ -892,12 +893,27 @@ function ProductModal({ item, user, onClose }: { item?: any, user?: any, onClose
          </div>
 
          <div className="px-6 py-5 border-t border-gray-100 bg-white sm:rounded-b-[32px]">
-            <button 
-              onClick={handleSubmit} disabled={loading || uploading}
-              className="w-full bg-[#007AFF] hover:bg-[#0066CC] active:scale-[0.99] transition-all text-white font-semibold rounded-2xl py-4 flex items-center justify-center shadow-lg shadow-blue-500/20 disabled:opacity-70 disabled:cursor-not-allowed"
-            >
-              {loading ? 'Processando pagamento...' : <><RefreshCw className="w-4 h-4 mr-2" /> Salvar Produto</>}
-            </button>
+            {showConfirmation ? (
+              <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 flex flex-col gap-3">
+                 <div>
+                   <h4 className="font-bold text-[#1D1D1F] text-sm">Confirmar Cadastro</h4>
+                   <p className="text-xs text-blue-800 mt-1">Ao {item ? 'editar' : 'cadastrar'} este produto, os tokens correspondentes ao plano de {formData.duration_days} dias serão verificados no seu saldo (você tem {user?.wallet?.tokens?.length || 0} disponíveis). Deseja autorizar a transação?</p>
+                 </div>
+                 <div className="flex gap-2">
+                   <button onClick={() => setShowConfirmation(false)} className="flex-1 bg-white text-blue-600 font-bold text-xs py-3 rounded-xl border border-blue-200 hover:bg-blue-100 transition-colors">Cancelar</button>
+                   <button onClick={handleSubmit} disabled={loading || uploading} className="flex-1 bg-[#007AFF] text-white font-bold text-xs py-3 rounded-xl shadow-sm hover:bg-[#0066CC] transition-colors disabled:opacity-70">
+                     {loading ? 'Processando...' : 'Autorizar & Concluir'}
+                   </button>
+                 </div>
+              </div>
+            ) : (
+              <button 
+                onClick={() => setShowConfirmation(true)} disabled={loading || uploading}
+                className="w-full bg-[#007AFF] hover:bg-[#0066CC] active:scale-[0.99] transition-all text-white font-semibold rounded-2xl py-4 flex items-center justify-center shadow-lg shadow-blue-500/20 disabled:opacity-70 disabled:cursor-not-allowed"
+              >
+                {loading ? 'Processando...' : <><RefreshCw className="w-4 h-4 mr-2" /> Salvar Produto</>}
+              </button>
+            )}
          </div>
        </motion.div>
     </div>
@@ -1533,7 +1549,7 @@ export default function AdminApp() {
           <Route path="/" element={<AdminOverview user={user} onRefreshUser={refreshUser} onLogout={() => { localStorage.removeItem('token'); setUser(null); }} />} />
           <Route path="/products" element={<AdminProducts user={user} onRefreshUser={refreshUser} />} />
           <Route path="/orders" element={<AdminOrders />} />
-          <Route path="/wallet" element={<AdminWallet user={user} onRefreshUser={refreshUser} />} />
+          <Route path="/etoken" element={<AdminWallet user={user} onRefreshUser={refreshUser} />} />
           <Route path="/credits" element={<AdminCredits user={user} onRefreshUser={refreshUser} />} />
           <Route path="/logs" element={<AdminLogs user={user} />} />
           <Route path="/users" element={user.role === 'admin' ? <AdminUsers /> : <div className="p-8 text-center text-gray-500">Acesso negado. Apenas administradores.</div>} />
@@ -1557,11 +1573,11 @@ export default function AdminApp() {
           <span className="text-[10px] font-semibold">Produtos</span>
         </button>
         <button 
-          onClick={() => navigate('/wallet')}
-          className={cn("flex flex-col items-center gap-1", location.pathname === '/wallet' ? "text-[#007AFF]" : "text-[#86868B]")}
+          onClick={() => navigate('/etoken')}
+          className={cn("flex flex-col items-center gap-1", location.pathname === '/etoken' ? "text-[#007AFF]" : "text-[#86868B]")}
         >
-          <Wallet className={cn("w-6 h-6", location.pathname === '/wallet' && "fill-current")} />
-          <span className="text-[10px] font-semibold">Carteira</span>
+          <Wallet className={cn("w-6 h-6", location.pathname === '/etoken' && "fill-current")} />
+          <span className="text-[10px] font-semibold">eToken</span>
         </button>
         <button 
           onClick={() => navigate('/orders')}
