@@ -383,51 +383,6 @@ async function startServer() {
         return res.status(400).json({ success: false, error: `Saldo insuficiente para modalidade de ${duration} dias. Necessário ${requiredAmount} token(s) do tipo ${requiredTypeLength}.` });
       }
 
-      // Deduct tokens
-      let newWallet = rawWallet;
-      let deducted = 0;
-      
-      if (walletFormat === 'array_of_objects') {
-        const tokensObj = { ...rawWallet[targetArrayIndex].wallet };
-        for (const k in tokensObj) {
-           if (typeof tokensObj[k] === 'string' && tokensObj[k].length === requiredTypeLength && deducted < requiredAmount) {
-              delete tokensObj[k];
-              deducted++;
-           }
-        }
-        newWallet = [...rawWallet];
-        newWallet[targetArrayIndex] = { ...newWallet[targetArrayIndex], wallet: tokensObj };
-      } else if (walletFormat === 'object_with_key') {
-        const tokensObj = { ...rawWallet[targetObjKey] };
-        for (const k in tokensObj) {
-           if (typeof tokensObj[k] === 'string' && tokensObj[k].length === requiredTypeLength && deducted < requiredAmount) {
-              delete tokensObj[k];
-              deducted++;
-           }
-        }
-        newWallet = { ...rawWallet, [targetObjKey]: tokensObj };
-      } else if (walletFormat === 'root_strings') {
-        newWallet = { ...rawWallet };
-        for (const k in newWallet) {
-           if (typeof newWallet[k] === 'string' && newWallet[k].length === requiredTypeLength && deducted < requiredAmount) {
-              delete newWallet[k];
-              deducted++;
-           }
-        }
-      } else {
-        const newTokensList = [];
-        for (const t of userTokens) {
-          if (t.length === requiredTypeLength && deducted < requiredAmount) {
-            deducted++;
-          } else {
-            newTokensList.push(t);
-          }
-        }
-        newWallet = { ...rawWallet, tokens: newTokensList };
-      }
-      
-      await pool.query('UPDATE users SET wallet = $1 WHERE id = $2', [JSON.stringify(newWallet), userId]);
-
       const imagesString = (media || []).map((m: any) => m.url).join(',');
       const result = await pool.query(`
         INSERT INTO products (name, category, price, tokens, stock, details, media, variations, image, user_id, user_name, business_model, tables, seats_per_table, is_available, req_token_amount, req_token_type, duration_days)
@@ -436,13 +391,13 @@ async function startServer() {
         name, category, String(price || '0'), parseInt(tokens) || 0, parseInt(stock) || 0, details, 
         JSON.stringify(media || []), JSON.stringify(variations || []), imagesString, userId, userName, business_model || 'Venda', tables || null, seats_per_table || null, requiredAmount, requiredTypeLength, duration
       ]);
-      await logAction(userId, userEmail, 'produto_adicionado', `Produto ${result.rows[0].name} criado (pendente) para ${duration} dias e debitou ${requiredAmount} tokens do tipo ${requiredTypeLength}`);
+      await logAction(userId, userEmail, 'produto_adicionado', `Produto ${result.rows[0].name} criado (pendente webhook) para ${duration} dias (necessita ${requiredAmount} tokens do tipo ${requiredTypeLength})`);
       
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 seconds
-        const webhookUrl = 'https://system.voryx.com.br/webhook/pagamentodetokenemcadastro';
-        console.log(`Iniciando webhook: ${webhookUrl} para produto ${result.rows[0].id}`);
+        const webhookUrl = `https://system.voryx.com.br/webhook/pagamentodetokenemcadastro?userId=${userId}&email=${encodeURIComponent(userEmail)}&productId=${result.rows[0].id}&amount=${requiredAmount}&typeLength=${requiredTypeLength}`;
+        console.log(`Iniciando webhook: ${webhookUrl}`);
         const webhookRes = await fetch(webhookUrl, { 
           method: 'GET',
           signal: controller.signal 
@@ -456,10 +411,8 @@ async function startServer() {
         let paymentSuccess = false;
         if (status === 200 && !text.includes('100')) {
            paymentSuccess = true;
-        } else if (status === 200 && text.includes('100')) {
+        } else if (status === 100 || status.toString() === '100' || text.includes('100')) {
            paymentSuccess = false;
-        } else if (status === 200) {
-           paymentSuccess = true;
         }
 
         if (paymentSuccess) {
