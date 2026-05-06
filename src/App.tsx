@@ -274,45 +274,45 @@ function Storefront() {
     <div className="min-h-screen flex flex-col bg-[var(--color-brand-bg)] overflow-x-hidden">
       {/* Logged in Top Bar */}
       {user && (
-        <div className="fixed top-0 left-0 right-0 z-[60] bg-[#111] text-white border-b border-white/10 px-4 py-2 flex items-center justify-between text-[10px] md:text-xs">
+        <div className="fixed top-0 left-0 right-0 z-[60] bg-[#007AFF] text-white border-b border-blue-400 px-4 py-2 flex items-center justify-between text-[10px] md:text-xs">
           <div className="flex items-center gap-3">
-            <button onClick={() => { localStorage.removeItem('token'); setUser(null); }} className="flex items-center gap-1 hover:text-[#d4af37] transition-colors" title="Sair">
+            <button onClick={() => { localStorage.removeItem('token'); setUser(null); }} className="flex items-center gap-1 hover:text-blue-200 transition-colors" title="Sair">
               <LogOut className="w-3 h-3" />
               <span className="hidden sm:inline uppercase">Sair</span>
             </button>
-            <div className="w-px h-4 bg-white/20"></div>
+            <div className="w-px h-4 bg-blue-300"></div>
             {user.company_logo && (
-              <img src={user.company_logo} alt="Logo" className="w-5 h-5 md:w-6 md:h-6 object-cover rounded-full border border-white/20" />
+              <img src={user.company_logo} alt="Logo" className="w-5 h-5 md:w-6 md:h-6 object-cover rounded-full border border-blue-300/50" />
             )}
             <span className="font-bold uppercase tracking-wider hidden sm:inline">{user.company_name || 'Usuário'}</span>
           </div>
           
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-1 cursor-help" title="Produtos Ativos">
-               <ShoppingBag className="w-3 h-3 text-[#d4af37]" />
+               <ShoppingBag className="w-3 h-3 text-blue-200" />
                <span className="font-bold">{user.active_products_count || 0}</span>
-               <span className="uppercase text-gray-400 hidden sm:inline">Produtos</span>
+               <span className="uppercase text-blue-100 hidden sm:inline">Produtos</span>
             </div>
-            <div className="w-px h-4 bg-white/20"></div>
+            <div className="w-px h-4 bg-blue-300"></div>
             
             <div className="flex items-center gap-2">
-               <button onClick={() => setShowWallet(!showWallet)} className="hover:text-[#d4af37] transition-colors" title="Ocultar/Mostrar Saldo">
+               <button onClick={() => setShowWallet(!showWallet)} className="hover:text-blue-200 transition-colors" title="Ocultar/Mostrar Saldo">
                   {showWallet ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
                </button>
                {showWallet && user.wallet?.tokens && Array.isArray(user.wallet.tokens) ? (
-                 <div className="flex items-center gap-2">
+                 <div className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => window.location.href = '/etoken'}>
                    {Object.entries(user.wallet.tokens.reduce((acc: any, t: string) => { acc[t] = (acc[t]||0)+1; return acc; }, {})).map(([tipo, qty]: any) => (
-                      <div key={tipo} className="flex gap-1 items-center bg-white/10 rounded px-1.5 py-0.5">
-                         <span className="font-bold text-[#d4af37]">{qty}</span>
-                         <span className="uppercase">{tipo}</span>
+                      <div key={tipo} className="flex gap-1 items-center bg-white/20 rounded px-1.5 py-0.5">
+                         <span className="font-bold text-white">{qty}</span>
+                         <span className="uppercase text-blue-50">E{tipo}</span>
                       </div>
                    ))}
-                   {user.wallet.tokens.length === 0 && <span className="text-gray-400 uppercase">Sem Tokens</span>}
+                   {user.wallet.tokens.length === 0 && <span className="text-blue-200 uppercase cursor-pointer" onClick={() => window.location.href = '/etoken'}>Sem Tokens</span>}
                  </div>
                ) : showWallet ? (
-                 <span className="text-gray-400 uppercase">Sem Tokens</span>
+                 <span className="text-blue-200 uppercase cursor-pointer" onClick={() => window.location.href = '/etoken'}>Sem Tokens</span>
                ) : (
-                 <span className="text-gray-500 uppercase tracking-widest hidden sm:inline">Oculto</span>
+                 <span className="text-blue-200 uppercase tracking-widest hidden sm:inline cursor-pointer" onClick={() => window.location.href = '/etoken'}>Oculto</span>
                )}
             </div>
           </div>
@@ -320,11 +320,11 @@ function Storefront() {
       )}
 
       {/* Navigation */}
-      <header className={`fixed w-full z-50 p-6 flex justify-between items-center transition-all duration-300 ${isScrolled ? 'bg-[var(--color-brand-bg)] text-[var(--color-brand-ink)] border-b border-white/10' : 'text-white border-b border-transparent'} ${user ? 'top-[40px] md:top-[44px]' : 'top-0'}`}>
+      <header className={`fixed w-full z-50 p-6 flex justify-between items-center transition-all duration-300 ${isScrolled ? 'bg-white text-gray-900 border-b border-gray-200 shadow-sm' : 'text-gray-900 border-b border-transparent bg-white/80 backdrop-blur-md'} ${user ? 'top-[40px] md:top-[44px]' : 'top-0'}`}>
         <div className="flex gap-6 hidden md:flex">
           <a href="#categories-section" onClick={scrollToCategories} className="nav-link text-xs tracking-widest uppercase">Coleções</a>
           <a href="#products-section" onClick={scrollToProducts} className="nav-link text-xs tracking-widest uppercase">Maison</a>
-          <a href="/" className="nav-link text-xs tracking-widest uppercase text-[#d4af37]">Vitrine admin</a>
+          <a href="/" className="nav-link text-xs tracking-widest uppercase text-[#007AFF] font-bold">Vitrine admin</a>
         </div>
         
         <div className="md:hidden">
@@ -332,20 +332,20 @@ function Storefront() {
         </div>
 
         <div className="absolute left-1/2 -translate-x-1/2">
-          <h1 className="font-serif text-3xl tracking-wide cursor-pointer" onClick={() => window.scrollTo({top: 0, behavior: 'smooth'})}>VALENTINA</h1>
+          <h1 className="font-serif text-3xl tracking-wide cursor-pointer text-[#007AFF]" onClick={() => window.scrollTo({top: 0, behavior: 'smooth'})}>VALENTINA</h1>
         </div>
 
         <div className="flex gap-6 items-center">
-          <Search className="w-4 h-4 cursor-pointer hover:text-[#d4af37] transition-colors" strokeWidth={1.5} />
+          <Search className="w-4 h-4 cursor-pointer hover:text-[#007AFF] transition-colors" strokeWidth={1.5} />
           {user ? (
-            <span className="text-xs uppercase tracking-widest text-[#d4af37] hidden md:block" title={`ID: ${user.id}`}>Olá, {user.name.split(' ')[0]} (ID: {user.id})</span>
+            <span className="text-xs uppercase tracking-widest text-[#007AFF] hidden md:block font-bold" title={`ID: ${user.id}`}>Olá, {user.name.split(' ')[0]} (ID: {user.id})</span>
           ) : (
-            <User onClick={() => setShowLogin(true)} className="w-4 h-4 cursor-pointer hover:text-[#d4af37] transition-colors hidden md:block" strokeWidth={1.5} />
+            <User onClick={() => setShowLogin(true)} className="w-4 h-4 cursor-pointer hover:text-[#007AFF] transition-colors hidden md:block" strokeWidth={1.5} />
           )}
           <div className="relative">
-             <ShoppingBag onClick={() => setIsCartOpen(true)} className="w-4 h-4 cursor-pointer hover:text-[#d4af37] transition-colors" strokeWidth={1.5} />
+             <ShoppingBag onClick={() => setIsCartOpen(true)} className="w-4 h-4 cursor-pointer hover:text-[#007AFF] transition-colors" strokeWidth={1.5} />
              {cartItems.length > 0 && (
-                <span className="absolute -top-2 -right-2 bg-[#d4af37] text-white text-[8px] font-bold w-4 h-4 flex items-center justify-center rounded-full">
+                <span className="absolute -top-2 -right-2 bg-[#007AFF] text-white text-[8px] font-bold w-4 h-4 flex items-center justify-center rounded-full">
                   {cartItems.reduce((acc, item) => acc + item.quantity, 0)}
                 </span>
              )}
@@ -357,19 +357,19 @@ function Storefront() {
       {showLogin && (
         <AnimatePresence>
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-0">
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-md" onClick={() => setShowLogin(false)} />
-            <motion.div initial={{ scale: 0.95, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} className="bg-[#0a0a0a] border border-[#d4af37]/20 p-8 sm:p-12 w-full max-w-[420px] relative rounded-3xl shadow-2xl overflow-hidden shadow-[#d4af37]/10 z-10">
+            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowLogin(false)} />
+            <motion.div initial={{ scale: 0.95, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} className="bg-white border border-gray-100 p-8 sm:p-12 w-full max-w-[420px] relative rounded-3xl shadow-2xl overflow-hidden z-10">
               {/* Decorative elements */}
-              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-[#d4af37] to-transparent opacity-50" />
-              <div className="absolute top-[-50px] left-1/2 -translate-x-1/2 w-[100px] h-[100px] bg-[#d4af37] rounded-full blur-[80px] opacity-20 pointer-events-none" />
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-[#007AFF] to-transparent opacity-50" />
+              <div className="absolute top-[-50px] left-1/2 -translate-x-1/2 w-[100px] h-[100px] bg-[#007AFF] rounded-full blur-[80px] opacity-10 pointer-events-none" />
 
-              <button onClick={() => setShowLogin(false)} className="absolute top-5 right-5 w-8 h-8 flex items-center justify-center bg-white/5 rounded-full text-gray-400 hover:text-white hover:bg-white/10 transition-colors z-20">
+              <button onClick={() => setShowLogin(false)} className="absolute top-5 right-5 w-8 h-8 flex items-center justify-center bg-gray-100 rounded-full text-gray-500 hover:text-gray-900 hover:bg-gray-200 transition-colors z-20">
                  ✕
               </button>
               
               <div className="text-center mb-8 relative z-10">
-                <h2 className="font-serif text-3xl mb-2 text-white">{isRegistering ? 'Criar Conta' : 'Acesso Exclusivo'}</h2>
-                <p className="text-[10px] text-[#d4af37] uppercase tracking-[0.2em] font-medium">
+                <h2 className="font-serif text-3xl mb-2 text-gray-900">{isRegistering ? 'Criar Conta' : 'Acesso Exclusivo'}</h2>
+                <p className="text-[10px] text-[#007AFF] uppercase tracking-[0.2em] font-bold">
                   {isRegistering ? 'Junte-se à Maison Valentina' : 'Faça login para continuar'}
                 </p>
               </div>
@@ -383,10 +383,10 @@ function Storefront() {
                         placeholder="Nome Completo" 
                         value={name}
                         onChange={e => setName(e.target.value)}
-                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 pt-5 pb-2 text-sm text-white peer focus:border-[#d4af37]/50 focus:bg-white/10 transition-all outline-none"
+                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 pt-5 pb-2 text-sm text-gray-900 peer focus:border-[#007AFF]/50 focus:bg-white transition-all outline-none"
                         required
                       />
-                      <label className="absolute text-[10px] uppercase tracking-wider text-gray-500 top-2 left-4 peer-focus:text-[#d4af37] transition-colors">Nome</label>
+                      <label className="absolute text-[10px] uppercase tracking-wider text-gray-500 top-2 left-4 peer-focus:text-[#007AFF] transition-colors">Nome</label>
                     </div>
                     <div className="relative group">
                       <input 
@@ -394,22 +394,22 @@ function Storefront() {
                         placeholder="Nome da Empresa (opcional)" 
                         value={companyName}
                         onChange={e => setCompanyName(e.target.value)}
-                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 pt-5 pb-2 text-sm text-white peer focus:border-[#d4af37]/50 focus:bg-white/10 transition-all outline-none"
+                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 pt-5 pb-2 text-sm text-gray-900 peer focus:border-[#007AFF]/50 focus:bg-white transition-all outline-none"
                       />
-                      <label className="absolute text-[10px] uppercase tracking-wider text-gray-500 top-2 left-4 peer-focus:text-[#d4af37] transition-colors">Empresa</label>
+                      <label className="absolute text-[10px] uppercase tracking-wider text-gray-500 top-2 left-4 peer-focus:text-[#007AFF] transition-colors">Empresa</label>
                     </div>
-                    <div className="flex border border-white/10 rounded-xl px-4 py-3 bg-white/5 items-center justify-between">
+                    <div className="flex border border-gray-200 rounded-xl px-4 py-3 bg-gray-50 items-center justify-between">
                       <span className="text-xs text-gray-500 uppercase tracking-wider font-medium">Logo da Empresa</span>
                       <input 
                         type="file" 
                         accept="image/*"
                         onChange={handleLogoUpload}
                         disabled={uploadingLogo}
-                        className="text-[10px] max-w-[140px] file:mr-2 file:py-1 file:px-3 file:rounded-full file:border-0 file:text-[10px] file:bg-white file:text-black file:font-semibold hover:file:bg-[#d4af37] hover:file:text-white file:transition-colors cursor-pointer text-gray-400"
+                        className="text-[10px] max-w-[140px] file:mr-2 file:py-1 file:px-3 file:rounded-full file:border-0 file:text-[10px] file:bg-gray-200 file:text-gray-900 file:font-semibold hover:file:bg-[#007AFF] hover:file:text-white file:transition-colors cursor-pointer text-gray-400"
                       />
                     </div>
-                    {uploadingLogo && <span className="text-[10px] text-[#d4af37] flex items-center gap-2"><RefreshCw className="w-3 h-3 animate-spin"/> Enviando logo...</span>}
-                    {companyLogo && <img src={companyLogo} alt="Logo" className="h-12 w-12 object-cover rounded-full border border-white/20 self-center" />}
+                    {uploadingLogo && <span className="text-[10px] text-[#007AFF] flex items-center gap-2"><RefreshCw className="w-3 h-3 animate-spin"/> Enviando logo...</span>}
+                    {companyLogo && <img src={companyLogo} alt="Logo" className="h-12 w-12 object-cover rounded-full border border-gray-200 self-center" />}
                   </motion.div>
                 )}
                 
@@ -419,10 +419,10 @@ function Storefront() {
                     placeholder={isRegistering ? "seu@email.com" : "admin@valentina.com"}  
                     value={email}
                     onChange={e => setEmail(e.target.value)}
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 pt-5 pb-2 text-sm text-white peer focus:border-[#d4af37]/50 focus:bg-white/10 transition-all outline-none"
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 pt-5 pb-2 text-sm text-gray-900 peer focus:border-[#007AFF]/50 focus:bg-white transition-all outline-none"
                     required
                   />
-                  <label className="absolute text-[10px] uppercase tracking-wider text-gray-500 top-2 left-4 peer-focus:text-[#d4af37] transition-colors">Email ou ID</label>
+                  <label className="absolute text-[10px] uppercase tracking-wider text-gray-500 top-2 left-4 peer-focus:text-[#007AFF] transition-colors">Email ou ID</label>
                 </div>
 
                 <div className="relative group">
@@ -431,16 +431,16 @@ function Storefront() {
                     placeholder="••••••••" 
                     value={password}
                     onChange={e => setPassword(e.target.value)}
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 pt-5 pb-2 text-sm text-white peer focus:border-[#d4af37]/50 focus:bg-white/10 transition-all outline-none"
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 pt-5 pb-2 text-sm text-gray-900 peer focus:border-[#007AFF]/50 focus:bg-white transition-all outline-none"
                     required
                   />
-                  <label className="absolute text-[10px] uppercase tracking-wider text-gray-500 top-2 left-4 peer-focus:text-[#d4af37] transition-colors">Senha</label>
+                  <label className="absolute text-[10px] uppercase tracking-wider text-gray-500 top-2 left-4 peer-focus:text-[#007AFF] transition-colors">Senha</label>
                 </div>
 
                 <AnimatePresence>
                   {authError && authError === 'Usuário bloqueado pelo administrador.' ? (
-                    <motion.div initial={{opacity:0, height:0}} animate={{opacity:1, height:'auto'}} exit={{opacity:0, height:0}} className="p-4 bg-red-950/40 border border-red-500/30 rounded-xl backdrop-blur-sm">
-                      <p className="text-red-300 text-[11px] text-center font-medium leading-relaxed">
+                    <motion.div initial={{opacity:0, height:0}} animate={{opacity:1, height:'auto'}} exit={{opacity:0, height:0}} className="p-4 bg-red-50 border border-red-200 rounded-xl">
+                      <p className="text-red-600 text-[11px] text-center font-medium leading-relaxed">
                         Seu cadastro possui uma irregularidade. Entre em contato para resolver aqui.
                       </p>
                       <a 
@@ -453,11 +453,11 @@ function Storefront() {
                       </a>
                     </motion.div>
                   ) : authError ? (
-                    <motion.p initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="text-red-400 text-xs text-center p-3 bg-red-500/10 rounded-xl border border-red-500/20">{authError}</motion.p>
+                    <motion.p initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="text-red-500 text-xs text-center p-3 bg-red-100 rounded-xl border border-red-200">{authError}</motion.p>
                   ) : null}
                 </AnimatePresence>
                 
-                <button type="submit" className="w-full bg-[#d4af37] text-white mt-4 py-4 rounded-xl text-xs uppercase tracking-[0.2em] font-bold hover:bg-white hover:text-black transition-all duration-300 shadow-[0_0_20px_rgba(212,175,55,0.3)] hover:shadow-[0_0_30px_rgba(255,255,255,0.5)]">
+                <button type="submit" className="w-full bg-[#007AFF] text-white mt-4 py-4 rounded-xl text-xs uppercase tracking-[0.2em] font-bold hover:bg-blue-600 transition-all duration-300 shadow-[0_4px_14px_rgba(0,122,255,0.39)]">
                   {isRegistering ? 'Criar Minha Conta' : 'Entrar na Plataforma'}
                 </button>
               </form>
@@ -469,7 +469,7 @@ function Storefront() {
                      setIsRegistering(!isRegistering);
                      setAuthError('');
                   }} 
-                  className="text-[11px] font-medium text-gray-400 hover:text-white transition-colors border-b border-transparent hover:border-white pb-0.5 uppercase tracking-wider"
+                  className="text-[11px] font-bold text-gray-500 hover:text-[#007AFF] transition-colors uppercase tracking-wider"
                 >
                   {isRegistering ? 'Já tem uma conta? Faça login' : 'Ainda não tem conta? Criar agora'}
                 </button>
@@ -501,7 +501,7 @@ function Storefront() {
           <h2 className="font-serif text-6xl md:text-8xl lg:text-9xl font-light tracking-tighter leading-none mb-10">
             A Nova <br /> Elegância
           </h2>
-          <button onClick={scrollToProducts} className="border border-white/30 hover:border-[#d4af37] text-white hover:text-[#d4af37] hover:bg-[#d4af37]/10 transition-all duration-300 rounded-full px-8 py-3 text-xs uppercase tracking-widest">
+          <button onClick={scrollToProducts} className="border border-white/30 hover:border-[#007AFF] text-white hover:text-white hover:bg-[#007AFF] transition-all duration-300 rounded-full px-8 py-3 text-xs uppercase tracking-widest">
             Descobrir Coleção
           </button>
         </motion.div>
@@ -532,16 +532,16 @@ function Storefront() {
           className="order-1 md:order-2 flex gap-8"
         >
           <div className="hidden md:block">
-            <span className="vertical-text text-gray-400">Desde 1998</span>
+            <span className="vertical-text text-gray-500">Desde 1998</span>
           </div>
           <div>
-            <h3 className="font-serif text-4xl md:text-5xl font-light leading-snug mb-8">
-              Redefinindo o luxo contemporâneo através de <span className="italic">silhuetas impecáveis</span> e tecidos nobres.
+            <h3 className="font-serif text-4xl md:text-5xl font-light leading-snug mb-8 text-[#1D1D1F]">
+              Redefinindo o luxo contemporâneo através de <span className="italic text-[#007AFF]">silhuetas impecáveis</span> e tecidos nobres.
             </h3>
-            <p className="font-sans text-sm text-gray-400 leading-relaxed max-w-md mb-8">
+            <p className="font-sans text-sm text-gray-600 leading-relaxed max-w-md mb-8">
               Cada peça Valentina é uma celebração da feminilidade moderna. Desenhada em nosso ateliê, costurada à mão com maestria e pensada para transcender as estações.
             </p>
-            <a href="#" className="font-sans text-xs uppercase tracking-widest flex items-center gap-2 hover:text-[#d4af37] transition-colors">
+            <a href="#" className="font-sans text-xs uppercase tracking-widest flex items-center gap-2 hover:text-[#007AFF] transition-colors text-gray-900 font-bold">
               Conheça a Maison <ArrowRight className="w-4 h-4" />
             </a>
           </div>
@@ -549,8 +549,8 @@ function Storefront() {
       </section>
 
       {/* Categories Grid */}
-      <section className="border-y border-white/10">
-        <div className="grid md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-white/10">
+      <section className="border-y border-gray-200">
+        <div className="grid md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-gray-200">
           {[
             { title: "Vestidos", img: "https://images.unsplash.com/photo-1543163521-1bf539c55dd2?auto=format&fit=crop&q=80&w=800" },
             { title: "Alfaiataria", img: "https://images.unsplash.com/photo-1584273143981-41c073dfe8f8?auto=format&fit=crop&q=80&w=800" },
@@ -558,7 +558,7 @@ function Storefront() {
           ].map((cat, i) => (
             <motion.div 
               key={i} 
-              className="relative group cursor-pointer aspect-[3/4] md:h-[600px] overflow-hidden"
+              className="relative group cursor-pointer aspect-[3/4] md:h-[600px] overflow-hidden bg-gray-100"
               initial={{ opacity: 0 }}
               whileInView={{ opacity: 1 }}
               viewport={{ once: true }}
@@ -566,14 +566,14 @@ function Storefront() {
             >
               <img 
                 src={cat.img} 
-                className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105 opacity-80 group-hover:opacity-100" 
+                className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105 opacity-80 group-hover:opacity-100 mixes-multiply" 
                 alt={cat.title} 
                 referrerPolicy="no-referrer"
               />
-              <div className="absolute inset-0 bg-[#0a0a0a]/20 group-hover:bg-transparent transition-colors duration-500"></div>
+              <div className="absolute inset-0 bg-white/10 group-hover:bg-transparent transition-colors duration-500"></div>
               <div className="absolute bottom-8 left-8">
-                <h4 className="font-serif text-3xl text-white mb-2">{cat.title}</h4>
-                <div className="w-0 h-[1px] bg-[#d4af37] group-hover:w-full transition-all duration-500"></div>
+                <h4 className="font-serif text-3xl text-white mb-2 drop-shadow-md">{cat.title}</h4>
+                <div className="w-0 h-[3px] bg-[#007AFF] group-hover:w-full transition-all duration-500"></div>
               </div>
             </motion.div>
           ))}
@@ -581,7 +581,7 @@ function Storefront() {
       </section>
 
       {/* Featured Products */}
-      <section id="products-section" className="py-32 px-6 md:px-12 max-w-7xl mx-auto w-full">
+      <section id="products-section" className="py-32 px-6 md:px-12 max-w-7xl mx-auto w-full text-[#1D1D1F]">
         <div className="flex justify-between items-end mb-16">
           <h3 className="font-serif text-4xl md:text-5xl font-light">Novidades</h3>
           <a href="#" className="hidden md:inline-block nav-link text-xs tracking-widest uppercase truncate">
@@ -616,30 +616,30 @@ function Storefront() {
                    setSelectedVariations({});
                 }}
               >
-                <div className="overflow-hidden mb-4 relative aspect-[3/4]">
+                <div className="overflow-hidden mb-4 relative aspect-[3/4] bg-gray-100">
                   {isVideo ? (
                     <video 
                       src={imgSrc} 
-                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 mixes-multiply"
                       autoPlay muted loop playsInline
                     />
                   ) : (
                     <img 
                       src={imgSrc} 
                       alt={product.name} 
-                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 mixes-multiply"
                       referrerPolicy="no-referrer"
                     />
                   )}
-                  <div className="absolute inset-0 bg-[#0a0a0a]/10 group-hover:bg-transparent transition-colors duration-500"></div>
+                  <div className="absolute inset-0 bg-white/5 group-hover:bg-transparent transition-colors duration-500"></div>
                   <div className="absolute bottom-4 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                    <span className="bg-white/90 text-black text-[10px] uppercase font-bold tracking-widest py-2 px-6 hover:bg-[#d4af37] hover:text-white transition-colors">Ver Detalhes</span>
+                    <span className="bg-[#007AFF] text-white text-[10px] uppercase font-bold tracking-widest py-2 px-6 hover:bg-blue-600 transition-colors">Ver Detalhes</span>
                   </div>
                 </div>
-                <h5 className="font-serif text-lg text-white mb-1 group-hover:text-[#d4af37] transition-colors line-clamp-1">{product.name}</h5>
+                <h5 className="font-serif text-lg text-gray-900 mb-1 group-hover:text-[#007AFF] transition-colors line-clamp-1">{product.name}</h5>
                 <div className="flex justify-between items-start mt-1">
-                  <p className="font-sans text-sm text-gray-400">{priceLabel}</p>
-                  {product.user_name && <p className="font-sans text-[9px] uppercase tracking-widest text-[#d4af37] opacity-80">Por {product.user_name}</p>}
+                  <p className="font-sans text-sm text-gray-600 font-medium">{priceLabel}</p>
+                  {product.user_name && <p className="font-sans text-[9px] uppercase tracking-widest text-[#007AFF] font-bold opacity-80">Por {product.user_name}</p>}
                 </div>
               </motion.div>
             );
@@ -647,7 +647,7 @@ function Storefront() {
         </div>
         
         <div className="mt-12 text-center md:hidden">
-            <a href="#" className="inline-block border border-white/30 hover:border-[#d4af37] hover:bg-[#d4af37]/10 text-white hover:text-[#d4af37] transition-all duration-300 rounded-full px-8 py-3 text-xs tracking-widest uppercase">
+            <a href="#" className="inline-block border border-gray-300 hover:border-[#007AFF] hover:bg-[#007AFF]/10 text-gray-900 font-bold hover:text-[#007AFF] transition-all duration-300 rounded-full px-8 py-3 text-xs tracking-widest uppercase">
               Ver Todas
             </a>
         </div>
@@ -657,43 +657,43 @@ function Storefront() {
       <AnimatePresence>
       {selectedProduct && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 md:p-12">
-          <div className="absolute inset-0 bg-black/90 backdrop-blur-md cursor-pointer" onClick={() => setSelectedProduct(null)}></div>
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm cursor-pointer" onClick={() => setSelectedProduct(null)}></div>
           <motion.div 
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
-            className="w-full max-w-5xl bg-[#0a0a0a] border border-white/10 flex flex-col md:flex-row relative max-h-full overflow-y-auto"
+            className="w-full max-w-5xl bg-white border border-gray-100 flex flex-col md:flex-row relative max-h-full overflow-y-auto rounded-3xl md:rounded-none"
           >
             <button 
               onClick={() => setSelectedProduct(null)} 
-              className="absolute top-4 right-4 z-10 text-white hover:text-[#d4af37] bg-black/30 md:bg-transparent rounded-full p-2 md:p-0 transition-colors"
+              className="absolute top-4 right-4 z-10 text-gray-500 hover:text-[#1D1D1F] bg-gray-100 md:bg-transparent rounded-full p-2 md:p-0 transition-colors"
             >
               ✕
             </button>
-            <div className="md:w-1/2 aspect-[3/4] md:aspect-auto">
+            <div className="md:w-1/2 aspect-[3/4] md:aspect-auto bg-gray-100">
               {selectedProduct.isVideo ? (
                 <video 
                   src={selectedProduct.image} 
-                  className="w-full h-full object-cover" 
+                  className="w-full h-full object-cover mixes-multiply" 
                   autoPlay muted loop playsInline
                 />
               ) : (
                 <img 
                   src={selectedProduct.image} 
                   alt={selectedProduct.name} 
-                  className="w-full h-full object-cover" 
+                  className="w-full h-full object-cover mixes-multiply" 
                   referrerPolicy="no-referrer"
                 />
               )}
             </div>
             <div className="md:w-1/2 p-8 md:p-16 flex flex-col justify-center">
-              <span className="text-[10px] text-gray-500 uppercase tracking-[0.2em] mb-4">Coleção Exclusiva {selectedProduct.category && `• ${selectedProduct.category}`}</span>
-              <h2 className="font-serif text-3xl md:text-5xl text-white mb-4 leading-tight">{selectedProduct.name}</h2>
-              <p className="text-[#d4af37] text-xl md:text-2xl mb-8">{selectedProduct.price}</p>
+              <span className="text-[10px] text-[#007AFF] font-bold uppercase tracking-[0.2em] mb-4">Coleção Exclusiva {selectedProduct.category && `• ${selectedProduct.category}`}</span>
+              <h2 className="font-serif text-3xl md:text-5xl text-gray-900 mb-4 leading-tight">{selectedProduct.name}</h2>
+              <p className="text-gray-900 font-medium text-xl md:text-2xl mb-8">{selectedProduct.price}</p>
               
-              <div className="w-8 h-[1px] bg-white/20 mb-8"></div>
+              <div className="w-8 h-[2px] bg-[#007AFF] mb-8"></div>
               
-              <p className="text-gray-400 text-sm leading-relaxed mb-10">
+              <p className="text-gray-600 text-sm leading-relaxed mb-10">
                 {selectedProduct.details || selectedProduct.description || 'Uma peça exclusiva da coleção Valentina. Confeccionada com os mais altos padrões de luxo em nosso ateliê, pensada para trazer elegância e sofisticação instantânea ao seu guarda-roupa.'}
               </p>
 
@@ -701,7 +701,7 @@ function Storefront() {
                 <div className="flex flex-col gap-6 mb-10">
                   {selectedProduct.variations.map((v: any, vIdx: number) => (
                     <div key={vIdx}>
-                      <span className="text-xs uppercase tracking-widest text-[#d4af37] mb-3 block">{v.type}</span>
+                      <span className="text-xs uppercase tracking-widest text-gray-500 font-bold mb-3 block">{v.type}</span>
                       <div className="flex flex-wrap gap-2">
                         {v.options.map((opt: string, optIdx: number) => {
                            const priceAdd = v.optionPrices && v.optionPrices[optIdx] ? `(+R$ ${v.optionPrices[optIdx]})` : '';
@@ -709,22 +709,22 @@ function Storefront() {
                               const count = selectedVariations[vIdx]?.[optIdx] || 0;
                               if (v.multipleCount) {
                                   return (
-                                     <div key={optIdx} className="flex items-center gap-3 border border-white/20 p-2 text-sm text-white">
-                                       <span className="text-xs">{opt} <span className="text-xs text-gray-400">{priceAdd}</span></span>
-                                       <div className="flex items-center ml-auto">
+                                     <div key={optIdx} className="flex items-center gap-3 border border-gray-300 rounded-lg p-2 text-sm text-gray-900">
+                                       <span className="text-xs font-semibold">{opt} <span className="text-xs text-blue-600">{priceAdd}</span></span>
+                                       <div className="flex items-center ml-auto bg-gray-100 rounded-md">
                                           <button onClick={() => {
                                              const curr = {...selectedVariations};
                                              if(!curr[vIdx]) curr[vIdx] = {};
                                              curr[vIdx][optIdx] = Math.max(0, (curr[vIdx][optIdx] || 0) - 1);
                                              setSelectedVariations(curr);
-                                          }} className="text-gray-400 hover:text-white px-2">-</button>
-                                          <span className="text-xs w-4 text-center">{count}</span>
+                                          }} className="text-gray-500 hover:text-gray-900 px-2 font-bold">-</button>
+                                          <span className="text-xs w-4 text-center font-bold text-[#007AFF]">{count}</span>
                                           <button onClick={() => {
                                              const curr = {...selectedVariations};
                                              if(!curr[vIdx]) curr[vIdx] = {};
                                              curr[vIdx][optIdx] = (curr[vIdx][optIdx] || 0) + 1;
                                              setSelectedVariations(curr);
-                                          }} className="text-gray-400 hover:text-white px-2">+</button>
+                                          }} className="text-gray-500 hover:text-gray-900 px-2 font-bold">+</button>
                                        </div>
                                      </div>
                                   );
@@ -735,7 +735,7 @@ function Storefront() {
                                         if(!curr[vIdx]) curr[vIdx] = {};
                                         curr[vIdx][optIdx] = curr[vIdx][optIdx] ? 0 : 1;
                                         setSelectedVariations(curr);
-                                     }} className={`border px-4 py-2 text-xs transition-colors ${count ? 'border-[#d4af37] text-[#d4af37]' : 'border-white/20 text-white hover:border-white/50'}`}>
+                                     }} className={`border px-4 py-2 rounded-lg font-bold text-xs transition-colors ${count ? 'border-[#007AFF] bg-blue-50 text-[#007AFF]' : 'border-gray-300 text-gray-600 hover:border-gray-400 hover:bg-gray-50'}`}>
                                        {opt} {priceAdd}
                                      </button>
                                   );
@@ -747,7 +747,7 @@ function Storefront() {
                                    const curr = {...selectedVariations};
                                    curr[vIdx] = { [optIdx]: 1 };
                                    setSelectedVariations(curr);
-                                }} className={`border px-4 py-2 text-xs transition-colors ${isSelected ? 'border-[#d4af37] text-[#d4af37]' : 'border-white/20 text-white hover:border-white/50'}`}>
+                                }} className={`border px-4 py-2 rounded-lg font-bold text-xs transition-colors ${isSelected ? 'border-[#007AFF] bg-blue-50 text-[#007AFF]' : 'border-gray-300 text-gray-600 hover:border-gray-400 hover:bg-gray-50'}`}>
                                   {opt} {priceAdd}
                                 </button>
                               );
@@ -760,12 +760,12 @@ function Storefront() {
               )}
               
               <div className="flex flex-col gap-4 mt-auto">
-                <button onClick={() => handleAddToCart(selectedProduct)} className="w-full bg-white text-black py-4 uppercase text-xs tracking-[0.15em] font-bold hover:bg-[#d4af37] hover:text-white transition-all duration-300">
+                <button onClick={() => handleAddToCart(selectedProduct)} className="w-full bg-[#007AFF] text-white py-4 rounded-xl uppercase text-xs tracking-[0.15em] font-bold hover:bg-blue-600 transition-all duration-300 shadow-md shadow-blue-500/20">
                   Adicionar à Sacola
                 </button>
                 <button 
                   onClick={() => setSelectedProduct(null)}
-                  className="w-full bg-transparent border border-white/20 text-white py-4 uppercase text-xs tracking-[0.15em] font-bold hover:border-white transition-all duration-300"
+                  className="w-full bg-transparent border border-gray-300 text-gray-600 rounded-xl py-4 uppercase text-xs tracking-[0.15em] font-bold hover:border-gray-400 hover:text-gray-900 transition-all duration-300"
                 >
                   Continuar Explorando
                 </button>
@@ -780,32 +780,32 @@ function Storefront() {
       <AnimatePresence>
       {isCartOpen && (
         <div className="fixed inset-0 z-[120] flex justify-end">
-           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm cursor-pointer" onClick={() => setIsCartOpen(false)}></div>
+           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm cursor-pointer" onClick={() => setIsCartOpen(false)}></div>
            <motion.div 
              initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'tween' }}
-             className="w-full md:w-[400px] h-full bg-[#0a0a0a] border-l border-white/10 p-8 flex flex-col relative"
+             className="w-full md:w-[400px] h-full bg-white border-l border-gray-200 p-8 flex flex-col relative shadow-2xl"
            >
-             <button onClick={() => setIsCartOpen(false)} className="absolute top-8 right-8 text-white hover:text-[#d4af37] transition-colors">✕</button>
-             <h2 className="font-serif text-3xl mb-8">Sacola</h2>
+             <button onClick={() => setIsCartOpen(false)} className="absolute top-8 right-8 text-gray-500 hover:text-gray-900 bg-gray-100 rounded-full p-2 transition-colors">✕</button>
+             <h2 className="font-serif text-3xl mb-8 text-gray-900 font-bold">Sacola</h2>
              
              <div className="flex-1 overflow-y-auto pr-2 pb-8 flex flex-col gap-6">
                 {cartItems.length === 0 ? (
                   <p className="text-gray-500 text-sm italic">Sua sacola de compras está vazia.</p>
                 ) : (
                   cartItems.map(item => (
-                    <div key={item.cartItemId} className="flex gap-4 border-b border-white/10 pb-4">
-                       <img src={item.image} alt={item.name} className="w-20 h-28 object-cover" />
+                    <div key={item.cartItemId} className="flex gap-4 border-b border-gray-100 pb-4">
+                       <img src={item.image} alt={item.name} className="w-20 h-28 object-cover rounded-md" />
                        <div className="flex-1 flex flex-col justify-center">
-                          <h6 className="font-serif text-white line-clamp-1">{item.name}</h6>
+                          <h6 className="font-serif text-gray-900 line-clamp-1 font-bold">{item.name}</h6>
                           {item.chosenOptions && item.chosenOptions.length > 0 && (
-                            <p className="text-[10px] text-gray-400 my-0.5 line-clamp-2">{item.chosenOptions.join(', ')}</p>
+                            <p className="text-[10px] font-bold text-gray-500 my-0.5 line-clamp-2">{item.chosenOptions.join(', ')}</p>
                           )}
-                          <span className="font-sans text-xs text-gray-500 my-1">Qtd: {item.quantity}</span>
-                          <span className="font-sans text-[#d4af37]">R$ {item.finalPrice.toLocaleString('pt-BR')}</span>
+                          <span className="font-sans text-xs text-gray-400 my-1 font-medium">Qtd: {item.quantity}</span>
+                          <span className="font-sans text-[#007AFF] font-bold">R$ {item.finalPrice.toLocaleString('pt-BR')}</span>
                        </div>
                        <button 
                          onClick={() => setCartItems(cartItems.filter(i => i.cartItemId !== item.cartItemId))}
-                         className="text-[10px] text-gray-600 hover:text-red-400 self-start mt-2 transition-colors uppercase tracking-widest"
+                         className="text-[10px] text-gray-400 hover:text-red-500 font-bold self-start mt-2 transition-colors uppercase tracking-widest"
                        >
                          Remover
                        </button>
@@ -815,17 +815,17 @@ function Storefront() {
              </div>
 
              {cartItems.length > 0 && (
-               <div className="border-t border-white/20 pt-6 mt-auto">
+               <div className="border-t border-gray-200 pt-6 mt-auto bg-white">
                  <div className="flex justify-between items-center mb-6">
-                    <span className="text-sm text-gray-400">Total Estimado</span>
-                    <span className="text-lg text-white font-medium">{calculateTotal()}</span>
+                    <span className="text-sm font-bold text-gray-500">Total Estimado</span>
+                    <span className="text-lg text-[#1D1D1F] font-black">{calculateTotal()}</span>
                  </div>
                  
                  {orderStatus && (
-                   <div className="mb-4 text-center text-xs text-[#d4af37] border border-[#d4af37]/30 p-2">{orderStatus}</div>
+                   <div className="mb-4 text-center text-xs text-[#007AFF] border border-blue-200 bg-blue-50 p-3 rounded-lg font-bold">{orderStatus}</div>
                  )}
 
-                 <button onClick={handleCheckout} className="w-full bg-white text-black py-4 uppercase text-xs tracking-[0.15em] font-bold hover:bg-[#d4af37] hover:text-white transition-all duration-300">
+                 <button onClick={handleCheckout} className="w-full bg-[#007AFF] text-white rounded-xl py-4 uppercase text-xs tracking-[0.15em] font-bold hover:bg-blue-600 transition-all duration-300 shadow-[0_4px_14px_rgba(0,122,255,0.39)]">
                    {user ? 'Finalizar Pedido' : 'Fazer Login e Finalizar'}
                  </button>
                </div>
@@ -836,52 +836,52 @@ function Storefront() {
       </AnimatePresence>
 
       {/* Footer */}
-      <footer id="footer" className="border-t border-white/10 mt-auto">
+      <footer id="footer" className="border-t border-gray-200 bg-white mt-auto">
         <div className="max-w-7xl mx-auto w-full px-6 md:px-12 py-20">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-12 md:gap-8 mb-20 text-white">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-12 md:gap-8 mb-20 text-[#1D1D1F]">
             <div className="md:col-span-2">
-              <h2 className="font-serif text-3xl tracking-wide mb-8">VALENTINA</h2>
-              <p className="font-sans text-sm text-gray-400 max-w-sm mb-8">
+              <h2 className="font-serif text-3xl tracking-wide mb-8 font-bold text-[#007AFF]">VALENTINA</h2>
+              <p className="font-sans text-sm text-gray-600 max-w-sm mb-8 font-medium">
                 Assine nossa newsletter para receber convites exclusivos para lançamentos de coleções e eventos privados.
               </p>
-              <div className="flex border-b border-white/20 pb-2 max-w-sm focus-within:border-[#d4af37] transition-colors">
+              <div className="flex border-b border-gray-300 pb-2 max-w-sm focus-within:border-[#007AFF] transition-colors">
                 <input 
                   type="email" 
                   placeholder="Seu endereço de e-mail" 
-                  className="w-full bg-transparent outline-none text-sm placeholder:text-gray-500"
+                  className="w-full bg-transparent outline-none text-sm placeholder:text-gray-400 font-medium"
                 />
-                <button className="text-xs uppercase tracking-widest hover:text-[#d4af37] transition-colors">
+                <button className="text-xs font-bold uppercase tracking-widest text-[#007AFF] hover:text-blue-800 transition-colors">
                   Assinar
                 </button>
               </div>
             </div>
             
             <div>
-              <h6 className="font-sans text-xs uppercase tracking-widest font-semibold mb-6">Maison</h6>
-              <ul className="space-y-4 font-sans text-sm text-gray-400">
-                <li><a href="#" className="hover:text-[#d4af37] transition-colors">A Marca</a></li>
-                <li><a href="#" className="hover:text-[#d4af37] transition-colors">Ateliê</a></li>
-                <li><a href="#" className="hover:text-[#d4af37] transition-colors">Sustentabilidade</a></li>
-                <li><a href="#" className="hover:text-[#d4af37] transition-colors">Carreiras</a></li>
+              <h6 className="font-sans text-xs uppercase tracking-widest font-bold mb-6 text-gray-400">Maison</h6>
+              <ul className="space-y-4 font-sans text-sm font-medium text-gray-600">
+                <li><a href="#" className="hover:text-[#007AFF] transition-colors">A Marca</a></li>
+                <li><a href="#" className="hover:text-[#007AFF] transition-colors">Ateliê</a></li>
+                <li><a href="#" className="hover:text-[#007AFF] transition-colors">Sustentabilidade</a></li>
+                <li><a href="#" className="hover:text-[#007AFF] transition-colors">Carreiras</a></li>
               </ul>
             </div>
 
             <div>
-              <h6 className="font-sans text-xs uppercase tracking-widest font-semibold mb-6">Serviços</h6>
-              <ul className="space-y-4 font-sans text-sm text-gray-400">
-                <li><a href="#" className="hover:text-[#d4af37] transition-colors">Entrega & Devoluções</a></li>
-                <li><a href="#" className="hover:text-[#d4af37] transition-colors">Guia de Medidas</a></li>
-                <li><a href="#" className="hover:text-[#d4af37] transition-colors">Personal Shopper</a></li>
-                <li><a href="/" className="hover:text-[#d4af37] transition-colors text-[#d4af37]">Área do Lojista (Admin)</a></li>
+              <h6 className="font-sans text-xs uppercase tracking-widest font-bold mb-6 text-gray-400">Serviços</h6>
+              <ul className="space-y-4 font-sans text-sm font-medium text-gray-600">
+                <li><a href="#" className="hover:text-[#007AFF] transition-colors">Entrega & Devoluções</a></li>
+                <li><a href="#" className="hover:text-[#007AFF] transition-colors">Guia de Medidas</a></li>
+                <li><a href="#" className="hover:text-[#007AFF] transition-colors">Personal Shopper</a></li>
+                <li><a href="/" className="hover:text-[#007AFF] transition-colors font-bold text-[#007AFF]">Área do Lojista (Admin)</a></li>
               </ul>
             </div>
           </div>
 
-          <div className="flex flex-col md:flex-row justify-between items-center pt-8 border-t border-white/10 text-xs text-gray-500 uppercase tracking-widest">
+          <div className="flex flex-col md:flex-row justify-between items-center pt-8 border-t border-gray-200 text-xs text-gray-500 font-bold uppercase tracking-widest">
             <p>&copy; 2026 VALENTINA. Todos os direitos reservados.</p>
             <div className="flex gap-6 mt-4 md:mt-0">
-              <a href="#" className="hover:text-[#d4af37] transition-colors">Instagram</a>
-              <a href="#" className="hover:text-[#d4af37] transition-colors">Pinterest</a>
+              <a href="#" className="hover:text-[#007AFF] transition-colors">Instagram</a>
+              <a href="#" className="hover:text-[#007AFF] transition-colors">Pinterest</a>
             </div>
           </div>
         </div>
