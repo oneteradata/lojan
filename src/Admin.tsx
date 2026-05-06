@@ -1278,8 +1278,9 @@ export function AdminUsers() {
                          {copiedId === u.id ? <Check className="w-3 h-3 text-green-600" /> : <Copy className="w-3 h-3" />}
                          ID: {u.id}
                        </button>
-                       {u.role === 'admin' && <span className="bg-blue-100 text-blue-700 text-[9px] uppercase font-bold px-1.5 py-0.5 rounded">Admin</span>}
-                       {u.role === 'blocked' && <span className="bg-red-100 text-red-700 text-[9px] uppercase font-bold px-1.5 py-0.5 rounded">Block</span>}
+                       {u.role === 'admin' && <span className="bg-blue-100 text-blue-700 text-[9px] uppercase font-bold px-1.5 py-0.5 rounded shrink-0">Admin</span>}
+                       {u.role === 'blocked' && <span className="bg-red-100 text-red-700 text-[9px] uppercase font-bold px-1.5 py-0.5 rounded shrink-0">Block</span>}
+                       {!u.is_approved && u.role !== 'admin' && <span className="bg-amber-100 text-amber-700 text-[9px] uppercase font-bold px-1.5 py-0.5 rounded shrink-0">Pendente</span>}
                      </p>
                      <p className="text-xs text-[#86868B] mt-0.5 truncate">
                        {u.company_name ? `${u.company_name} • ${u.email}` : u.email}
@@ -1316,7 +1317,7 @@ export function AdminUsers() {
                          setShowAddForm(true); 
                        }} className="text-[10px] uppercase font-bold text-[#007AFF] py-3 sm:px-3 sm:py-2 bg-blue-50 rounded-xl hover:bg-blue-100 transition-colors flex items-center justify-center">Editar</button>
                        <button onClick={() => handleToggleApproval(u)} className="py-3 sm:px-3 sm:py-2 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors flex items-center justify-center">
-                         {u.is_approved ? <Check className="w-4 h-4 text-green-500" title="Aprovado (Clique para remover aprovação)" /> : <Activity className="w-4 h-4 text-orange-500" title="Aprovar Usuário" />}
+                         {u.is_approved ? <><X className="w-4 h-4 text-red-500" title="Revogar Aprovação" /><span className="text-[10px] text-red-500 font-bold uppercase hidden sm:inline ml-1">Revogar</span></> : <><Check className="w-4 h-4 text-green-500" title="Aprovar Usuário" /><span className="text-[10px] text-green-500 font-bold uppercase hidden sm:inline ml-1">Aprovar</span></>}
                        </button>
                        <button onClick={() => handleToggleBlock(u, 'team')} className="py-3 sm:px-3 sm:py-2 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors flex items-center justify-center">
                          {u.role === 'blocked' ? <Unlock className="w-4 h-4 text-green-600" /> : <Lock className="w-4 h-4 text-orange-500" />}
