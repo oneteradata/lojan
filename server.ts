@@ -826,8 +826,8 @@ async function startServer() {
       await pool.query('UPDATE users SET wallet = $1 WHERE id = $2', [JSON.stringify(rawWallet), senderId]);
       await pool.query('UPDATE users SET wallet = $1 WHERE id = $2', [JSON.stringify(recWallet), receiver_id]);
 
-      await logAction(senderId, sender.email, 'transferencia', \`Enviou \${amountInt} eToken(s) E\${tokenLenInt} para ID \${receiver_id}\`);
-      await logAction(receiver_id, receiver.email, 'recebimento_transferencia', \`Recebeu \${amountInt} eToken(s) E\${tokenLenInt} do ID \${senderId}\`);
+      await logAction(senderId, sender.email, 'transferencia', `Enviou ${amountInt} eToken(s) E${tokenLenInt} para ID ${receiver_id}`);
+      await logAction(receiver_id, receiver.email, 'recebimento_transferencia', `Recebeu ${amountInt} eToken(s) E${tokenLenInt} do ID ${senderId}`);
 
       res.json({ success: true });
     } catch (err: any) {
