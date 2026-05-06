@@ -224,9 +224,11 @@ function AdminLogin({ onLogin }: { onLogin: (user: any) => void }) {
   );
 }
 
+import { BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+
 // -- Overview Component --
 function AdminOverview({ user, onLogout, onRefreshUser }: { user: any, onLogout: () => void, onRefreshUser?: () => void }) {
-  const [stats, setStats] = useState({ products: 0, orders: 0, stock: 0, likes: 0 });
+  const [stats, setStats] = useState({ products: 0, orders: 0, stock: 0, likes: 0, monthlySales: [] });
   const [loading, setLoading] = useState(true);
 
   const fetchStats = async () => {
@@ -242,11 +244,13 @@ function AdminOverview({ user, onLogout, onRefreshUser }: { user: any, onLogout:
 
   useEffect(() => { fetchStats(); }, []);
 
+  const isAdmin = user?.role === 'admin';
+
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-4 md:p-8 space-y-6">
       <div className="flex justify-between items-end">
         <div>
-          <h2 className="text-3xl font-bold text-[#1D1D1F] tracking-tight">Resumo</h2>
+          <h2 className="text-3xl font-bold text-[#1D1D1F] tracking-tight">{isAdmin ? 'Dashboard Admin' : 'Minha Loja'}</h2>
           <p className="text-[11px] font-bold text-[#86868B] tracking-widest mt-1 uppercase">ID: {user?.id} • Visão Geral</p>
         </div>
         <div className="flex gap-3">
@@ -259,55 +263,61 @@ function AdminOverview({ user, onLogout, onRefreshUser }: { user: any, onLogout:
         </div>
       </div>
 
-      <div className="bg-white rounded-[32px] p-6 shadow-sm border border-gray-100">
-        <div className="flex justify-between items-center mb-6">
-          <div>
-            <h3 className="text-xl font-bold text-[#1D1D1F]">Estatísticas</h3>
-            <p className="text-[#86868B] text-sm">Sua Loja</p>
-          </div>
-          <div className="w-10 h-10 bg-[#F5F5F7] rounded-xl flex items-center justify-center text-[#007AFF]">
-            <TrendingUp className="w-5 h-5" />
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="bg-white border border-gray-100 rounded-[24px] p-6 shadow-sm flex flex-col justify-center">
+          <span className="text-[10px] font-bold text-[#86868B] tracking-widest uppercase mb-2">Produtos Ativos</span>
+          <div className="flex items-baseline gap-2">
+            <span className="text-4xl font-bold text-[#1D1D1F]">{stats.products}</span>
+            <span className="text-xs font-bold text-[#007AFF] uppercase">Itens</span>
           </div>
         </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <div className="border border-gray-100 rounded-3xl p-5 flex flex-col justify-center">
-            <span className="text-[10px] font-bold text-[#86868B] tracking-widest uppercase mb-2">Produtos</span>
-            <div className="flex items-baseline gap-2">
-              <span className="text-4xl font-bold text-[#1D1D1F]">{stats.products}</span>
-              <span className="text-xs font-bold text-[#007AFF] uppercase">Itens</span>
-            </div>
+        <div className="bg-white border border-gray-100 rounded-[24px] p-6 shadow-sm flex flex-col justify-center">
+          <span className="text-[10px] font-bold text-[#86868B] tracking-widest uppercase mb-2">Total Pedidos</span>
+          <div className="flex items-baseline gap-2">
+            <span className="text-4xl font-bold text-[#1D1D1F]">{stats.orders}</span>
+            <span className="text-xs font-bold text-[#34C759] uppercase">Pedidos</span>
           </div>
-          <div className="border border-gray-100 rounded-3xl p-5 flex flex-col justify-center">
-            <span className="text-[10px] font-bold text-[#86868B] tracking-widest uppercase mb-2">Vendas</span>
-            <div className="flex items-baseline gap-2">
-              <span className="text-4xl font-bold text-[#1D1D1F]">{stats.orders}</span>
-              <span className="text-xs font-bold text-[#34C759] uppercase">Pedidos</span>
-            </div>
+        </div>
+        <div className="bg-white border border-gray-100 rounded-[24px] p-6 shadow-sm flex flex-col justify-center">
+          <span className="text-[10px] font-bold text-[#86868B] tracking-widest uppercase mb-2">Inventário</span>
+          <div className="flex items-baseline gap-2">
+            <span className="text-4xl font-bold text-[#1D1D1F]">{stats.stock}</span>
+            <span className="text-xs font-bold text-[#007AFF] uppercase">Unidades</span>
           </div>
-          <div className="border border-gray-100 rounded-3xl p-5 flex flex-col justify-center">
-            <span className="text-[10px] font-bold text-[#86868B] tracking-widest uppercase mb-2">Estoque</span>
-            <div className="flex items-baseline gap-2">
-              <span className="text-4xl font-bold text-[#1D1D1F]">{stats.stock}</span>
-              <span className="text-xs font-bold text-[#007AFF] uppercase">Unid</span>
-            </div>
-          </div>
-          <div className="border border-gray-100 rounded-3xl p-5 flex flex-col justify-center">
-            <span className="text-[10px] font-bold text-[#86868B] tracking-widest uppercase mb-2">Social</span>
-            <div className="flex items-baseline gap-2">
-              <span className="text-4xl font-bold text-[#1D1D1F]">{stats.likes}</span>
-              <span className="text-xs font-bold text-[#FF3B30] uppercase">Likes</span>
-            </div>
+        </div>
+        <div className="bg-white border border-gray-100 rounded-[24px] p-6 shadow-sm flex flex-col justify-center">
+          <span className="text-[10px] font-bold text-[#86868B] tracking-widest uppercase mb-2">Interações</span>
+          <div className="flex items-baseline gap-2">
+            <span className="text-4xl font-bold text-[#1D1D1F]">{stats.likes}</span>
+            <span className="text-xs font-bold text-[#FF3B30] uppercase">Likes</span>
           </div>
         </div>
       </div>
 
-      <div className="bg-white rounded-[32px] p-6 shadow-sm border border-gray-100 flex items-center gap-4 cursor-pointer hover:bg-gray-50 transition-colors">
-        <div className="w-10 h-10 bg-[#FFF5E5] rounded-xl flex items-center justify-center text-[#FF9500]">
-          <Activity className="w-5 h-5" />
-        </div>
-        <h3 className="text-lg font-bold text-[#1D1D1F]">Monitoramento</h3>
+      <div className="bg-white rounded-[32px] p-6 shadow-sm border border-gray-100 mt-6">
+         <div className="flex justify-between items-center mb-6">
+           <div>
+             <h3 className="text-xl font-bold text-[#1D1D1F]">Vendas Mensais</h3>
+             <p className="text-[#86868B] text-sm">Histórico dos últimos meses</p>
+           </div>
+         </div>
+         <div className="h-64 w-full">
+            {stats.monthlySales && stats.monthlySales.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                 <BarChart data={stats.monthlySales}>
+                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                   <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fill: '#86868B', fontSize: 12}} />
+                   <YAxis axisLine={false} tickLine={false} tick={{fill: '#86868B', fontSize: 12}} />
+                   <RechartsTooltip cursor={{fill: '#f5f5f7'}} contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)'}} />
+                   <Bar dataKey="count" fill="#007AFF" radius={[4, 4, 0, 0]} barSize={40} />
+                 </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex w-full h-full justify-center items-center text-gray-400 text-sm">Nenhum dado de vendas disponível</div>
+            )}
+         </div>
       </div>
+
     </motion.div>
   );
 }
@@ -368,16 +378,32 @@ function AdminProducts({ user, onRefreshUser }: { user: any, onRefreshUser?: () 
                  const displayUrl = firstImg || (p.media && p.media.length > 0 ? p.media[0].url : '');
 
                  return (
-                 <div key={p.id} onClick={() => { setModalItem(p); setIsModalOpen(true); }} className="border border-gray-100 rounded-2xl overflow-hidden hover:shadow-md transition-all cursor-pointer relative">
+                 <div key={p.id} onClick={() => { setModalItem(p); setIsModalOpen(true); }} className="border border-gray-100 rounded-2xl overflow-hidden hover:shadow-md transition-all cursor-pointer relative group flex flex-col justify-between">
                     {!p.is_available && (
                       <div className="absolute top-2 right-2 bg-amber-100 text-amber-700 text-[10px] font-bold px-2 py-1 rounded shadow-sm z-10 uppercase tracking-widest">Pendente</div>
                     )}
+                    {(() => {
+                      if (!p.created_at) return null;
+                      const createdAt = new Date(p.created_at);
+                      const expirationDate = new Date(createdAt.getTime() + (p.duration_days || 7) * 24 * 60 * 60 * 1000);
+                      const daysRemaining = Math.ceil((expirationDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                      
+                      if (daysRemaining <= 0) return null; // cron will delete
+
+                      if (daysRemaining <= 1) {
+                         return <div className="absolute top-2 left-2 bg-red-500 text-white text-[10px] font-bold px-2 py-1 rounded shadow-sm z-10 uppercase tracking-widest">Expira amanhã</div>
+                      } else if (daysRemaining <= 2) {
+                         return <div className="absolute top-2 left-2 bg-amber-500 text-white text-[10px] font-bold px-2 py-1 rounded shadow-sm z-10 uppercase tracking-widest">Faltam 2 dias</div>
+                      }
+                      
+                      return <div className="absolute top-2 left-2 bg-black/50 text-white text-[9px] font-bold px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity z-10 uppercase">{daysRemaining} dias restantes</div>;
+                    })()}
                     {isVideo ? (
                        <video src={displayUrl} className="w-full aspect-square object-cover bg-gray-100" muted loop autoPlay playsInline />
                     ) : (
                        <img src={displayUrl} className="w-full aspect-square object-cover bg-gray-100" />
                     )}
-                    <div className="p-4">
+                    <div className="p-4 bg-white flex flex-col justify-between flex-1">
                        <h4 className="font-semibold text-sm truncate">{p.name}</h4>
                        <div className="flex justify-between items-center mt-1">
                          <p className="text-xs text-[#007AFF] font-medium">
@@ -881,13 +907,29 @@ function ProductModal({ item, user, onClose }: { item?: any, user?: any, onClose
 // -- Orders Component --
 function AdminOrders() {
   const [orders, setOrders] = useState<any[]>([]);
+  const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
 
   useEffect(() => {
     apiFetch('/api/orders').then(r => r.json()).then(d => setOrders(d)).catch(e => {});
   }, []);
 
+  const handlePrint = () => {
+    window.print();
+  };
+
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-4 md:p-8 h-full flex flex-col">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-4 md:p-8 h-full flex flex-col relative w-full overflow-hidden">
+       <style>{`
+          @media print {
+             body * { display: none !important; }
+             #receipt-print, #receipt-print * { display: block !important; }
+             #receipt-print {
+                position: absolute; left: 0; top: 0;
+                width: 300px; /* Thermal printer approx */
+                font-family: monospace; color: #000;
+             }
+          }
+       `}</style>
        <div className="mb-6">
           <h2 className="text-3xl font-bold text-[#1D1D1F] tracking-tight">Vendas</h2>
           <p className="text-[11px] font-bold text-[#86868B] tracking-widest mt-1 uppercase">Pedidos Recentes</p>
@@ -905,7 +947,7 @@ function AdminOrders() {
           ) : (
             <div className="space-y-4 overflow-y-auto">
                {orders.map(o => (
-                 <div key={o.id} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex justify-between items-center">
+                 <div key={o.id} onClick={() => setSelectedOrder(o)} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex justify-between items-center cursor-pointer hover:shadow-md transition-all">
                     <div>
                       <p className="font-bold text-sm">Pedido #{o.id}</p>
                       <p className="text-xs text-gray-500">{o.customer_name || 'Desconhecido'} • {new Date(o.created_at).toLocaleDateString()}</p>
@@ -919,6 +961,89 @@ function AdminOrders() {
             </div>
           )}
        </div>
+
+       <AnimatePresence>
+         {selectedOrder && (
+           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/40 z-50 flex justify-end">
+             <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', damping: 25, stiffness: 200 }} className="w-full max-w-md bg-white h-full flex flex-col shadow-2xl relative">
+               <div className="flex justify-between items-center px-6 py-4 border-b border-gray-100 bg-white z-10 sticky top-0">
+                  <h3 className="font-bold text-lg">Detalhes do Pedido #{selectedOrder.id}</h3>
+                  <button onClick={() => setSelectedOrder(null)} className="w-8 h-8 flex items-center justify-center bg-gray-100 rounded-full hover:bg-gray-200 transition-colors">
+                     <X className="w-4 h-4 text-gray-600" />
+                  </button>
+               </div>
+               
+               <div className="flex-1 overflow-y-auto p-6 bg-[#F5F5F7]">
+                  <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 mb-4">
+                     <div className="flex justify-between mb-4 pb-4 border-b border-gray-100">
+                        <div>
+                           <p className="text-[10px] text-gray-400 font-bold tracking-widest uppercase">Cliente</p>
+                           <p className="font-bold">{selectedOrder.customer_name || 'Usuário Final'}</p>
+                           <p className="text-sm text-gray-500">{selectedOrder.customer_email}</p>
+                        </div>
+                        <div className="text-right">
+                           <p className="text-[10px] text-gray-400 font-bold tracking-widest uppercase">Data</p>
+                           <p className="text-sm font-semibold">{new Date(selectedOrder.created_at).toLocaleString('pt-BR')}</p>
+                           <span className="text-[10px] bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded flex w-fit ml-auto mt-2 font-bold uppercase">{selectedOrder.status}</span>
+                        </div>
+                     </div>
+                     <div className="space-y-4">
+                        <p className="text-[10px] text-gray-400 font-bold tracking-widest uppercase text-center">Itens do Pedido</p>
+                        {selectedOrder.items && selectedOrder.items.map((item: any) => (
+                           <div key={item.id} className="flex justify-between py-2 border-b border-gray-50 last:border-0">
+                              <div className="max-w-[70%]">
+                                 <p className="text-sm font-semibold truncate" title={item.product_name}>{item.quantity}x {item.product_name}</p>
+                                 <p className="text-xs text-gray-400 truncate">{item.details}</p>
+                                 {item.variation_name && <p className="text-xs font-bold text-blue-500">Var: {item.variation_name}</p>}
+                              </div>
+                              <p className="text-sm font-bold text-gray-900 self-center">R$ {parseFloat(item.price).toFixed(2).replace('.', ',')}</p>
+                           </div>
+                        ))}
+                     </div>
+                  </div>
+                  
+                  <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+                     <div className="flex justify-between text-lg font-bold">
+                        <span>Total:</span>
+                        <span className="text-[#007AFF]">{selectedOrder.total_price}</span>
+                     </div>
+                  </div>
+               </div>
+
+               <div className="p-4 border-t border-gray-100 bg-white">
+                  <button onClick={handlePrint} className="w-full bg-[#1D1D1F] hover:bg-black text-white font-bold rounded-2xl py-4 flex justify-center items-center gap-2">
+                     <List className="w-5 h-5" />
+                     Imprimir Recibo
+                  </button>
+               </div>
+             </motion.div>
+           </motion.div>
+         )}
+       </AnimatePresence>
+
+       {/* INVISIBLE RECEIPT FOR PRINTING */}
+       {selectedOrder && (
+          <div id="receipt-print" className="hidden p-4 text-sm w-[300px] border border-black bg-white m-0 text-black">
+             <div className="text-center font-bold text-lg mb-2 uppercase">PEDIDO #{selectedOrder.id}</div>
+             <div className="text-center text-xs mb-4">{new Date(selectedOrder.created_at).toLocaleString('pt-BR')}</div>
+             <div className="text-xs mb-2 pb-2 border-b border-black border-dashed">
+                Cliente: {selectedOrder.customer_name || 'Desconhecido'}
+             </div>
+             <div className="space-y-1 mb-2 pb-2 border-b border-black border-dashed">
+                {selectedOrder.items && selectedOrder.items.map((item: any) => (
+                   <div key={item.id} className="flex justify-between text-xs">
+                      <span>{item.quantity}x {item.product_name.substring(0,20)}</span>
+                      <span>{parseFloat(item.price).toFixed(2)}</span>
+                   </div>
+                ))}
+             </div>
+             <div className="flex justify-between font-bold mt-2">
+                <span>TOTAL:</span>
+                <span>{selectedOrder.total_price}</span>
+             </div>
+             <div className="text-center text-[10px] mt-6">--- OBRIGADO PELA COMPRA ---</div>
+          </div>
+       )}
     </motion.div>
   );
 }
@@ -1033,7 +1158,7 @@ export function AdminUsers() {
           await apiFetch(url, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: u.name, email: u.email, role: newRole })
+            body: JSON.stringify({ name: u.name, email: u.email, role: newRole, is_approved: u.is_approved })
           });
       } else {
           await apiFetch(url, {
@@ -1044,6 +1169,13 @@ export function AdminUsers() {
       }
       fetchData();
     } catch (e) {}
+  };
+
+  const handleToggleApproval = async (u: any) => {
+    try {
+       await apiFetch(`/api/users/${u.id}`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ name: u.name, email: u.email, role: u.role, is_approved: !u.is_approved }) });
+       fetchData();
+    } catch(e) {}
   };
 
   const handleDelete = async (u: any, type: 'team'|'client') => {
@@ -1183,6 +1315,9 @@ export function AdminUsers() {
                          }); 
                          setShowAddForm(true); 
                        }} className="text-[10px] uppercase font-bold text-[#007AFF] py-3 sm:px-3 sm:py-2 bg-blue-50 rounded-xl hover:bg-blue-100 transition-colors flex items-center justify-center">Editar</button>
+                       <button onClick={() => handleToggleApproval(u)} className="py-3 sm:px-3 sm:py-2 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors flex items-center justify-center">
+                         {u.is_approved ? <Check className="w-4 h-4 text-green-500" title="Aprovado (Clique para remover aprovação)" /> : <Activity className="w-4 h-4 text-orange-500" title="Aprovar Usuário" />}
+                       </button>
                        <button onClick={() => handleToggleBlock(u, 'team')} className="py-3 sm:px-3 sm:py-2 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors flex items-center justify-center">
                          {u.role === 'blocked' ? <Unlock className="w-4 h-4 text-green-600" /> : <Lock className="w-4 h-4 text-orange-500" />}
                        </button>

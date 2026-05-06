@@ -73,10 +73,23 @@ function Storefront() {
       });
       const data = await res.json();
       if (data.success) {
-        if (data.token) localStorage.setItem('token', data.token);
-        setUser(data.user);
-        setShowLogin(false);
-        if (isRegistering) {
+        if (data.token) {
+           localStorage.setItem('token', data.token);
+           setUser(data.user);
+           setShowLogin(false);
+        } else if (data.message) {
+           // Registration success, waiting for approval
+           alert(data.message);
+           setIsRegistering(false);
+           setEmail('');
+           setPassword('');
+           setName('');
+           setCompanyName('');
+           setCompanyLogo('');
+           return;
+        }
+
+        if (isRegistering && data.user) {
             alert(`Cadastrado(a) com sucesso! Seu ID de cadastro é: ${data.user.id}`);
         }
         setEmail('');

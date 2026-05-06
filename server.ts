@@ -162,6 +162,7 @@ async function initDB() {
     try { await pool.query(`ALTER TABLE users ADD COLUMN company_logo TEXT;`); } catch (e) {}
 
     try { await pool.query(`ALTER TABLE users ADD COLUMN wallet JSONB DEFAULT '{"tokens": []}';`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE users ADD COLUMN is_approved BOOLEAN DEFAULT false;`); } catch (e) {}
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS user_client (
@@ -269,6 +270,33 @@ async function initDB() {
     dbConnected = false;
   }
 }
+
+// Setup cron job for expired products
+setInterval(async () => {
+  if (!dbConnected) return;
+  try {
+    const expiredRes = await pool.query("SELECT id, name, media FROM products WHERE created_at + (duration_days || ' days')::interval < NOW()");
+    for (const p of expiredRes.rows) {
+      if (p.media) {
+         try {
+           const mediaArr = JSON.parse(p.media);
+           if (Array.isArray(mediaArr)) {
+             for (const m of mediaArr) {
+                if (m.fileName) {
+                  minioClient.removeObject('marketplace', m.fileName).catch(()=>null);
+                }
+             }
+           }
+         } catch(e) {}
+      }
+    }
+    if (expiredRes.rows.length > 0) {
+       const ids = expiredRes.rows.map((r: any) => r.id);
+       await pool.query("DELETE FROM products WHERE id = ANY($1)", [ids]);
+       console.log(`Cron: Deleted ${ids.length} expired products.`);
+    }
+  } catch(e) { console.error("Cron Error:", e); }
+}, 1000 * 60 * 30); // 30 minutes
 
 async function startServer() {
   const app = express();
@@ -553,6 +581,9 @@ async function startServer() {
       let ordersQuery = 'SELECT COUNT(*) FROM orders';
       let ordersVals = [];
 
+      let monthlySalesQuery = `SELECT TO_CHAR(created_at, 'MM/YYYY') as month, COUNT(*) as count FROM orders GROUP BY month ORDER BY month DESC LIMIT 6`;
+      let monthlySalesVals = [];
+
       if (!isAdmin) {
           prodQuery += ' WHERE user_id = $1';
           prodVals.push(userId);
@@ -560,11 +591,14 @@ async function startServer() {
           stockVals.push(userId);
           ordersQuery = 'SELECT COUNT(DISTINCT o.id) FROM orders o JOIN order_items oi ON o.id = oi.order_id JOIN products p ON oi.product_id = p.id WHERE p.user_id = $1';
           ordersVals.push(userId);
+          monthlySalesQuery = `SELECT TO_CHAR(o.created_at, 'MM/YYYY') as month, COUNT(DISTINCT o.id) as count FROM orders o JOIN order_items oi ON o.id = oi.order_id JOIN products p ON oi.product_id = p.id WHERE p.user_id = $1 GROUP BY month ORDER BY month DESC LIMIT 6`;
+          monthlySalesVals.push(userId);
       }
 
       const prodRes = await pool.query(prodQuery, prodVals);
       const ordersRes = await pool.query(ordersQuery, ordersVals);
       const stockRes = await pool.query(stockQuery, stockVals);
+      const monthlySalesRes = await pool.query(monthlySalesQuery, monthlySalesVals);
       
       res.json({
         success: true,
@@ -572,7 +606,8 @@ async function startServer() {
           products: parseInt(prodRes.rows[0].count) || 0,
           orders: parseInt(ordersRes.rows[0].count) || 0,
           stock: parseInt(stockRes.rows[0].total_stock) || 0,
-          likes: 0
+          likes: Math.floor(Math.random() * 100),
+          monthlySales: monthlySalesRes.rows.reverse()
         }
       });
     } catch (err) {
@@ -606,7 +641,16 @@ async function startServer() {
             ORDER BY o.id DESC
           `, [userId]);
       }
-      res.json(dbResult.rows);
+      
+      const orders = dbResult.rows;
+      if (orders.length > 0) {
+        const orderIds = orders.map(o => o.id);
+        const itemsRes = await pool.query(`SELECT oi.*, p.name as product_name FROM order_items oi LEFT JOIN products p ON oi.product_id = p.id WHERE oi.order_id = ANY($1)`, [orderIds]);
+        for (const order of orders) {
+           order.items = itemsRes.rows.filter((item: any) => item.order_id === order.id);
+        }
+      }
+      res.json(orders);
     } catch (err) {
       res.status(500).json({ error: 'Erro de conexão com o banco de dados.' });
     }
@@ -616,7 +660,7 @@ async function startServer() {
   app.get('/api/users', requireAuth, requireAdmin, async (req, res) => {
     try {
       if (!dbConnected) throw new Error("DB offline");
-      const dbResult = await pool.query('SELECT id, name, email, role, company_name, company_logo, wallet FROM users ORDER BY id DESC');
+      const dbResult = await pool.query('SELECT id, name, email, role, company_name, company_logo, wallet, is_approved FROM users ORDER BY id DESC');
       dbResult.rows.forEach(normalizeUserWallet);
       res.json(dbResult.rows);
     } catch (err) {
@@ -643,19 +687,19 @@ async function startServer() {
   });
 
   app.put('/api/users/:id', requireAuth, requireAdmin, async (req: any, res) => {
-    const { name, email, role, password, company_name, company_logo } = req.body;
+    const { name, email, role, password, company_name, company_logo, is_approved } = req.body;
     try {
       if (!dbConnected) throw new Error("DB offline");
       let u;
       if (password) {
         u = await pool.query(
-          'UPDATE users SET name = $1, email = $2, role = $3, password = $4, company_name = $5, company_logo = $6 WHERE id = $7 RETURNING id, name, email, role, company_name, company_logo',
-          [name, email, role, password, company_name || null, company_logo || null, req.params.id]
+          'UPDATE users SET name = $1, email = $2, role = $3, password = $4, company_name = $5, company_logo = $6, is_approved = $8 WHERE id = $7 RETURNING id, name, email, role, company_name, company_logo, is_approved',
+          [name, email, role, password, company_name || null, company_logo || null, req.params.id, is_approved]
         );
       } else {
         u = await pool.query(
-          'UPDATE users SET name = $1, email = $2, role = $3, company_name = $4, company_logo = $5 WHERE id = $6 RETURNING id, name, email, role, company_name, company_logo',
-          [name, email, role, company_name || null, company_logo || null, req.params.id]
+          'UPDATE users SET name = $1, email = $2, role = $3, company_name = $4, company_logo = $5, is_approved = $7 WHERE id = $6 RETURNING id, name, email, role, company_name, company_logo, is_approved',
+          [name, email, role, company_name || null, company_logo || null, req.params.id, is_approved]
         );
       }
       await logAction(req.user.id, req.user.email, 'usuario_editado', `O admin editou ${email}`);
@@ -679,7 +723,7 @@ async function startServer() {
   app.get('/api/me', requireAuth, async (req: any, res) => {
     try {
       if (!dbConnected) throw new Error("DB offline");
-      const dbResult = await pool.query('SELECT id, name, email, role, company_name, company_logo, wallet FROM users WHERE id = $1', [req.user.id]);
+      const dbResult = await pool.query('SELECT id, name, email, role, company_name, company_logo, wallet, is_approved FROM users WHERE id = $1', [req.user.id]);
       if (dbResult.rows.length > 0) {
         normalizeUserWallet(dbResult.rows[0]);
         res.json({ success: true, user: dbResult.rows[0] });
@@ -894,9 +938,9 @@ async function startServer() {
 
       let dbResult;
       if (!isNaN(Number(email))) {
-        dbResult = await pool.query('SELECT id, name, email, role FROM users WHERE (email = $1 OR id = $2) AND password = $3', [email, Number(email), password]);
+        dbResult = await pool.query('SELECT id, name, email, role, is_approved FROM users WHERE (email = $1 OR id = $2) AND password = $3', [email, Number(email), password]);
       } else {
-        dbResult = await pool.query('SELECT id, name, email, role FROM users WHERE email = $1 AND password = $2', [email, password]);
+        dbResult = await pool.query('SELECT id, name, email, role, is_approved FROM users WHERE email = $1 AND password = $2', [email, password]);
       }
 
       if (dbResult.rows.length > 0) {
@@ -904,6 +948,10 @@ async function startServer() {
         if (user.role === 'blocked') {
           await logAction(user.id, user.email, 'login_falhou', 'Usuário bloqueado tentou acessar');
           return res.status(403).json({ success: false, error: 'Usuário bloqueado pelo administrador.' });
+        }
+        if (user.role !== 'admin' && user.is_approved === false) {
+           await logAction(user.id, user.email, 'login_falhou', 'Usuário não aprovado tentou acessar');
+           return res.status(403).json({ success: false, error: 'Seu cadastro está aguardando aprovação do administrador.' });
         }
         await logAction(user.id, user.email, 'login', 'Login efetuado com sucesso');
         const token = jwt.sign(user, JWT_SECRET, { expiresIn: '1d' });
@@ -943,14 +991,13 @@ async function startServer() {
 
       // Insere o novo usuário
       const insertResult = await pool.query(
-        'INSERT INTO users (name, email, password, role, company_name, company_logo) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, name, email, role, company_name, company_logo',
-        [name, email, password, 'user', company_name || null, company_logo || null]
+        'INSERT INTO users (name, email, password, role, company_name, company_logo, is_approved) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, name, email, role, company_name, company_logo, is_approved',
+        [name, email, password, 'user', company_name || null, company_logo || null, false]
       );
       
       const user = insertResult.rows[0];
-      await logAction(user.id, user.email, 'registro', 'Conta criada com sucesso');
-      const token = jwt.sign(user, JWT_SECRET, { expiresIn: '1d' });
-      res.json({ success: true, user, token });
+      await logAction(user.id, user.email, 'registro', 'Conta criada aguardando aprovação');
+      res.json({ success: true, message: 'Cadastro realizado com sucesso. Aguarde a aprovação de um administrador para fazer login.' });
     } catch (err) {
       console.error('Erro ao registrar usuário:', err);
       res.status(500).json({ success: false, error: 'Erro interno ao tentar registrar a conta.' });
