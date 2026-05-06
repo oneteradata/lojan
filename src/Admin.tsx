@@ -1077,7 +1077,7 @@ export function AdminUsers() {
   const [searchText, setSearchText] = useState('');
   const [copiedId, setCopiedId] = useState<number | null>(null);
   
-  const defaultTeamFormState = { name: '', email: '', password: '', role: 'user', company_name: '', company_logo: '', is_approved: false };
+  const defaultTeamFormState = { name: '', email: '', password: '', role: 'user', company_name: '', company_logo: '', is_approved: false, can_transfer: true, can_request: true };
   const defaultClientFormState = { 
     email: '', senha_mestre: '', nome_completo: '', primeiro_nome: '', data_nascimento: '', telegram: '', melhor_horario: '', interesses: '', convite: ''
   };
@@ -1329,7 +1329,9 @@ export function AdminUsers() {
                            role: u.role, 
                            company_name: u.company_name || '', 
                            company_logo: u.company_logo || '',
-                           is_approved: u.is_approved
+                           is_approved: u.is_approved,
+                           can_transfer: u.can_transfer !== false,
+                           can_request: u.can_request !== false
                          }); 
                          setShowAddForm(true); 
                        }} className="text-[10px] uppercase font-bold text-[#007AFF] py-3 sm:px-3 sm:py-2 bg-blue-50 rounded-xl hover:bg-blue-100 transition-colors flex items-center justify-center">Editar</button>
@@ -1454,6 +1456,34 @@ export function AdminUsers() {
                          <div className="flex flex-col">
                            <span className="text-sm font-bold text-[#1D1D1F]">Conta Aprovada para Login</span>
                            <span className="text-[10px] text-gray-500 uppercase tracking-widest mt-0.5">Permite que o usuário faça login na vitrine e gerencie produtos</span>
+                         </div>
+                       </label>
+                     </div>
+                     <div className="pt-2">
+                       <label className="flex items-center gap-3 cursor-pointer p-4 border border-gray-200 rounded-xl bg-gray-50">
+                         <input 
+                           type="checkbox" 
+                           checked={formData.can_transfer !== false} 
+                           onChange={e => setFormData({...formData, can_transfer: e.target.checked})} 
+                           className="accent-green-500 w-5 h-5"
+                         />
+                         <div className="flex flex-col">
+                           <span className="text-sm font-bold text-[#1D1D1F]">Permitir Transferência de eTokens</span>
+                           <span className="text-[10px] text-gray-500 uppercase tracking-widest mt-0.5">Libera o envio de tokens para outros parceiros</span>
+                         </div>
+                       </label>
+                     </div>
+                     <div className="pt-2">
+                       <label className="flex items-center gap-3 cursor-pointer p-4 border border-gray-200 rounded-xl bg-gray-50">
+                         <input 
+                           type="checkbox" 
+                           checked={formData.can_request !== false} 
+                           onChange={e => setFormData({...formData, can_request: e.target.checked})} 
+                           className="accent-green-500 w-5 h-5"
+                         />
+                         <div className="flex flex-col">
+                           <span className="text-sm font-bold text-[#1D1D1F]">Permitir Pedido de eTokens</span>
+                           <span className="text-[10px] text-gray-500 uppercase tracking-widest mt-0.5">Pode solicitar mais saldo para a moderação</span>
                          </div>
                        </label>
                      </div>

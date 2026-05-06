@@ -13,7 +13,7 @@ export function AdminWallet({ user, onRefreshUser }: { user: any, onRefreshUser?
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [showBalance, setShowBalance] = useState(true);
-  const [activeTab, setActiveTab] = useState<'extrato' | 'transferir' | 'receber'>('extrato');
+  const [activeTab, setActiveTab] = useState<'extrato' | 'transferir' | 'receber' | 'solicitar'>('extrato');
 
   // Transfer state
   const [transferUserId, setTransferUserId] = useState('');
@@ -39,9 +39,11 @@ export function AdminWallet({ user, onRefreshUser }: { user: any, onRefreshUser?
     fetchData();
   }, []);
 
-  const handleTransfer = async (e: React.FormEvent) => {
+  const handleTransfer = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setTransferLoading(true);
+    const formData = new FormData(e.currentTarget);
+    const password = formData.get('password');
     try {
       const res = await apiFetch('/api/transfer_tokens', {
         method: 'POST',
@@ -49,7 +51,8 @@ export function AdminWallet({ user, onRefreshUser }: { user: any, onRefreshUser?
         body: JSON.stringify({
           receiver_id: transferUserId,
           amount: parseInt(transferAmount),
-          token_length: parseInt(transferType)
+          token_length: parseInt(transferType),
+          password
         })
       });
       const data = await res.json();
@@ -65,6 +68,44 @@ export function AdminWallet({ user, onRefreshUser }: { user: any, onRefreshUser?
       alert('Erro de conexão ao tentar transferir.');
     }
     setTransferLoading(false);
+  };
+
+  // Request state
+  const [requestUserId, setRequestUserId] = useState('');
+  const [requestAmount, setRequestAmount] = useState('1');
+  const [requestType, setRequestType] = useState('64');
+  const [requestLoading, setRequestLoading] = useState(false);
+  const [requestSuccess, setRequestSuccess] = useState(false);
+
+  const handleRequestTokens = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setRequestLoading(true);
+    try {
+      const payload: any = {
+        quantidade: parseInt(requestAmount),
+        tipo_token: parseInt(requestType)
+      };
+      if (user.role === 'admin') {
+        payload.user_id_recebedor = requestUserId || user.id;
+      }
+      
+      const res = await apiFetch('/api/credit-requests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (data.success) {
+        setRequestSuccess(true);
+        setTimeout(() => setRequestSuccess(false), 3000);
+        setRequestUserId('');
+      } else {
+        alert(data.error || 'Erro ao solicitar e-tokens.');
+      }
+    } catch(err) {
+      alert('Erro de conexão ao solicitar.');
+    }
+    setRequestLoading(false);
   };
 
   const totalTokens = user.wallet?.tokens?.length || 0;
@@ -143,11 +184,11 @@ export function AdminWallet({ user, onRefreshUser }: { user: any, onRefreshUser?
                 </div>
                 <span className="text-[10px] font-bold text-gray-600 uppercase tracking-wider">Extrato</span>
              </button>
-             <button onClick={() => {}} className="flex flex-col items-center gap-2 min-w-[72px] shrink-0 hover:opacity-80 transition-opacity">
-                <div className="w-14 h-14 bg-gray-50 rounded-2xl flex items-center justify-center text-[#007AFF] shadow-sm">
+             <button onClick={() => setActiveTab('solicitar')} className="flex flex-col items-center gap-2 min-w-[72px] shrink-0 hover:opacity-80 transition-opacity">
+                <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center shadow-sm", activeTab === 'solicitar' ? "bg-[#007AFF] text-white" : "bg-gray-50 text-[#007AFF]")}>
                    <CreditCard className="w-6 h-6" />
                 </div>
-                <span className="text-[10px] font-bold text-gray-600 uppercase tracking-wider">Comprar</span>
+                <span className="text-[10px] font-bold text-gray-600 uppercase tracking-wider">Solicitar</span>
              </button>
           </div>
        </div>
@@ -235,6 +276,10 @@ export function AdminWallet({ user, onRefreshUser }: { user: any, onRefreshUser?
                            </select>
                          </div>
                        </div>
+                       <div>
+                         <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2 block">SENHA PARA CONFIRMAR</label>
+                         <input required type="password" name="password" placeholder="Digite sua senha" className="w-full bg-gray-50 border border-gray-200 focus:border-[#007AFF] rounded-2xl px-4 py-3 text-sm font-semibold outline-none" />
+                       </div>
                        <div className="pt-2 border-t border-gray-50 mt-2">
                          <button type="submit" disabled={transferLoading} className="w-full bg-[#007AFF] text-white rounded-2xl py-4 font-bold uppercase tracking-widest text-xs hover:bg-[#0066CC] transition-colors disabled:opacity-50">
                            {transferLoading ? 'Processando...' : 'Confirmar Transferência'}
@@ -258,6 +303,48 @@ export function AdminWallet({ user, onRefreshUser }: { user: any, onRefreshUser?
                     <p className="text-3xl font-black text-[#007AFF] tracking-tight">{user.id}</p>
                   </div>
                 </div>
+             </motion.div>
+           )}
+
+           {activeTab === 'solicitar' && (
+             <motion.div key="solicitar" initial={{opacity:0, y:10}} animate={{opacity:1, y:0}} exit={{opacity:0, y:-10}}>
+                <h3 className="font-bold text-[#1D1D1F] uppercase tracking-wider text-sm mb-4">{user.role === 'admin' ? 'Gerar e-Tokens' : 'Solicitar e-Tokens'}</h3>
+                <form onSubmit={handleRequestTokens} className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 flex flex-col gap-5">
+                   {requestSuccess ? (
+                     <div className="bg-green-50 rounded-2xl p-6 flex flex-col items-center justify-center text-center">
+                       <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center text-white mb-4">
+                         <Check className="w-8 h-8" />
+                       </div>
+                       <h4 className="font-bold text-green-900 text-lg mb-1">{user.role === 'admin' ? 'Tokens Gerados!' : 'Pedido Enviado!'}</h4>
+                       <p className="text-green-700 text-sm mb-4">{user.role === 'admin' ? 'Os tokens foram enviados para a carteira.' : 'Seu pedido foi registrado e será analisado.'}</p>
+                       <button onClick={() => { setRequestSuccess(false); fetchData(); }} type="button" className="text-green-600 font-bold uppercase text-[10px] tracking-widest border border-green-200 px-6 py-2 rounded-full hover:bg-green-100 transition-colors">{user.role === 'admin' ? 'Gerar Mais' : 'Nova Solicitação'}</button>
+                     </div>
+                   ) : (
+                     <>
+                       {user.role === 'admin' && (
+                         <div>
+                           <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2 block">ID DO USUÁRIO (OPCIONAL)</label>
+                           <input type="number" value={requestUserId} onChange={e=>setRequestUserId(e.target.value)} placeholder={`Deixe em branco para o seu ID (${user.id})`} className="w-full bg-gray-50 border border-gray-200 focus:border-[#007AFF] rounded-2xl px-4 py-3 text-sm font-semibold outline-none" />
+                         </div>
+                       )}
+                       <div className="flex gap-4">
+                         <div className="flex-1">
+                           <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2 block">QUANTIDADE</label>
+                           <input required type="number" min="1" value={requestAmount} onChange={e=>setRequestAmount(e.target.value)} className="w-full bg-gray-50 border border-gray-200 focus:border-[#007AFF] rounded-2xl px-4 py-3 text-lg font-bold text-[#007AFF] outline-none" />
+                         </div>
+                         <div className="flex-1">
+                           <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2 block">TIPO (e64 - e2048)</label>
+                           <input required type="number" min="64" max="2048" value={requestType} onChange={e=>setRequestType(e.target.value)} placeholder="Ex: 64, 128" className="w-full bg-gray-50 border border-gray-200 focus:border-[#007AFF] rounded-2xl px-4 py-3 sm:py-[13.5px] text-sm font-semibold outline-none" />
+                         </div>
+                       </div>
+                       <div className="pt-2 border-t border-gray-50 mt-2">
+                         <button type="submit" disabled={requestLoading} className="w-full bg-[#007AFF] text-white rounded-2xl py-4 font-bold uppercase tracking-widest text-xs hover:bg-[#0066CC] transition-colors disabled:opacity-50">
+                           {requestLoading ? 'Enviando...' : (user.role === 'admin' ? 'Gerar e-Tokens' : 'Enviar Solicitação')}
+                         </button>
+                       </div>
+                     </>
+                   )}
+                </form>
              </motion.div>
            )}
          </AnimatePresence>

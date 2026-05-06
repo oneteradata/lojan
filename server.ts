@@ -163,6 +163,8 @@ async function initDB() {
 
     try { await pool.query(`ALTER TABLE users ADD COLUMN wallet JSONB DEFAULT '{"tokens": []}';`); } catch (e) {}
     try { await pool.query(`ALTER TABLE users ADD COLUMN is_approved BOOLEAN DEFAULT false;`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE users ADD COLUMN can_transfer BOOLEAN DEFAULT true;`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE users ADD COLUMN can_request BOOLEAN DEFAULT true;`); } catch (e) {}
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS user_client (
@@ -660,7 +662,7 @@ async function startServer() {
   app.get('/api/users', requireAuth, requireAdmin, async (req, res) => {
     try {
       if (!dbConnected) throw new Error("DB offline");
-      const dbResult = await pool.query('SELECT id, name, email, role, company_name, company_logo, wallet, is_approved FROM users ORDER BY id DESC');
+      const dbResult = await pool.query('SELECT id, name, email, role, company_name, company_logo, wallet, is_approved, can_transfer, can_request FROM users ORDER BY id DESC');
       dbResult.rows.forEach(normalizeUserWallet);
       res.json(dbResult.rows);
     } catch (err) {
@@ -687,19 +689,19 @@ async function startServer() {
   });
 
   app.put('/api/users/:id', requireAuth, requireAdmin, async (req: any, res) => {
-    const { name, email, role, password, company_name, company_logo, is_approved } = req.body;
+    const { name, email, role, password, company_name, company_logo, is_approved, can_transfer, can_request } = req.body;
     try {
       if (!dbConnected) throw new Error("DB offline");
       let u;
       if (password) {
         u = await pool.query(
-          'UPDATE users SET name = $1, email = $2, role = $3, password = $4, company_name = $5, company_logo = $6, is_approved = COALESCE($8, is_approved) WHERE id = $7 RETURNING id, name, email, role, company_name, company_logo, is_approved',
-          [name, email, role, password, company_name || null, company_logo || null, req.params.id, is_approved]
+          'UPDATE users SET name = $1, email = $2, role = $3, password = $4, company_name = $5, company_logo = $6, is_approved = COALESCE($8, is_approved), can_transfer = COALESCE($9, can_transfer), can_request = COALESCE($10, can_request) WHERE id = $7 RETURNING id, name, email, role, company_name, company_logo, is_approved, can_transfer, can_request',
+          [name, email, role, password, company_name || null, company_logo || null, req.params.id, is_approved, can_transfer, can_request]
         );
       } else {
         u = await pool.query(
-          'UPDATE users SET name = $1, email = $2, role = $3, company_name = $4, company_logo = $5, is_approved = COALESCE($7, is_approved) WHERE id = $6 RETURNING id, name, email, role, company_name, company_logo, is_approved',
-          [name, email, role, company_name || null, company_logo || null, req.params.id, is_approved]
+          'UPDATE users SET name = $1, email = $2, role = $3, company_name = $4, company_logo = $5, is_approved = COALESCE($7, is_approved), can_transfer = COALESCE($8, can_transfer), can_request = COALESCE($9, can_request) WHERE id = $6 RETURNING id, name, email, role, company_name, company_logo, is_approved, can_transfer, can_request',
+          [name, email, role, company_name || null, company_logo || null, req.params.id, is_approved, can_transfer, can_request]
         );
       }
       await logAction(req.user.id, req.user.email, 'usuario_editado', `O admin editou ${email}`);
@@ -757,10 +759,27 @@ async function startServer() {
   app.post('/api/transfer_tokens', requireAuth, async (req: any, res) => {
     try {
       if (!dbConnected) throw new Error("DB offline");
-      const { receiver_id, amount, token_length } = req.body;
+      const { receiver_id, amount, token_length, password } = req.body;
       const amountInt = parseInt(amount);
       const tokenLenInt = parseInt(token_length);
       const senderId = req.user.id;
+
+      if (!req.user.can_transfer && req.user.role !== 'admin') {
+        return res.status(403).json({ success: false, error: 'A transferência de tokens está bloqueada para sua conta.' });
+      }
+
+      if (!password) {
+        return res.status(400).json({ success: false, error: 'A senha é obrigatória para realizar transferências.' });
+      }
+
+      const senderValidationRes = await pool.query('SELECT password FROM users WHERE id = $1', [senderId]);
+      if (senderValidationRes.rows.length === 0) return res.status(404).json({ success: false, error: 'Remetente não encontrado.' });
+      
+      const bcrypt = require('bcryptjs');
+      const isMatch = await bcrypt.compare(password, senderValidationRes.rows[0].password);
+      if (!isMatch) {
+         return res.status(401).json({ success: false, error: 'Senha incorreta.' });
+      }
 
       if (!receiver_id || !amountInt || !tokenLenInt || amountInt <= 0) {
         return res.status(400).json({ success: false, error: 'Parâmetros inválidos.' });
@@ -872,15 +891,53 @@ async function startServer() {
     }
   });
 
-  app.post('/api/credit-requests', requireAuth, requireAdmin, async (req: any, res) => {
+  app.post('/api/credit-requests', requireAuth, async (req: any, res) => {
     try {
-      const { user_id_recebedor, quantidade, tipo_token } = req.body;
+      let { user_id_recebedor, quantidade, tipo_token } = req.body;
       if (!dbConnected) throw new Error("DB offline");
+      
+      const isAdmin = req.user.role === 'admin';
+      
+      // If not admin, verify if 'can_request' is enabled, force user_id to themselves
+      if (!isAdmin) {
+        if (req.user.can_request === false) {
+          return res.status(403).json({ success: false, error: 'Função de solicitar e-tokens desativada para sua conta.' });
+        }
+        
+        // Check if there's already a pending request
+        const checkPending = await pool.query('SELECT id FROM credit_requests WHERE user_id_recebedor = $1 AND status = $2', [req.user.id, 'pendente']);
+        if (checkPending.rows.length > 0) {
+          return res.status(400).json({ success: false, error: 'Você já possui uma solicitação pendente. Aguarde.' });
+        }
+        
+        user_id_recebedor = req.user.id;
+      }
+      
       const insertResult = await pool.query(
         'INSERT INTO credit_requests (user_id_recebedor, user_id_solicitante, quantidade, tipo_token, status) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-        [user_id_recebedor, req.user.id, quantidade, tipo_token, 'pendente']
+        [user_id_recebedor, req.user.id, quantidade, tipo_token, isAdmin ? 'gerado' : 'pendente']
       );
-      await logAction(req.user.id, req.user.email, 'credito_solicitado', `Admin solicitou ${quantidade} tokens do tipo ${tipo_token} para o usuario ${user_id_recebedor}`);
+
+      if (isAdmin) {
+        const userRes = await pool.query('SELECT wallet FROM users WHERE id = $1', [user_id_recebedor]);
+        if (userRes.rows.length > 0) {
+           const wallet = userRes.rows[0].wallet || { tokens: [] };
+           const userTokens = Array.isArray(wallet.tokens) ? wallet.tokens : [];
+           
+           for(let i=0; i<quantidade; i++) {
+             let tokenStr = '';
+             const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+             for(let j=0; j<tipo_token; j++) {
+               tokenStr += chars.charAt(Math.floor(Math.random() * chars.length));
+             }
+             userTokens.push(tokenStr);
+           }
+           wallet.tokens = userTokens;
+           await pool.query('UPDATE users SET wallet = $1 WHERE id = $2', [JSON.stringify(wallet), user_id_recebedor]);
+        }
+      }
+
+      await logAction(req.user.id, req.user.email, 'credito_solicitado', `${isAdmin ? 'Admin gerou' : 'Usuário solicitou'} ${quantidade} tokens do tipo E${tipo_token} para o usuario ${user_id_recebedor}`);
       
       try {
         fetch('https://system.voryx.com.br/webhook/atualizasaldo').catch(e => console.error("Erro webhook:", e));
