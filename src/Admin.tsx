@@ -991,16 +991,54 @@ function ProductModal({ item, user, onClose }: { item?: any, user?: any, onClose
 
 // -- Orders Component --
 function AdminOrders() {
-  const [orders, setOrders] = useState<any[]>([]);
+  const [purchases, setPurchases] = useState<any[]>([]);
+  const [sales, setSales] = useState<any[]>([]);
+  const [activeTab, setActiveTab] = useState<'purchases'|'sales'>('purchases');
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
 
   useEffect(() => {
-    apiFetch('/api/orders').then(r => r.json()).then(d => setOrders(d)).catch(e => {});
+    apiFetch('/api/orders')
+      .then(r => r.json())
+      .then(d => {
+         if (d && d.success) {
+            setPurchases(d.purchases || []);
+            setSales(d.sales || []);
+            // Se não tiver compras e tiver vendas, muda pra vendas logo
+            if (d.purchases?.length === 0 && d.sales?.length > 0) {
+               setActiveTab('sales');
+            }
+         } else if (Array.isArray(d)) {
+            // Fallback for previous API
+            setPurchases(d);
+         }
+      })
+      .catch(e => {});
   }, []);
 
   const handlePrint = () => {
     window.print();
   };
+
+  const handleStatusChange = async (orderId: number, currentStatus: string) => {
+    // Apenas exemplo, precisa de endpoint para atualizar
+    const nextStatus = currentStatus === 'Pendente' ? 'Em andamento' : currentStatus === 'Em andamento' ? 'Concluído' : 'Pendente';
+    try {
+       await apiFetch(`/api/orders/${orderId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: nextStatus })
+       });
+       // Otimistic update
+       const updateOrderInList = (list: any[]) => list.map(o => o.id === orderId ? { ...o, status: nextStatus } : o);
+       setPurchases(updateOrderInList(purchases));
+       setSales(updateOrderInList(sales));
+       if (selectedOrder && selectedOrder.id === orderId) {
+          setSelectedOrder({ ...selectedOrder, status: nextStatus });
+       }
+    } catch(e) {}
+  };
+
+  const currentList = activeTab === 'purchases' ? purchases : sales;
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-4 md:p-8 h-full flex flex-col relative w-full overflow-hidden">
@@ -1015,23 +1053,39 @@ function AdminOrders() {
              }
           }
        `}</style>
-       <div className="mb-6">
-          <h2 className="text-3xl font-bold text-[#1D1D1F] tracking-tight">Vendas</h2>
-          <p className="text-[11px] font-bold text-[#86868B] tracking-widest mt-1 uppercase">Pedidos Recentes</p>
+       <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h2 className="text-3xl font-bold text-[#1D1D1F] tracking-tight">Vendas e Pedidos</h2>
+            <p className="text-[11px] font-bold text-[#86868B] tracking-widest mt-1 uppercase">Sua movimentação</p>
+          </div>
+          <div className="flex bg-[#F5F5F7] p-1 rounded-2xl w-fit">
+            <button 
+              onClick={() => setActiveTab('purchases')}
+              className={cn("px-4 py-2 text-sm font-bold rounded-xl transition-all", activeTab === 'purchases' ? "bg-white text-[#1D1D1F] shadow-sm" : "text-[#86868B] hover:text-[#1D1D1F]")}
+            >
+              Meus Pedidos ({purchases.length})
+            </button>
+            <button 
+              onClick={() => setActiveTab('sales')}
+              className={cn("px-4 py-2 text-sm font-bold rounded-xl transition-all", activeTab === 'sales' ? "bg-white text-[#1D1D1F] shadow-sm" : "text-[#86868B] hover:text-[#1D1D1F]")}
+            >
+              Minhas Vendas ({sales.length})
+            </button>
+          </div>
        </div>
 
        <div className="bg-[#F5F5F7] rounded-[32px] flex-1 flex flex-col p-6 overflow-hidden relative">
-          {orders.length === 0 ? (
+          {currentList.length === 0 ? (
             <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
               <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mb-6 shadow-sm border border-gray-100">
                 <ShoppingCart className="w-8 h-8 text-[#86868B]" />
               </div>
-              <h3 className="text-xl font-bold text-[#1D1D1F] mb-2">Sem pedidos</h3>
-              <p className="text-sm text-[#86868B]">Os novos pedidos aparecerão aqui automaticamente.</p>
+              <h3 className="text-xl font-bold text-[#1D1D1F] mb-2">{activeTab === 'purchases' ? 'Sem pedidos efetuados' : 'Sem vendas ainda'}</h3>
+              <p className="text-sm text-[#86868B]">{activeTab === 'purchases' ? 'Tudo que você comprar aparecerá aqui.' : 'Suas vendas aparecerão aqui automaticamente.'}</p>
             </div>
           ) : (
             <div className="space-y-4 overflow-y-auto">
-               {orders.map(o => (
+               {currentList.map(o => (
                  <div key={o.id} onClick={() => setSelectedOrder(o)} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex justify-between items-center cursor-pointer hover:shadow-md transition-all">
                     <div>
                       <p className="font-bold text-sm">Pedido #{o.id}</p>
@@ -1093,6 +1147,15 @@ function AdminOrders() {
                         <span className="text-[#007AFF]">{selectedOrder.total_price}</span>
                      </div>
                   </div>
+
+                  {activeTab === 'sales' && (
+                     <button
+                        onClick={() => handleStatusChange(selectedOrder.id, selectedOrder.status)}
+                        className="w-full mt-4 bg-[#007AFF] hover:bg-[#0058bc] text-white font-bold rounded-2xl py-4 flex justify-center items-center gap-2 transition-colors"
+                     >
+                        Avançar Status do Pedido
+                     </button>
+                  )}
                </div>
 
                <div className="p-4 border-t border-gray-100 bg-white">

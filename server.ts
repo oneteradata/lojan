@@ -6,7 +6,7 @@ import * as Minio from 'minio';
 import multer from 'multer';
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'valentina_jwt_super_secret_key_2026';
+const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_do_not_use_in_prod_12345';
 
 const requireAuth = (req: any, res: any, next: any) => {
   const authHeader = req.headers.authorization;
@@ -33,22 +33,22 @@ const { Pool } = pkg;
 
 // Configuração do MinIO
 const minioClient = new Minio.Client({
-  endPoint: 'file.voryx.com.br',
-  port: 443,
-  useSSL: true,
-  accessKey: 'admin',
-  secretKey: '88490805'
+  endPoint: process.env.MINIO_ENDPOINT || 'file.voryx.com.br',
+  port: parseInt(process.env.MINIO_PORT || '443', 10),
+  useSSL: process.env.MINIO_USE_SSL !== 'false',
+  accessKey: process.env.MINIO_ACCESS_KEY || '',
+  secretKey: process.env.MINIO_SECRET_KEY || ''
 });
 const upload = multer({ storage: multer.memoryStorage() });
 
 // Configuração de conexão do PostgreSQL
-// Credenciais definidas via instrução do Easypanel VPS
+// Credenciais definidas pelas variaveis de ambiente
 const pool = new Pool({
-  user: process.env.DB_USER || 'admin',
-  host: process.env.DB_HOST || 'sites_postgree_db_vitrine',
-  database: process.env.DB_NAME || 'site',
-  password: process.env.DB_PASSWORD || '1234',
-  port: 5432,
+  user: process.env.DB_USER,
+  host: process.env.DB_HOST,
+  database: process.env.DB_NAME,
+  password: process.env.DB_PASSWORD,
+  port: parseInt(process.env.DB_PORT || '5432', 10),
 });
 
 // Adiciona tratamento de erro na pool para evitar que a aplicação faça throw em falhas de EAI_AGAIN
@@ -624,16 +624,21 @@ async function startServer() {
       const userId = req.user.id;
       const isAdmin = req.user.role === 'admin';
 
-      let dbResult;
+      let sales: any[] = [];
+      let purchases: any[] = [];
+
       if (isAdmin) {
-          dbResult = await pool.query(`
+          const dbResult = await pool.query(`
             SELECT o.*, u.name as customer_name, u.email as customer_email 
             FROM orders o 
             LEFT JOIN users u ON o.user_id = u.id 
             ORDER BY o.id DESC
           `);
+          sales = dbResult.rows;
+          purchases = dbResult.rows; // Admin sees everything everywhere
       } else {
-          dbResult = await pool.query(`
+          // Sales: where the product seller is the user
+          const salesResult = await pool.query(`
             SELECT DISTINCT o.*, u.name as customer_name, u.email as customer_email 
             FROM orders o 
             LEFT JOIN users u ON o.user_id = u.id 
@@ -642,17 +647,35 @@ async function startServer() {
             WHERE p.user_id = $1
             ORDER BY o.id DESC
           `, [userId]);
+          sales = salesResult.rows;
+
+          // Purchases: where the order buyer is the user
+          const purchasesResult = await pool.query(`
+            SELECT DISTINCT o.*, u.name as customer_name, u.email as customer_email 
+            FROM orders o 
+            LEFT JOIN users u ON o.user_id = u.id 
+            WHERE o.user_id = $1
+            ORDER BY o.id DESC
+          `, [userId]);
+          purchases = purchasesResult.rows;
       }
       
-      const orders = dbResult.rows;
-      if (orders.length > 0) {
-        const orderIds = orders.map(o => o.id);
+      // Fetch items for all unique orders
+      const allOrders = [...sales, ...purchases];
+      const uniqueOrders = Array.from(new Map(allOrders.map(o => [o.id, o])).values());
+
+      if (uniqueOrders.length > 0) {
+        const orderIds = uniqueOrders.map((o: any) => o.id);
         const itemsRes = await pool.query(`SELECT oi.*, p.name as product_name FROM order_items oi LEFT JOIN products p ON oi.product_id = p.id WHERE oi.order_id = ANY($1)`, [orderIds]);
-        for (const order of orders) {
+        
+        for (const order of sales) {
+           order.items = itemsRes.rows.filter((item: any) => item.order_id === order.id);
+        }
+        for (const order of purchases) {
            order.items = itemsRes.rows.filter((item: any) => item.order_id === order.id);
         }
       }
-      res.json(orders);
+      res.json({ success: true, purchases, sales });
     } catch (err) {
       res.status(500).json({ error: 'Erro de conexão com o banco de dados.' });
     }
@@ -1197,6 +1220,47 @@ async function startServer() {
     } catch (err: any) {
       console.error('Erro geral ao registrar pedido:', err.message);
       res.status(500).json({ success: false, error: 'PostgreSQL - Falha ao gravar a ordem.' });
+    }
+  });
+
+  // Atualizar status do pedido
+  app.patch('/api/orders/:id', requireAuth, async (req: any, res) => {
+    try {
+      if (!dbConnected) throw new Error("DB offline");
+      const orderId = req.params.id;
+      const { status } = req.body;
+      const isAdmin = req.user.role === 'admin';
+      const userId = req.user.id;
+
+      if (!status) {
+         return res.status(400).json({ success: false, error: 'Status não fornecido' });
+      }
+
+      // Se não for admin, verifica se a ordem pertence aos produtos deste vendedor
+      let authorized = false;
+      if (isAdmin) {
+         authorized = true;
+      } else {
+         const checkRes = await pool.query(`
+            SELECT 1 FROM orders o
+            JOIN order_items oi ON o.id = oi.order_id
+            JOIN products p ON oi.product_id = p.id
+            WHERE o.id = $1 AND p.user_id = $2 LIMIT 1
+         `, [orderId, userId]);
+         if (checkRes.rows.length > 0) {
+            authorized = true;
+         }
+      }
+
+      if (!authorized) {
+         return res.status(403).json({ success: false, error: 'Acesso negado para modificar este pedido.' });
+      }
+
+      await pool.query('UPDATE orders SET status = $1 WHERE id = $2', [status, orderId]);
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error('Erro ao atualizar pedido:', err.message);
+      res.status(500).json({ success: false, error: 'Falha ao atualizar ordem.' });
     }
   });
 
