@@ -639,19 +639,21 @@ async function startServer() {
       } else {
           // Sales: where the product seller is the user
           const salesResult = await pool.query(`
-            SELECT DISTINCT o.*, u.name as customer_name, u.email as customer_email 
+            SELECT o.*, u.name as customer_name, u.email as customer_email 
             FROM orders o 
             LEFT JOIN users u ON o.user_id = u.id 
-            JOIN order_items oi ON o.id = oi.order_id
-            JOIN products p ON oi.product_id = p.id
-            WHERE p.user_id = $1
+            WHERE EXISTS (
+               SELECT 1 FROM order_items oi
+               JOIN products p ON oi.product_id = p.id
+               WHERE oi.order_id = o.id AND p.user_id = $1
+            )
             ORDER BY o.id DESC
           `, [userId]);
           sales = salesResult.rows;
 
           // Purchases: where the order buyer is the user
           const purchasesResult = await pool.query(`
-            SELECT DISTINCT o.*, u.name as customer_name, u.email as customer_email 
+            SELECT o.*, u.name as customer_name, u.email as customer_email 
             FROM orders o 
             LEFT JOIN users u ON o.user_id = u.id 
             WHERE o.user_id = $1
