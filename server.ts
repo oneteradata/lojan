@@ -695,24 +695,34 @@ async function startServer() {
         const itemsRes = await pool.query(`SELECT oi.*, p.name as product_name FROM order_items oi LEFT JOIN products p ON oi.product_id::text = p.id::text WHERE oi.order_id = ANY($1)`, [orderIds]);
         
         for (const order of sales) {
-           order.items = itemsRes.rows.filter((item: any) => Number(item.order_id) === Number(order.id)).map((item: any) => ({
+           let fallbackItems = [];
+           try { fallbackItems = Array.isArray(order.items) ? order.items : (typeof order.items === 'string' ? JSON.parse(order.items) : []); } catch(e){}
+           
+           const dbItems = itemsRes.rows.filter((item: any) => Number(item.order_id) === Number(order.id)).map((item: any) => ({
               id: item.product_id,
               name: item.product_name || 'Produto Excluído',
               price: parseFloat(item.final_price) || 0,
               quantity: item.quantity,
               variations: typeof item.chosen_options === 'string' ? JSON.parse(item.chosen_options) : (item.chosen_options || {})
            }));
+           
+           order.items = dbItems.length > 0 ? dbItems : fallbackItems;
            order.payment_method = order.payment_method || 'entrega';
            order.order_code = order.order_code || `858-${order.id}`;
         }
         for (const order of purchases) {
-           order.items = itemsRes.rows.filter((item: any) => Number(item.order_id) === Number(order.id)).map((item: any) => ({
+           let fallbackItems = [];
+           try { fallbackItems = Array.isArray(order.items) ? order.items : (typeof order.items === 'string' ? JSON.parse(order.items) : []); } catch(e){}
+
+           const dbItems = itemsRes.rows.filter((item: any) => Number(item.order_id) === Number(order.id)).map((item: any) => ({
               id: item.product_id,
               name: item.product_name || 'Produto Excluído',
               price: parseFloat(item.final_price) || 0,
               quantity: item.quantity,
               variations: typeof item.chosen_options === 'string' ? JSON.parse(item.chosen_options) : (item.chosen_options || {})
            }));
+           
+           order.items = dbItems.length > 0 ? dbItems : fallbackItems;
            order.payment_method = order.payment_method || 'entrega';
            order.order_code = order.order_code || `858-${order.id}`;
         }
@@ -1228,7 +1238,7 @@ async function startServer() {
 
   // Criar novo pedido (Cart Checkout)
   app.post('/api/orders', requireAuth, async (req, res) => {
-    const { userId, total, items } = req.body;
+    const { userId, total, items, seller_id, order_code, payment_method } = req.body;
     
     if (!userId || !items || items.length === 0) {
       return res.status(400).json({ success: false, error: 'Dados do pedido incompletos.' });
@@ -1241,8 +1251,8 @@ async function startServer() {
 
       // 1. Cria o pedido no Postgres
       const orderResult = await pool.query(
-        'INSERT INTO orders (user_id, total_price) VALUES ($1, $2) RETURNING id',
-        [userId, total]
+        'INSERT INTO orders (user_id, total_price, seller_id) VALUES ($1, $2, $3) RETURNING id',
+        [userId, total, seller_id || null]
       );
       const orderId = orderResult.rows[0].id;
 

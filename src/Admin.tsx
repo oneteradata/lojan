@@ -1195,8 +1195,8 @@ function AdminOrders() {
              <div className="space-y-1 mb-2 pb-2 border-b border-black border-dashed">
                 {selectedOrder.items && selectedOrder.items.map((item: any) => (
                    <div key={item.id} className="flex justify-between text-xs">
-                      <span>{item.quantity}x {item.product_name.substring(0,20)}</span>
-                      <span>{parseFloat(item.price).toFixed(2)}</span>
+                      <span>{item.quantity}x {(item.name || item.product_name || 'Produto').substring(0,20)}</span>
+                      <span>{parseFloat(item.price || 0).toFixed(2)}</span>
                    </div>
                 ))}
              </div>
