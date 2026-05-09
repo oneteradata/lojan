@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'motion/react';
-import { Search, ShoppingBag, User, Menu, ArrowRight, Eye, EyeOff, LogOut, RefreshCw } from 'lucide-react';
+import { Search, ShoppingBag, Heart, Share2, User, Menu, ArrowRight, Eye, EyeOff, LogOut, RefreshCw } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import AdminApp from './Admin';
@@ -20,6 +20,33 @@ function Storefront() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [products, setProducts] = useState<any[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
+  const [interactionText, setInteractionText] = useState('');
+
+  const handleInteraction = async (type: string, contentStr?: string) => {
+    if (!user) { alert('Faça login para interagir.'); return; }
+    try {
+      const res = await apiFetch('/api/interactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          product_id: selectedProduct.id,
+          interaction_type: type,
+          content: contentStr || ''
+        })
+      });
+      if (res.ok && type === 'comment') {
+         setInteractionText('');
+         alert('Comentário enviado!');
+      } else if (res.ok && type === 'like') {
+         alert('Você curtiu este produto!');
+      } else if (res.ok && type === 'share') {
+         alert('Compartilhado com sucesso!');
+      }
+    } catch (e) { 
+       console.error(e);
+    }
+  };
+
   
   const [showLogin, setShowLogin] = useState(false);
   const [showWallet, setShowWallet] = useState(true);
@@ -760,6 +787,26 @@ function Storefront() {
               )}
               
               <div className="flex flex-col gap-4 mt-auto">
+                <div className="flex gap-2">
+                  <button onClick={() => handleInteraction('like')} className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-red-50 hover:text-red-600 transition-colors" title="Curtir">
+                     <Heart className="w-4 h-4" /> <span>Curtir</span>
+                  </button>
+                  <button onClick={() => handleInteraction('share')} className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-green-50 hover:text-green-600 transition-colors" title="Compartilhar">
+                     <Share2 className="w-4 h-4" /> <span>Compartilhar</span>
+                  </button>
+                </div>
+                <div className="flex gap-2">
+                  <input 
+                     type="text"
+                     placeholder="Adicione um comentário..."
+                     value={interactionText}
+                     onChange={(e) => setInteractionText(e.target.value)}
+                     className="flex-1 bg-white border border-gray-300 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-[#007AFF]/20 focus:border-[#007AFF] outline-none"
+                  />
+                  <button onClick={() => handleInteraction('comment', interactionText)} className="bg-[#1D1D1F] text-white px-4 rounded-xl font-bold text-xs uppercase tracking-wider hover:bg-black transition-colors">
+                     Enviar
+                  </button>
+                </div>
                 <button onClick={() => handleAddToCart(selectedProduct)} className="w-full bg-[#007AFF] text-white py-4 rounded-xl uppercase text-xs tracking-[0.15em] font-bold hover:bg-blue-600 transition-all duration-300 shadow-md shadow-blue-500/20">
                   Adicionar à Sacola
                 </button>

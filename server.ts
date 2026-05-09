@@ -192,6 +192,17 @@ async function initDB() {
 
     // Novas tabelas
     await pool.query(`
+      CREATE TABLE IF NOT EXISTS product_interactions (
+        id SERIAL PRIMARY KEY,
+        product_id INTEGER,
+        user_id INTEGER,
+        user_name VARCHAR(255),
+        user_email VARCHAR(255),
+        interaction_type VARCHAR(50),
+        content TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    
       CREATE TABLE IF NOT EXISTS logs (
         id SERIAL PRIMARY KEY,
         event_name VARCHAR(255),
@@ -617,7 +628,7 @@ async function startServer() {
           products: parseInt(prodRes.rows[0].count) || 0,
           orders: parseInt(ordersRes.rows[0].count) || 0,
           stock: parseInt(stockRes.rows[0].total_stock) || 0,
-          likes: Math.floor(Math.random() * 100),
+          likes: parseInt((await pool.query("SELECT COUNT(*) FROM product_interactions WHERE interaction_type = 'like'")).rows[0]?.count) || 0,
           monthlySales: monthlySalesRes.rows.reverse()
         }
       });
@@ -927,6 +938,52 @@ async function startServer() {
     } catch (err: any) {
       console.error(err);
       res.status(500).json({ success: false, error: 'Erro interno ao transferir.' });
+    }
+  });
+
+  // GET /api/interactions
+  app.get('/api/interactions', requireAuth, async (req: any, res) => {
+    try {
+      if (!dbConnected) throw new Error("DB offline");
+      const isAdmin = req.user.role === 'admin';
+      let dbResult;
+      if (isAdmin) {
+         dbResult = await pool.query('SELECT i.*, p.name as product_name FROM product_interactions i LEFT JOIN products p ON i.product_id::text = p.id::text ORDER BY i.id DESC LIMIT 500');
+      } else {
+         dbResult = await pool.query(`
+            SELECT i.*, p.name as product_name 
+            FROM product_interactions i 
+            JOIN products p ON i.product_id::text = p.id::text 
+            WHERE p.user_id::text = $1::text 
+            ORDER BY i.id DESC LIMIT 500
+         `, [req.user.id]);
+      }
+      res.json(dbResult.rows);
+    } catch (err) {
+      res.status(500).json({ error: 'Erro de conexão com o DB.' });
+    }
+  });
+
+  // POST /api/interactions
+  app.post('/api/interactions', requireAuth, async (req: any, res) => {
+    try {
+      if (!dbConnected) throw new Error("DB offline");
+      const { product_id, interaction_type, content } = req.body;
+      const user_id = req.user.id;
+      const user_email = req.user.email;
+      const user_name = req.user.name;
+
+      if (!product_id || !interaction_type) {
+         return res.status(400).json({ success: false, error: 'product_id e interaction_type são obrigatórios' });
+      }
+
+      await pool.query(
+        'INSERT INTO product_interactions (product_id, user_id, user_name, user_email, interaction_type, content) VALUES (, , , , , )',
+        [product_id, user_id, user_name, user_email, interaction_type, content || '']
+      );
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
     }
   });
 

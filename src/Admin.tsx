@@ -6,8 +6,9 @@ import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { AdminCredits } from "./AdminCredits";
 import { AdminLogs } from "./AdminLogs";
+import { AdminInteractions } from "./AdminInteractions";
 import { AdminWallet } from "./AdminWallet";
-import { Wallet } from "lucide-react";
+import { Wallet, MessageSquare } from "lucide-react";
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -1766,6 +1767,10 @@ export default function AdminApp() {
                  <List className="w-5 h-5" />
                  <span className={cn("text-sm", location.pathname === '/logs' ? "font-bold" : "font-semibold")}>Logs</span>
               </button>
+              <button onClick={() => navigate('/interactions')} className={cn("flex w-full items-center gap-4 px-5 py-3.5 rounded-2xl transition-all", location.pathname === '/interactions' ? "bg-[#0058bc] text-white shadow-lg shadow-[#0058bc]/20" : "text-[#414755] hover:bg-white hover:shadow-sm")}>
+                 <MessageSquare className="w-5 h-5" />
+                 <span className={cn("text-sm", location.pathname === '/interactions' ? "font-bold" : "font-semibold")}>Interações</span>
+              </button>
             </>
           )}
 
@@ -1819,6 +1824,7 @@ export default function AdminApp() {
             <Route path="/etoken" element={<AdminWallet user={user} onRefreshUser={refreshUser} />} />
             <Route path="/credits" element={<AdminCredits user={user} onRefreshUser={refreshUser} />} />
             <Route path="/logs" element={<AdminLogs user={user} />} />
+            <Route path="/interactions" element={<AdminInteractions user={user} />} />
             <Route path="/users" element={user.role === 'admin' ? <AdminUsers /> : <div className="p-8 text-center text-gray-500">Acesso negado. Apenas administradores.</div>} />
           </Routes>
         </div>
@@ -1839,10 +1845,16 @@ export default function AdminApp() {
              <span className="text-[10px] font-extrabold">Vendas</span>
          </button>
          {user.role === 'admin' ? (
+           <>
+           <button onClick={() => navigate('/interactions')} className={cn("flex flex-col items-center gap-1", location.pathname === '/interactions' ? "text-[#0058bc]" : "text-[#414755] opacity-60")}>
+               <MessageSquare className="w-5 h-5" />
+               <span className="text-[10px] font-extrabold">Info</span>
+           </button>
            <button onClick={() => navigate('/users')} className={cn("flex flex-col items-center gap-1", location.pathname === '/users' ? "text-[#0058bc]" : "text-[#414755] opacity-60")}>
                <Users className="w-5 h-5" />
                <span className="text-[10px] font-extrabold">Conta</span>
            </button>
+           </>
          ) : (
            <button onClick={() => navigate('/etoken')} className={cn("flex flex-col items-center gap-1", location.pathname === '/etoken' ? "text-[#0058bc]" : "text-[#414755] opacity-60")}>
                <Wallet className="w-5 h-5" />
