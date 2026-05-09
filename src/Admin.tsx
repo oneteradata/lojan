@@ -9,7 +9,7 @@ import { AdminLogs } from "./AdminLogs";
 import { AdminInteractions } from "./AdminInteractions";
 import { AdminDeliveries } from "./AdminDeliveries";
 import { AdminWallet } from "./AdminWallet";
-import { Wallet, MessageSquare } from "lucide-react";
+import { Wallet, MessageSquare, Menu } from "lucide-react";
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -1796,6 +1796,7 @@ export function AdminUsers() {
 export default function AdminApp() {
   const [user, setUser] = useState<any>(null);
   const [pendingCount, setPendingCount] = useState(0);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -1824,43 +1825,45 @@ export default function AdminApp() {
   return (
     <div className="admin-theme min-h-screen bg-[#faf9fe] text-[#1a1b1f] antialiased flex selection:bg-[#0058bc]/10 font-sans">
       {/* SideNavBar Component */}
-      <aside className="hidden md:flex h-[calc(100vh-32px)] w-72 fixed left-4 top-4 z-40 bg-white/60 backdrop-blur-xl flex-col py-8 rounded-[2rem] shadow-[0_10px_40px_-10px_rgba(0,0,0,0.04),_0_2px_10px_-2px_rgba(0,0,0,0.02)] border border-white/50">
+       {/* Mobile backdrop */}
+      {isMobileMenuOpen && (<div className="md:hidden fixed inset-0 bg-black/40 z-[55]" onClick={() => setIsMobileMenuOpen(false)} />)}
+      <aside className={`transform ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-[120%]"} transition-transform duration-300 md:translate-x-0 fixed left-4 top-4 z-[60] bg-white/95 md:bg-white/60 backdrop-blur-xl flex flex-col py-8 w-72 h-[calc(100vh-32px)] overflow-y-auto hide-scrollbar rounded-[2rem] shadow-[0_10px_40px_-10px_rgba(0,0,0,0.04),_0_2px_10px_-2px_rgba(0,0,0,0.02)] border border-white/50`}>
         <div className="px-8 mb-12">
           <h1 className="text-2xl font-extrabold text-[#0058bc] tracking-tighter">Vitrine Brasil</h1>
           <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#414755] opacity-60">sua vitrine para o mundo</p>
         </div>
         <nav className="flex-grow space-y-1.5 px-3">
-          <button onClick={() => navigate('/')} className={cn("flex w-full items-center gap-4 px-5 py-3.5 rounded-2xl transition-all", location.pathname === '/' ? "bg-[#0058bc] text-white shadow-lg shadow-[#0058bc]/20" : "text-[#414755] hover:bg-white hover:shadow-sm")}>
+          <button onClick={() => { setIsMobileMenuOpen(false); navigate('/'); }} className={cn("flex w-full items-center gap-4 px-5 py-3.5 rounded-2xl transition-all", location.pathname === '/' ? "bg-[#0058bc] text-white shadow-lg shadow-[#0058bc]/20" : "text-[#414755] hover:bg-white hover:shadow-sm")}>
             <LayoutDashboard className="w-5 h-5" />
             <span className={cn("text-sm", location.pathname === '/' ? "font-bold" : "font-semibold")}>Início</span>
           </button>
           
           {user.role !== 'delivery' && (
-             <button onClick={() => navigate('/products')} className={cn("flex w-full items-center gap-4 px-5 py-3.5 rounded-2xl transition-all", location.pathname === '/products' ? "bg-[#0058bc] text-white shadow-lg shadow-[#0058bc]/20" : "text-[#414755] hover:bg-white hover:shadow-sm")}>
+             <button onClick={() => { setIsMobileMenuOpen(false); navigate('/products'); }} className={cn("flex w-full items-center gap-4 px-5 py-3.5 rounded-2xl transition-all", location.pathname === '/products' ? "bg-[#0058bc] text-white shadow-lg shadow-[#0058bc]/20" : "text-[#414755] hover:bg-white hover:shadow-sm")}>
                <Package className="w-5 h-5" />
                <span className={cn("text-sm", location.pathname === '/products' ? "font-bold" : "font-semibold")}>Produtos</span>
              </button>
           )}
           
-          <button onClick={() => navigate('/etoken')} className={cn("flex w-full items-center gap-4 px-5 py-3.5 rounded-2xl transition-all", location.pathname === '/etoken' ? "bg-[#0058bc] text-white shadow-lg shadow-[#0058bc]/20" : "text-[#414755] hover:bg-white hover:shadow-sm")}>
+          <button onClick={() => { setIsMobileMenuOpen(false); navigate('/etoken'); }} className={cn("flex w-full items-center gap-4 px-5 py-3.5 rounded-2xl transition-all", location.pathname === '/etoken' ? "bg-[#0058bc] text-white shadow-lg shadow-[#0058bc]/20" : "text-[#414755] hover:bg-white hover:shadow-sm")}>
             <Wallet className="w-5 h-5" />
             <span className={cn("text-sm", location.pathname === '/etoken' ? "font-bold" : "font-semibold")}>eToken</span>
           </button>
           
           {user.role !== 'delivery' && (
-             <button onClick={() => navigate('/orders')} className={cn("flex w-full items-center gap-4 px-5 py-3.5 rounded-2xl transition-all", location.pathname === '/orders' ? "bg-[#0058bc] text-white shadow-lg shadow-[#0058bc]/20" : "text-[#414755] hover:bg-white hover:shadow-sm")}>
+             <button onClick={() => { setIsMobileMenuOpen(false); navigate('/orders'); }} className={cn("flex w-full items-center gap-4 px-5 py-3.5 rounded-2xl transition-all", location.pathname === '/orders' ? "bg-[#0058bc] text-white shadow-lg shadow-[#0058bc]/20" : "text-[#414755] hover:bg-white hover:shadow-sm")}>
                <div className="relative"><ShoppingCart className="w-5 h-5" />{pendingCount > 0 && <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5 rounded-full bg-red-600 ring-2 ring-white"></span>}</div>
                <span className={cn("text-sm", location.pathname === '/orders' ? "font-bold" : "font-semibold")}>Vendas</span>
              </button>
           )}
 
-          <button onClick={() => navigate('/credits')} className={cn("flex w-full items-center gap-4 px-5 py-3.5 rounded-2xl transition-all", location.pathname === '/credits' ? "bg-[#0058bc] text-white shadow-lg shadow-[#0058bc]/20" : "text-[#414755] hover:bg-white hover:shadow-sm")}>
+          <button onClick={() => { setIsMobileMenuOpen(false); navigate('/credits'); }} className={cn("flex w-full items-center gap-4 px-5 py-3.5 rounded-2xl transition-all", location.pathname === '/credits' ? "bg-[#0058bc] text-white shadow-lg shadow-[#0058bc]/20" : "text-[#414755] hover:bg-white hover:shadow-sm")}>
             <Landmark className="w-5 h-5" />
             <span className={cn("text-sm", location.pathname === '/credits' ? "font-bold" : "font-semibold")}>Logs</span>
           </button>
 
           {user.role !== 'delivery' && (
-             <button onClick={() => navigate('/interactions')} className={cn("flex w-full items-center gap-4 px-5 py-3.5 rounded-2xl transition-all", location.pathname === '/interactions' ? "bg-[#0058bc] text-white shadow-lg shadow-[#0058bc]/20" : "text-[#414755] hover:bg-white hover:shadow-sm")}>
+             <button onClick={() => { setIsMobileMenuOpen(false); navigate('/interactions'); }} className={cn("flex w-full items-center gap-4 px-5 py-3.5 rounded-2xl transition-all", location.pathname === '/interactions' ? "bg-[#0058bc] text-white shadow-lg shadow-[#0058bc]/20" : "text-[#414755] hover:bg-white hover:shadow-sm")}>
                 <MessageSquare className="w-5 h-5" />
                 <span className={cn("text-sm", location.pathname === '/interactions' ? "font-bold" : "font-semibold")}>Interações</span>
              </button>
@@ -1868,11 +1871,11 @@ export default function AdminApp() {
 
           {user.role === 'admin' && (
             <>
-              <button onClick={() => navigate('/users')} className={cn("flex w-full items-center gap-4 px-5 py-3.5 rounded-2xl transition-all", location.pathname === '/users' ? "bg-[#0058bc] text-white shadow-lg shadow-[#0058bc]/20" : "text-[#414755] hover:bg-white hover:shadow-sm")}>
+              <button onClick={() => { setIsMobileMenuOpen(false); navigate('/users'); }} className={cn("flex w-full items-center gap-4 px-5 py-3.5 rounded-2xl transition-all", location.pathname === '/users' ? "bg-[#0058bc] text-white shadow-lg shadow-[#0058bc]/20" : "text-[#414755] hover:bg-white hover:shadow-sm")}>
                  <Users className="w-5 h-5" />
                  <span className={cn("text-sm", location.pathname === '/users' ? "font-bold" : "font-semibold")}>Equipe</span>
               </button>
-              <button onClick={() => navigate('/logs')} className={cn("flex w-full items-center gap-4 px-5 py-3.5 rounded-2xl transition-all", location.pathname === '/logs' ? "bg-[#0058bc] text-white shadow-lg shadow-[#0058bc]/20" : "text-[#414755] hover:bg-white hover:shadow-sm")}>
+              <button onClick={() => { setIsMobileMenuOpen(false); navigate('/logs'); }} className={cn("flex w-full items-center gap-4 px-5 py-3.5 rounded-2xl transition-all", location.pathname === '/logs' ? "bg-[#0058bc] text-white shadow-lg shadow-[#0058bc]/20" : "text-[#414755] hover:bg-white hover:shadow-sm")}>
                  <List className="w-5 h-5" />
                  <span className={cn("text-sm", location.pathname === '/logs' ? "font-bold" : "font-semibold")}>Logs</span>
               </button>
@@ -1882,12 +1885,20 @@ export default function AdminApp() {
         </nav>
 
         <div className="px-4 mt-auto space-y-2">
+          {/* User Info Mobile */}
+          <div className="p-4 mb-2 bg-white rounded-[1.5rem] border border-gray-100 flex items-center gap-3">
+             <img src={user.company_logo || "https://i.ibb.co/605F0btn/userlmn-2a3058c5a41d95b47dcdaaede52b18e9-removebg-preview.png"} alt="User" className="h-10 w-10 rounded-xl bg-[#eeedf3] object-cover shrink-0" />
+             <div className="min-w-0">
+                <p className="text-sm font-extrabold text-[#1a1b1f] truncate">{user.name}</p>
+                <p className="text-[10px] text-[#414755] font-bold uppercase tracking-widest truncate">ID: {user.id}</p>
+             </div>
+          </div>
           {/* Suporte block */}
-          <div className="p-5 mb-6 bg-[#0058bc]/5 rounded-[1.5rem] border border-[#0058bc]/5">
+          <div className="p-5 mb-4 bg-[#0058bc]/5 rounded-[1.5rem] border border-[#0058bc]/5">
             <p className="text-xs font-bold text-[#0058bc] mb-3">Precisa de ajuda?</p>
             <button className="w-full text-[11px] bg-[#0058bc] text-white py-2.5 rounded-xl font-extrabold uppercase tracking-widest shadow-md shadow-[#0058bc]/10 hover:shadow-lg transition-all">Suporte 24h</button>
           </div>
-          <button className="w-full flex items-center justify-start gap-4 text-[#ba1a1a] hover:bg-[#ba1a1a]/5 px-5 py-3 rounded-2xl transition-all" onClick={() => { localStorage.removeItem('token'); setUser(null); navigate('/'); }}>
+          <button className="w-full flex items-center justify-start gap-4 text-[#ba1a1a] hover:bg-[#ba1a1a]/5 px-5 py-3 rounded-2xl transition-all" onClick={() => { localStorage.removeItem('token'); setUser(null); navigate('/'); setIsMobileMenuOpen(false); }}>
              <LogOut className="w-5 h-5" />
              <span className="font-semibold text-sm">Sair</span>
           </button>
@@ -1895,13 +1906,17 @@ export default function AdminApp() {
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-grow md:ml-[312px] min-h-screen pr-4 flex flex-col">
-        <header className="bg-[#faf9fe]/80 backdrop-blur-md sticky top-0 z-50 w-full h-20 flex justify-between items-center px-4 md:px-8">
+      <main className="flex-grow md:ml-[312px] min-h-screen px-4 md:px-0 md:pr-4 flex flex-col w-full overflow-x-hidden">
+        <header className="bg-[#faf9fe]/80 backdrop-blur-md sticky top-0 z-50 w-full h-20 flex justify-between items-center px-0 md:px-8">
             <div className="flex items-center gap-4">
+                <button className="md:hidden p-2 text-[#1a1b1f] hover:bg-white rounded-xl shadow-sm transition-all" onClick={() => setIsMobileMenuOpen(true)}>
+                   <Menu className="w-6 h-6" />
+                </button>
+                
                 <h2 className="text-2xl font-extrabold text-[#1a1b1f] tracking-tight">{location.pathname === '/' ? 'Dashboard' : location.pathname === '/products' ? 'Produtos' : location.pathname === '/etoken' ? 'eToken' : location.pathname === '/orders' ? 'Vendas' : location.pathname === '/credits' ? 'Logs' : location.pathname === '/users' ? 'Equipe' : 'Minha Loja'}</h2>
             </div>
             <div className="flex items-center gap-4 md:gap-8 justify-end">
-                <div className="relative ">
+                <div className="relative hidden md:block">
                    <input type="text" placeholder="Pesquisar transações..." className="bg-white border-none h-11 w-72 pl-12 pr-4 rounded-2xl text-sm focus:ring-2 focus:ring-[#0058bc]/20 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.04),_0_2px_10px_-2px_rgba(0,0,0,0.02)] transition-all outline-none text-[#1a1b1f]" />
                    <Search className="w-5 h-5 absolute left-4 top-3 text-[#414755] opacity-40" />
                 </div>
@@ -1909,8 +1924,8 @@ export default function AdminApp() {
                    <button className="p-2 text-[#414755] hover:bg-white hover:shadow-sm rounded-xl transition-all">
                       <Bell className="w-5 h-5" />
                    </button>
-                   <div className="h-8 w-px bg-[#c1c6d7]/30 mx-0 md:mx-2"></div>
-                   <div className="flex items-center gap-3 bg-white pl-4 pr-1 py-1 rounded-2xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.04),_0_2px_10px_-2px_rgba(0,0,0,0.02)]">
+                   <div className="hidden md:block h-8 w-px bg-[#c1c6d7]/30 mx-0 md:mx-2"></div>
+                   <div className="hidden md:flex items-center gap-3 bg-white pl-4 pr-1 py-1 rounded-2xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.04),_0_2px_10px_-2px_rgba(0,0,0,0.02)]">
                       <div className="text-right">
                          <p className="text-xs font-extrabold leading-tight text-[#1a1b1f]">{user.name}</p>
                          <p className="text-[10px] text-[#414755] font-medium capitalize">{user.role}</p>
@@ -1935,56 +1950,7 @@ export default function AdminApp() {
         </div>
       </main>
 
-      {/* Mobile Bottom Nav */}
-      <nav className="md:hidden fixed bottom-6 left-6 right-6 h-18 bg-white/80 backdrop-blur-2xl rounded-3xl flex items-center justify-start z-50 shadow-2xl border border-white/50 px-4 overflow-x-auto gap-6 sm:gap-8 hide-scrollbar">
-         <button onClick={() => navigate('/')} className={cn("flex flex-col items-center gap-1 shrink-0", location.pathname === '/' ? "text-[#0058bc]" : "text-[#414755] opacity-60")}>
-             <LayoutDashboard className="w-5 h-5" />
-             <span className="text-[10px] font-extrabold">{user.role === 'delivery' ? 'Entregas' : 'Início'}</span>
-         </button>
-         {user.role !== 'delivery' && (
-             <button onClick={() => navigate('/products')} className={cn("flex flex-col items-center gap-1 shrink-0", location.pathname === '/products' ? "text-[#0058bc]" : "text-[#414755] opacity-60")}>
-                 <Package className="w-5 h-5" />
-                 <span className="text-[10px] font-extrabold">Produtos</span>
-             </button>
-         )}
-         
-         <button onClick={() => navigate('/etoken')} className={cn("flex flex-col items-center gap-1 shrink-0", location.pathname === '/etoken' ? "text-[#0058bc]" : "text-[#414755] opacity-60")}>
-             <Wallet className="w-5 h-5" />
-             <span className="text-[10px] font-extrabold">eToken</span>
-         </button>
-
-         {user.role !== 'delivery' && (
-             <button onClick={() => navigate('/orders')} className={cn("flex flex-col items-center gap-1 shrink-0", location.pathname === '/orders' ? "text-[#0058bc]" : "text-[#414755] opacity-60")}>
-                 <div className="relative"><ShoppingCart className="w-5 h-5" />{pendingCount > 0 && <span className="absolute -top-1 -right-1 flex h-2 w-2 rounded-full bg-red-600"></span>}</div>
-                 <span className="text-[10px] font-extrabold">Vendas</span>
-             </button>
-         )}
-
-         <button onClick={() => navigate('/credits')} className={cn("flex flex-col items-center gap-1 shrink-0", location.pathname === '/credits' ? "text-[#0058bc]" : "text-[#414755] opacity-60")}>
-             <Landmark className="w-5 h-5" />
-             <span className="text-[10px] font-extrabold">Créditos</span>
-         </button>
-
-         {user.role !== 'delivery' && (
-             <button onClick={() => navigate('/interactions')} className={cn("flex flex-col items-center gap-1 shrink-0", location.pathname === '/interactions' ? "text-[#0058bc]" : "text-[#414755] opacity-60")}>
-                 <MessageSquare className="w-5 h-5" />
-                 <span className="text-[10px] font-extrabold">Info</span>
-             </button>
-         )}
-
-         {user.role === 'admin' && (
-           <>
-             <button onClick={() => navigate('/users')} className={cn("flex flex-col items-center gap-1 shrink-0", location.pathname === '/users' ? "text-[#0058bc]" : "text-[#414755] opacity-60")}>
-                 <Users className="w-5 h-5" />
-                 <span className="text-[10px] font-extrabold">Equipe</span>
-             </button>
-             <button onClick={() => navigate('/logs')} className={cn("flex flex-col items-center gap-1 shrink-0", location.pathname === '/logs' ? "text-[#0058bc]" : "text-[#414755] opacity-60")}>
-                 <List className="w-5 h-5" />
-                 <span className="text-[10px] font-extrabold">Logs</span>
-             </button>
-           </>
-         )}
-      </nav>
+      
     </div>
   );
 }
