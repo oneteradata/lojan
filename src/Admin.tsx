@@ -1143,6 +1143,12 @@ function AdminOrders() {
                                  <p className="text-sm font-semibold truncate" title={item.name || item.product_name}>{item.quantity}x {item.name || item.product_name}</p>
                                  <p className="text-xs text-gray-400 truncate">{item.details}</p>
                                  {item.variation_name && <p className="text-xs font-bold text-blue-500">Var: {item.variation_name}</p>}
+                                 {item.variations && typeof item.variations === 'object' && Object.keys(item.variations).length > 0 && !Array.isArray(item.variations) && Object.entries(item.variations).map(([k,v]) => (
+                                    <p key={k} className="text-[10px] font-bold text-blue-500 underline text-wrap break-words">{k}: {String(v)}</p>
+                                 ))}
+                                 {item.variations && Array.isArray(item.variations) && item.variations.length > 0 && item.variations.map((v: any, idx: number) => (
+                                    <p key={idx} className="text-[10px] font-bold text-blue-500 underline text-wrap break-words">{typeof v === 'object' ? v.name || JSON.stringify(v) : String(v)}</p>
+                                 ))}
                               </div>
                               <p className="text-sm font-bold text-gray-900 self-center">R$ {parseFloat(item.price || 0).toFixed(2).replace('.', ',')}</p>
                            </div>

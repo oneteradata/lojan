@@ -264,6 +264,8 @@ async function initDB() {
     // Atualiza tabela para suportar opções selecionadas (fallback dev)
     try { await pool.query(`ALTER TABLE order_items ADD COLUMN chosen_options JSONB DEFAULT '[]';`); } catch (e) {}
     try { await pool.query(`ALTER TABLE order_items ADD COLUMN final_price NUMERIC;`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE orders ADD COLUMN seller_id INTEGER;`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE orders ADD COLUMN default_shipping JSONB;`); } catch (e) {}
 
     // Inserção de um usuário admin teste se não existir
     const userResult = await pool.query('SELECT COUNT(*) FROM users');
@@ -663,7 +665,7 @@ async function startServer() {
                SELECT 1 FROM order_items oi
                JOIN products p ON oi.product_id::text = p.id::text
                WHERE oi.order_id::text = o.id::text AND p.user_id::text = $1::text
-            )
+            ) OR o.seller_id::text = $1::text
             ORDER BY o.id DESC
           `, [userId]);
           sales = salesResult.rows;
@@ -693,7 +695,7 @@ async function startServer() {
         const itemsRes = await pool.query(`SELECT oi.*, p.name as product_name FROM order_items oi LEFT JOIN products p ON oi.product_id::text = p.id::text WHERE oi.order_id = ANY($1)`, [orderIds]);
         
         for (const order of sales) {
-           order.items = itemsRes.rows.filter((item: any) => item.order_id === order.id).map((item: any) => ({
+           order.items = itemsRes.rows.filter((item: any) => Number(item.order_id) === Number(order.id)).map((item: any) => ({
               id: item.product_id,
               name: item.product_name || 'Produto Excluído',
               price: parseFloat(item.final_price) || 0,
@@ -704,7 +706,7 @@ async function startServer() {
            order.order_code = order.order_code || `858-${order.id}`;
         }
         for (const order of purchases) {
-           order.items = itemsRes.rows.filter((item: any) => item.order_id === order.id).map((item: any) => ({
+           order.items = itemsRes.rows.filter((item: any) => Number(item.order_id) === Number(order.id)).map((item: any) => ({
               id: item.product_id,
               name: item.product_name || 'Produto Excluído',
               price: parseFloat(item.final_price) || 0,
