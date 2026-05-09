@@ -640,7 +640,7 @@ async function startServer() {
             COALESCE(u.name, uc.nome_completo) as customer_name, 
             COALESCE(u.email, uc.email) as customer_email,
             uc.telefone, uc.endereco, uc.bairro, uc.cidade, uc.numero, uc.cep,
-            (SELECT p.user_id FROM order_items oi JOIN products p ON oi.product_id = p.id WHERE oi.order_id = o.id LIMIT 1) as seller_id
+            (SELECT p.user_id FROM order_items oi JOIN products p ON oi.product_id::text = p.id::text WHERE oi.order_id::text = o.id::text LIMIT 1) as seller_id
             FROM orders o 
             LEFT JOIN users u ON u.id::text = o.user_id::text 
             LEFT JOIN user_client uc ON uc.id::text = o.user_id::text
@@ -661,8 +661,8 @@ async function startServer() {
             LEFT JOIN user_client uc ON uc.id::text = o.user_id::text
             WHERE EXISTS (
                SELECT 1 FROM order_items oi
-               JOIN products p ON oi.product_id = p.id
-               WHERE oi.order_id = o.id AND p.user_id = $1
+               JOIN products p ON oi.product_id::text = p.id::text
+               WHERE oi.order_id::text = o.id::text AND p.user_id::text = $1::text
             )
             ORDER BY o.id DESC
           `, [userId]);
@@ -674,7 +674,7 @@ async function startServer() {
             COALESCE(u.name, uc.nome_completo) as customer_name, 
             COALESCE(u.email, uc.email) as customer_email,
             uc.telefone, uc.endereco, uc.bairro, uc.cidade, uc.numero, uc.cep,
-            (SELECT p.user_id FROM order_items oi JOIN products p ON oi.product_id = p.id WHERE oi.order_id = o.id LIMIT 1) as seller_id
+            (SELECT p.user_id FROM order_items oi JOIN products p ON oi.product_id::text = p.id::text WHERE oi.order_id::text = o.id::text LIMIT 1) as seller_id
             FROM orders o 
             LEFT JOIN users u ON u.id::text = o.user_id::text 
             LEFT JOIN user_client uc ON uc.id::text = o.user_id::text
@@ -690,7 +690,7 @@ async function startServer() {
 
       if (uniqueOrders.length > 0) {
         const orderIds = uniqueOrders.map((o: any) => o.id);
-        const itemsRes = await pool.query(`SELECT oi.*, p.name as product_name FROM order_items oi LEFT JOIN products p ON oi.product_id = p.id WHERE oi.order_id = ANY($1)`, [orderIds]);
+        const itemsRes = await pool.query(`SELECT oi.*, p.name as product_name FROM order_items oi LEFT JOIN products p ON oi.product_id::text = p.id::text WHERE oi.order_id = ANY($1)`, [orderIds]);
         
         for (const order of sales) {
            order.items = itemsRes.rows.filter((item: any) => item.order_id === order.id).map((item: any) => ({
@@ -1283,9 +1283,9 @@ async function startServer() {
       } else {
          const checkRes = await pool.query(`
             SELECT 1 FROM orders o
-            JOIN order_items oi ON o.id = oi.order_id
-            JOIN products p ON oi.product_id = p.id
-            WHERE o.id = $1 AND p.user_id = $2 LIMIT 1
+            JOIN order_items oi ON o.id::text = oi.order_id::text
+            JOIN products p ON oi.product_id::text = p.id::text
+            WHERE o.id::text = $1::text AND p.user_id::text = $2::text LIMIT 1
          `, [orderId, userId]);
          if (checkRes.rows.length > 0) {
             authorized = true;
