@@ -1119,6 +1119,15 @@ function AdminOrders() {
                            <p className="text-[10px] text-gray-400 font-bold tracking-widest uppercase">Cliente</p>
                            <p className="font-bold">{selectedOrder.customer_name || 'Usuário Final'}</p>
                            <p className="text-sm text-gray-500">{selectedOrder.customer_email}</p>
+                            {selectedOrder.telefone && <p className="text-sm text-gray-500 mt-1">📞 {selectedOrder.telefone}</p>}
+                            {(selectedOrder.endereco || selectedOrder.bairro || selectedOrder.cidade) && (
+                               <div className="mt-2 text-xs text-gray-500 border-t pt-2 border-gray-100">
+                                  <p className="font-semibold text-gray-800">Endereço de Entrega:</p>
+                                  <p>{selectedOrder.endereco}{selectedOrder.numero ? `, ${selectedOrder.numero}` : ''}</p>
+                                  <p>{selectedOrder.bairro && `${selectedOrder.bairro} - `}{selectedOrder.cidade}{selectedOrder.cep ? ` | CEP: ${selectedOrder.cep}` : ''}</p>
+                               </div>
+                            )}
+
                         </div>
                         <div className="text-right">
                            <p className="text-[10px] text-gray-400 font-bold tracking-widest uppercase">Data</p>
@@ -1131,11 +1140,11 @@ function AdminOrders() {
                         {selectedOrder.items && selectedOrder.items.map((item: any) => (
                            <div key={item.id} className="flex justify-between py-2 border-b border-gray-50 last:border-0">
                               <div className="max-w-[70%]">
-                                 <p className="text-sm font-semibold truncate" title={item.product_name}>{item.quantity}x {item.product_name}</p>
+                                 <p className="text-sm font-semibold truncate" title={item.name || item.product_name}>{item.quantity}x {item.name || item.product_name}</p>
                                  <p className="text-xs text-gray-400 truncate">{item.details}</p>
                                  {item.variation_name && <p className="text-xs font-bold text-blue-500">Var: {item.variation_name}</p>}
                               </div>
-                              <p className="text-sm font-bold text-gray-900 self-center">R$ {parseFloat(item.price).toFixed(2).replace('.', ',')}</p>
+                              <p className="text-sm font-bold text-gray-900 self-center">R$ {parseFloat(item.price || 0).toFixed(2).replace('.', ',')}</p>
                            </div>
                         ))}
                      </div>

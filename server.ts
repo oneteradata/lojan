@@ -183,6 +183,13 @@ async function initDB() {
       );
     `);
 
+    try { await pool.query(`ALTER TABLE user_client ADD COLUMN telefone VARCHAR(255);`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE user_client ADD COLUMN endereco VARCHAR(255);`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE user_client ADD COLUMN bairro VARCHAR(255);`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE user_client ADD COLUMN cidade VARCHAR(255);`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE user_client ADD COLUMN numero VARCHAR(50);`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE user_client ADD COLUMN cep VARCHAR(50);`); } catch (e) {}
+
     // Novas tabelas
     await pool.query(`
       CREATE TABLE IF NOT EXISTS logs (
@@ -629,9 +636,14 @@ async function startServer() {
 
       if (isAdmin) {
           const dbResult = await pool.query(`
-            SELECT o.*, u.name as customer_name, u.email as customer_email 
+            SELECT DISTINCT o.*, 
+            COALESCE(u.name, uc.nome_completo) as customer_name, 
+            COALESCE(u.email, uc.email) as customer_email,
+            uc.telefone, uc.endereco, uc.bairro, uc.cidade, uc.numero, uc.cep,
+            (SELECT p.user_id FROM order_items oi JOIN products p ON oi.product_id = p.id WHERE oi.order_id = o.id LIMIT 1) as seller_id
             FROM orders o 
-            LEFT JOIN users u ON o.user_id = u.id 
+            LEFT JOIN users u ON u.id::text = o.user_id::text 
+            LEFT JOIN user_client uc ON uc.id::text = o.user_id::text
             ORDER BY o.id DESC
           `);
           sales = dbResult.rows;
@@ -639,9 +651,14 @@ async function startServer() {
       } else {
           // Sales: where the product seller is the user
           const salesResult = await pool.query(`
-            SELECT o.*, u.name as customer_name, u.email as customer_email 
+            SELECT DISTINCT o.*, 
+            COALESCE(u.name, uc.nome_completo) as customer_name, 
+            COALESCE(u.email, uc.email) as customer_email,
+            uc.telefone, uc.endereco, uc.bairro, uc.cidade, uc.numero, uc.cep,
+            $1 as seller_id
             FROM orders o 
-            LEFT JOIN users u ON o.user_id = u.id 
+            LEFT JOIN users u ON u.id::text = o.user_id::text 
+            LEFT JOIN user_client uc ON uc.id::text = o.user_id::text
             WHERE EXISTS (
                SELECT 1 FROM order_items oi
                JOIN products p ON oi.product_id = p.id
@@ -653,10 +670,15 @@ async function startServer() {
 
           // Purchases: where the order buyer is the user
           const purchasesResult = await pool.query(`
-            SELECT o.*, u.name as customer_name, u.email as customer_email 
+            SELECT DISTINCT o.*, 
+            COALESCE(u.name, uc.nome_completo) as customer_name, 
+            COALESCE(u.email, uc.email) as customer_email,
+            uc.telefone, uc.endereco, uc.bairro, uc.cidade, uc.numero, uc.cep,
+            (SELECT p.user_id FROM order_items oi JOIN products p ON oi.product_id = p.id WHERE oi.order_id = o.id LIMIT 1) as seller_id
             FROM orders o 
-            LEFT JOIN users u ON o.user_id = u.id 
-            WHERE o.user_id = $1
+            LEFT JOIN users u ON u.id::text = o.user_id::text 
+            LEFT JOIN user_client uc ON uc.id::text = o.user_id::text
+            WHERE o.user_id::text = $1::text
             ORDER BY o.id DESC
           `, [userId]);
           purchases = purchasesResult.rows;
@@ -671,10 +693,26 @@ async function startServer() {
         const itemsRes = await pool.query(`SELECT oi.*, p.name as product_name FROM order_items oi LEFT JOIN products p ON oi.product_id = p.id WHERE oi.order_id = ANY($1)`, [orderIds]);
         
         for (const order of sales) {
-           order.items = itemsRes.rows.filter((item: any) => item.order_id === order.id);
+           order.items = itemsRes.rows.filter((item: any) => item.order_id === order.id).map((item: any) => ({
+              id: item.product_id,
+              name: item.product_name || 'Produto Excluído',
+              price: parseFloat(item.final_price) || 0,
+              quantity: item.quantity,
+              variations: typeof item.chosen_options === 'string' ? JSON.parse(item.chosen_options) : (item.chosen_options || {})
+           }));
+           order.payment_method = order.payment_method || 'entrega';
+           order.order_code = order.order_code || `858-${order.id}`;
         }
         for (const order of purchases) {
-           order.items = itemsRes.rows.filter((item: any) => item.order_id === order.id);
+           order.items = itemsRes.rows.filter((item: any) => item.order_id === order.id).map((item: any) => ({
+              id: item.product_id,
+              name: item.product_name || 'Produto Excluído',
+              price: parseFloat(item.final_price) || 0,
+              quantity: item.quantity,
+              variations: typeof item.chosen_options === 'string' ? JSON.parse(item.chosen_options) : (item.chosen_options || {})
+           }));
+           order.payment_method = order.payment_method || 'entrega';
+           order.order_code = order.order_code || `858-${order.id}`;
         }
       }
       res.json({ success: true, purchases, sales });
