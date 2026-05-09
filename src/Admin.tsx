@@ -1310,7 +1310,7 @@ export function AdminUsers() {
   const [searchText, setSearchText] = useState('');
   const [copiedId, setCopiedId] = useState<number | null>(null);
   
-  const defaultTeamFormState = { name: '', email: '', password: '', role: 'user', company_name: '', company_logo: '', is_approved: false, can_transfer: true, can_request: true };
+  const defaultTeamFormState = { name: '', email: '', password: '', role: 'user', company_name: '', company_logo: '', is_approved: false, can_transfer: true, can_request: true, can_request_delivery: true };
   const defaultClientFormState = { 
     email: '', senha_mestre: '', nome_completo: '', primeiro_nome: '', data_nascimento: '', telegram: '', melhor_horario: '', interesses: '', convite: ''
   };
@@ -1564,7 +1564,8 @@ export function AdminUsers() {
                            company_logo: u.company_logo || '',
                            is_approved: u.is_approved,
                            can_transfer: u.can_transfer !== false,
-                           can_request: u.can_request !== false
+                           can_request: u.can_request !== false,
+                           can_request_delivery: u.can_request_delivery !== false
                          }); 
                          setShowAddForm(true); 
                        }} className="text-[10px] uppercase font-bold text-[#007AFF] py-3 sm:px-3 sm:py-2 bg-blue-50 rounded-xl hover:bg-blue-100 transition-colors flex items-center justify-center">Editar</button>
@@ -1720,6 +1721,20 @@ export function AdminUsers() {
                          </div>
                        </label>
                      </div>
+                     <div className="pt-2">
+                       <label className="flex items-center gap-3 cursor-pointer p-4 border border-gray-200 rounded-xl bg-gray-50">
+                         <input 
+                           type="checkbox" 
+                           checked={formData.can_request_delivery !== false} 
+                           onChange={e => setFormData({...formData, can_request_delivery: e.target.checked})} 
+                           className="accent-green-500 w-5 h-5"
+                         />
+                         <div className="flex flex-col">
+                           <span className="text-sm font-bold text-[#1D1D1F]">Permitir Pedido de Entrega</span>
+                           <span className="text-[10px] text-gray-500 uppercase tracking-widest mt-0.5">Pode pedir entregador (liberado)</span>
+                         </div>
+                       </label>
+                     </div>
                    </>
                  ) : (
                    <>
@@ -1844,6 +1859,13 @@ export default function AdminApp() {
             <span className={cn("text-sm", location.pathname === '/credits' ? "font-bold" : "font-semibold")}>Logs</span>
           </button>
 
+          {user.role !== 'delivery' && (
+             <button onClick={() => navigate('/interactions')} className={cn("flex w-full items-center gap-4 px-5 py-3.5 rounded-2xl transition-all", location.pathname === '/interactions' ? "bg-[#0058bc] text-white shadow-lg shadow-[#0058bc]/20" : "text-[#414755] hover:bg-white hover:shadow-sm")}>
+                <MessageSquare className="w-5 h-5" />
+                <span className={cn("text-sm", location.pathname === '/interactions' ? "font-bold" : "font-semibold")}>Interações</span>
+             </button>
+          )}
+
           {user.role === 'admin' && (
             <>
               <button onClick={() => navigate('/users')} className={cn("flex w-full items-center gap-4 px-5 py-3.5 rounded-2xl transition-all", location.pathname === '/users' ? "bg-[#0058bc] text-white shadow-lg shadow-[#0058bc]/20" : "text-[#414755] hover:bg-white hover:shadow-sm")}>
@@ -1853,10 +1875,6 @@ export default function AdminApp() {
               <button onClick={() => navigate('/logs')} className={cn("flex w-full items-center gap-4 px-5 py-3.5 rounded-2xl transition-all", location.pathname === '/logs' ? "bg-[#0058bc] text-white shadow-lg shadow-[#0058bc]/20" : "text-[#414755] hover:bg-white hover:shadow-sm")}>
                  <List className="w-5 h-5" />
                  <span className={cn("text-sm", location.pathname === '/logs' ? "font-bold" : "font-semibold")}>Logs</span>
-              </button>
-              <button onClick={() => navigate('/interactions')} className={cn("flex w-full items-center gap-4 px-5 py-3.5 rounded-2xl transition-all", location.pathname === '/interactions' ? "bg-[#0058bc] text-white shadow-lg shadow-[#0058bc]/20" : "text-[#414755] hover:bg-white hover:shadow-sm")}>
-                 <MessageSquare className="w-5 h-5" />
-                 <span className={cn("text-sm", location.pathname === '/interactions' ? "font-bold" : "font-semibold")}>Interações</span>
               </button>
             </>
           )}
@@ -1933,14 +1951,14 @@ export default function AdminApp() {
                  <ShoppingCart className="w-5 h-5" />
                  <span className="text-[10px] font-extrabold">Vendas</span>
              </button>
+             <button onClick={() => navigate('/interactions')} className={cn("flex flex-col items-center gap-1", location.pathname === '/interactions' ? "text-[#0058bc]" : "text-[#414755] opacity-60")}>
+                 <MessageSquare className="w-5 h-5" />
+                 <span className="text-[10px] font-extrabold">Info</span>
+             </button>
            </>
          )}
          {user.role === 'admin' ? (
            <>
-           <button onClick={() => navigate('/interactions')} className={cn("flex flex-col items-center gap-1", location.pathname === '/interactions' ? "text-[#0058bc]" : "text-[#414755] opacity-60")}>
-               <MessageSquare className="w-5 h-5" />
-               <span className="text-[10px] font-extrabold">Info</span>
-           </button>
            <button onClick={() => navigate('/users')} className={cn("flex flex-col items-center gap-1", location.pathname === '/users' ? "text-[#0058bc]" : "text-[#414755] opacity-60")}>
                <Users className="w-5 h-5" />
                <span className="text-[10px] font-extrabold">Conta</span>

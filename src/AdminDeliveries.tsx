@@ -139,13 +139,24 @@ export function AdminDeliveries({ user }: { user: any }) {
                   <div className="flex justify-between items-start mb-4 mt-2">
                      <div>
                         <span className="text-[10px] font-extrabold uppercase tracking-widest text-gray-400">ID #{d.id}</span>
-                        <h4 className="font-bold text-lg mt-1 truncate">{d.customer_name || 'Desconhecido'}</h4>
+                        <h4 className="font-bold text-lg mt-1 truncate">{d.delivery_user_id ? (d.customer_name || 'Desconhecido') : 'Pedido Disponível'}</h4>
                      </div>
                      <span className={cn("px-3 py-1.5 rounded-xl text-[10px] font-extrabold uppercase", d.status === 'Entregue' ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700")}>{d.status}</span>
                   </div>
                   
                   <div className="space-y-3 mb-6">
-                     {d.endereco && (
+                     {!d.delivery_user_id ? (
+                        <div className="flex flex-col gap-3">
+                           <div className="flex gap-3 items-start">
+                              <div className="p-2 bg-gray-50 rounded-xl text-gray-400 shrink-0"><Package className="w-4 h-4" /></div>
+                              <p className="text-xs font-medium text-gray-600 leading-relaxed">Coleta: Bairro {d.seller_bairro || 'Desconhecido'}</p>
+                           </div>
+                           <div className="flex gap-3 items-start">
+                              <div className="p-2 bg-gray-50 rounded-xl text-gray-400 shrink-0"><MapPin className="w-4 h-4" /></div>
+                              <p className="text-xs font-medium text-gray-600 leading-relaxed">Entrega: Bairro {d.bairro || 'Desconhecido'}</p>
+                           </div>
+                        </div>
+                     ) : d.endereco && (
                         <div className="flex gap-3 items-start">
                            <div className="p-2 bg-gray-50 rounded-xl text-gray-400 shrink-0"><MapPin className="w-4 h-4" /></div>
                            <p className="text-xs font-medium text-gray-600 leading-relaxed">{d.endereco}, {d.numero}<br/>{d.bairro} - {d.cidade}</p>

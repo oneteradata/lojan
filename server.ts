@@ -165,6 +165,7 @@ async function initDB() {
     try { await pool.query(`ALTER TABLE users ADD COLUMN is_approved BOOLEAN DEFAULT false;`); } catch (e) {}
     try { await pool.query(`ALTER TABLE users ADD COLUMN can_transfer BOOLEAN DEFAULT true;`); } catch (e) {}
     try { await pool.query(`ALTER TABLE users ADD COLUMN can_request BOOLEAN DEFAULT true;`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE users ADD COLUMN can_request_delivery BOOLEAN DEFAULT true;`); } catch (e) {}
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS user_client (
@@ -611,6 +612,10 @@ async function startServer() {
          return res.status(403).json({ success: false, error: 'Acesso negado' });
       }
 
+      if (!isAdmin && req.user.can_request_delivery === false) {
+         return res.status(403).json({ success: false, error: 'Função de solicitar entrega desativada para sua conta.' });
+      }
+
       await pool.query('UPDATE orders SET requires_delivery = true WHERE id = $1', [orderId]);
       res.json({ success: true });
     } catch (err: any) {
@@ -720,7 +725,8 @@ async function startServer() {
             COALESCE(u.name, uc.nome_completo) as customer_name, 
             COALESCE(u.email, uc.email) as customer_email,
             uc.telefone, uc.endereco, uc.bairro, uc.cidade, uc.numero, uc.cep,
-            (SELECT p.user_id FROM order_items oi JOIN products p ON oi.product_id::text = p.id::text WHERE oi.order_id::text = o.id::text LIMIT 1) as seller_id
+            (SELECT p.user_id FROM order_items oi JOIN products p ON oi.product_id::text = p.id::text WHERE oi.order_id::text = o.id::text LIMIT 1) as seller_id,
+            (SELECT seller_uc.bairro FROM user_client seller_uc WHERE seller_uc.id::text = (SELECT p.user_id FROM order_items oi JOIN products p ON oi.product_id::text = p.id::text WHERE oi.order_id::text = o.id::text LIMIT 1)::text LIMIT 1) as seller_bairro
             FROM orders o 
             LEFT JOIN users u ON u.id::text = o.user_id::text 
             LEFT JOIN user_client uc ON uc.id::text = o.user_id::text
@@ -734,7 +740,8 @@ async function startServer() {
             COALESCE(u.name, uc.nome_completo) as customer_name, 
             COALESCE(u.email, uc.email) as customer_email,
             uc.telefone, uc.endereco, uc.bairro, uc.cidade, uc.numero, uc.cep,
-            (SELECT p.user_id FROM order_items oi JOIN products p ON oi.product_id::text = p.id::text WHERE oi.order_id::text = o.id::text LIMIT 1) as seller_id
+            (SELECT p.user_id FROM order_items oi JOIN products p ON oi.product_id::text = p.id::text WHERE oi.order_id::text = o.id::text LIMIT 1) as seller_id,
+            (SELECT seller_uc.bairro FROM user_client seller_uc WHERE seller_uc.id::text = (SELECT p.user_id FROM order_items oi JOIN products p ON oi.product_id::text = p.id::text WHERE oi.order_id::text = o.id::text LIMIT 1)::text LIMIT 1) as seller_bairro
             FROM orders o 
             LEFT JOIN users u ON u.id::text = o.user_id::text 
             LEFT JOIN user_client uc ON uc.id::text = o.user_id::text
@@ -829,7 +836,7 @@ async function startServer() {
   app.get('/api/users', requireAuth, requireAdmin, async (req, res) => {
     try {
       if (!dbConnected) throw new Error("DB offline");
-      const dbResult = await pool.query('SELECT id, name, email, role, company_name, company_logo, wallet, is_approved, can_transfer, can_request FROM users ORDER BY id DESC');
+      const dbResult = await pool.query('SELECT id, name, email, role, company_name, company_logo, wallet, is_approved, can_transfer, can_request, can_request_delivery FROM users ORDER BY id DESC');
       dbResult.rows.forEach(normalizeUserWallet);
       res.json(dbResult.rows);
     } catch (err) {
@@ -856,19 +863,19 @@ async function startServer() {
   });
 
   app.put('/api/users/:id', requireAuth, requireAdmin, async (req: any, res) => {
-    const { name, email, role, password, company_name, company_logo, is_approved, can_transfer, can_request } = req.body;
+    const { name, email, role, password, company_name, company_logo, is_approved, can_transfer, can_request, can_request_delivery } = req.body;
     try {
       if (!dbConnected) throw new Error("DB offline");
       let u;
       if (password) {
         u = await pool.query(
-          'UPDATE users SET name = $1, email = $2, role = $3, password = $4, company_name = $5, company_logo = $6, is_approved = COALESCE($8, is_approved), can_transfer = COALESCE($9, can_transfer), can_request = COALESCE($10, can_request) WHERE id = $7 RETURNING id, name, email, role, company_name, company_logo, is_approved, can_transfer, can_request',
-          [name, email, role, password, company_name || null, company_logo || null, req.params.id, is_approved, can_transfer, can_request]
+          'UPDATE users SET name = $1, email = $2, role = $3, password = $4, company_name = $5, company_logo = $6, is_approved = COALESCE($8, is_approved), can_transfer = COALESCE($9, can_transfer), can_request = COALESCE($10, can_request), can_request_delivery = COALESCE($11, can_request_delivery) WHERE id = $7 RETURNING id, name, email, role, company_name, company_logo, is_approved, can_transfer, can_request, can_request_delivery',
+          [name, email, role, password, company_name || null, company_logo || null, req.params.id, is_approved, can_transfer, can_request, can_request_delivery]
         );
       } else {
         u = await pool.query(
-          'UPDATE users SET name = $1, email = $2, role = $3, company_name = $4, company_logo = $5, is_approved = COALESCE($7, is_approved), can_transfer = COALESCE($8, can_transfer), can_request = COALESCE($9, can_request) WHERE id = $6 RETURNING id, name, email, role, company_name, company_logo, is_approved, can_transfer, can_request',
-          [name, email, role, company_name || null, company_logo || null, req.params.id, is_approved, can_transfer, can_request]
+          'UPDATE users SET name = $1, email = $2, role = $3, company_name = $4, company_logo = $5, is_approved = COALESCE($7, is_approved), can_transfer = COALESCE($8, can_transfer), can_request = COALESCE($9, can_request), can_request_delivery = COALESCE($10, can_request_delivery) WHERE id = $6 RETURNING id, name, email, role, company_name, company_logo, is_approved, can_transfer, can_request, can_request_delivery',
+          [name, email, role, company_name || null, company_logo || null, req.params.id, is_approved, can_transfer, can_request, can_request_delivery]
         );
       }
       await logAction(req.user.id, req.user.email, 'usuario_editado', `O admin editou ${email}`);
