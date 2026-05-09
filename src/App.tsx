@@ -306,20 +306,20 @@ function Storefront() {
           <div className="flex items-center gap-3">
             <button onClick={() => { localStorage.removeItem('token'); setUser(null); }} className="flex items-center gap-1 hover:text-blue-200 transition-colors" title="Sair">
               <LogOut className="w-3 h-3" />
-              <span className="hidden sm:inline uppercase">Sair</span>
+              <span className=" uppercase">Sair</span>
             </button>
             <div className="w-px h-4 bg-blue-300"></div>
             {user.company_logo && (
               <img src={user.company_logo} alt="Logo" className="w-5 h-5 md:w-6 md:h-6 object-cover rounded-full border border-blue-300/50" />
             )}
-            <span className="font-bold uppercase tracking-wider hidden sm:inline">{user.company_name || 'Usuário'}</span>
+            <span className="font-bold uppercase tracking-wider ">{user.company_name || 'Usuário'}</span>
           </div>
           
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-1 cursor-help" title="Produtos Ativos">
                <ShoppingBag className="w-3 h-3 text-blue-200" />
                <span className="font-bold">{user.active_products_count || 0}</span>
-               <span className="uppercase text-blue-100 hidden sm:inline">Produtos</span>
+               <span className="uppercase text-blue-100 ">Produtos</span>
             </div>
             <div className="w-px h-4 bg-blue-300"></div>
             
@@ -340,7 +340,7 @@ function Storefront() {
                ) : showWallet ? (
                  <span className="text-blue-200 uppercase cursor-pointer" onClick={() => window.location.href = '/etoken'}>Sem Tokens</span>
                ) : (
-                 <span className="text-blue-200 uppercase tracking-widest hidden sm:inline cursor-pointer" onClick={() => window.location.href = '/etoken'}>Oculto</span>
+                 <span className="text-blue-200 uppercase tracking-widest  cursor-pointer" onClick={() => window.location.href = '/etoken'}>Oculto</span>
                )}
             </div>
           </div>
@@ -366,9 +366,9 @@ function Storefront() {
         <div className="flex gap-6 items-center">
           <Search className="w-4 h-4 cursor-pointer hover:text-[#007AFF] transition-colors" strokeWidth={1.5} />
           {user ? (
-            <span className="text-xs uppercase tracking-widest text-[#007AFF] hidden md:block font-bold" title={`ID: ${user.id}`}>Olá, {user.name.split(' ')[0]} (ID: {user.id})</span>
+            <span className="text-xs uppercase tracking-widest text-[#007AFF]  font-bold" title={`ID: ${user.id}`}>Olá, {user.name.split(' ')[0]} (ID: {user.id})</span>
           ) : (
-            <User onClick={() => setShowLogin(true)} className="w-4 h-4 cursor-pointer hover:text-[#007AFF] transition-colors hidden md:block" strokeWidth={1.5} />
+            <User onClick={() => setShowLogin(true)} className="w-4 h-4 cursor-pointer hover:text-[#007AFF] transition-colors " strokeWidth={1.5} />
           )}
           <div className="relative">
              <ShoppingBag onClick={() => setIsCartOpen(true)} className="w-4 h-4 cursor-pointer hover:text-[#007AFF] transition-colors" strokeWidth={1.5} />
@@ -568,7 +568,7 @@ function Storefront() {
           transition={{ duration: 1 }}
           className="order-1 md:order-2 flex gap-8"
         >
-          <div className="hidden md:block">
+          <div className="">
             <span className="vertical-text text-gray-500">Desde 1998</span>
           </div>
           <div>
@@ -621,7 +621,7 @@ function Storefront() {
       <section id="products-section" className="py-32 px-6 md:px-12 max-w-7xl mx-auto w-full text-[#1D1D1F]">
         <div className="flex justify-between items-end mb-16">
           <h3 className="font-serif text-4xl md:text-5xl font-light">Novidades</h3>
-          <a href="#" className="hidden md:inline-block nav-link text-xs tracking-widest uppercase truncate">
+          <a href="#" className=" nav-link text-xs tracking-widest uppercase truncate">
             Ver Todas
           </a>
         </div>
@@ -679,7 +679,7 @@ function Storefront() {
           })}
         </div>
         
-        <div className="mt-12 text-center md:hidden">
+        <div className="mt-12 text-center">
             <a href="#" className="inline-block border border-gray-300 hover:border-[#007AFF] hover:bg-[#007AFF]/10 text-gray-900 font-bold hover:text-[#007AFF] transition-all duration-300 rounded-full px-8 py-3 text-xs tracking-widest uppercase">
               Ver Todas
             </a>

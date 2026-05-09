@@ -1550,7 +1550,7 @@ export function AdminUsers() {
                      )}
                    </div>
                  </div>
-                 <div className="grid grid-cols-3 gap-2 shrink-0 border-t border-gray-100 pt-3 mt-3 w-full sm:w-auto sm:border-0 sm:pt-0 sm:mt-0 sm:flex sm:flex-nowrap">
+                 <div className="flex flex-wrap sm:flex-nowrap gap-2 shrink-0 border-t border-gray-100 pt-3 mt-3 w-full sm:w-auto sm:border-0 sm:pt-0 sm:mt-0">
                    {u.email !== 'admin@valentina.com' && (
                      <>
                        <button onClick={() => { 
@@ -1568,14 +1568,14 @@ export function AdminUsers() {
                            can_request_delivery: u.can_request_delivery !== false
                          }); 
                          setShowAddForm(true); 
-                       }} className="text-[10px] uppercase font-bold text-[#007AFF] py-3 sm:px-3 sm:py-2 bg-blue-50 rounded-xl hover:bg-blue-100 transition-colors flex items-center justify-center">Editar</button>
-                       <button onClick={() => handleToggleApproval(u)} className="py-3 sm:px-3 sm:py-2 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors flex items-center justify-center">
-                         {u.is_approved ? <><X className="w-4 h-4 text-red-500" title="Revogar Aprovação" /><span className="text-[10px] text-red-500 font-bold uppercase hidden sm:inline ml-1">Revogar</span></> : <><Check className="w-4 h-4 text-green-500" title="Aprovar Usuário" /><span className="text-[10px] text-green-500 font-bold uppercase hidden sm:inline ml-1">Aprovar</span></>}
+                       }} className="flex-1 sm:flex-initial text-[10px] uppercase font-bold text-[#007AFF] py-3 sm:px-3 sm:py-2 bg-blue-50 rounded-xl hover:bg-blue-100 transition-colors flex items-center justify-center">Editar</button>
+                       <button onClick={() => handleToggleApproval(u)} className="flex-1 sm:flex-initial py-3 sm:px-3 sm:py-2 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors flex items-center justify-center">
+                         {u.is_approved ? <><X className="w-4 h-4 text-red-500" title="Revogar Aprovação" /><span className="text-[10px] text-red-500 font-bold uppercase ml-1">Revogar</span></> : <><Check className="w-4 h-4 text-green-500" title="Aprovar Usuário" /><span className="text-[10px] text-green-500 font-bold uppercase ml-1">Aprovar</span></>}
                        </button>
-                       <button onClick={() => handleToggleBlock(u, 'team')} className="py-3 sm:px-3 sm:py-2 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors flex items-center justify-center">
+                       <button onClick={() => handleToggleBlock(u, 'team')} className="flex-1 sm:flex-initial py-3 sm:px-3 sm:py-2 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors flex items-center justify-center">
                          {u.role === 'blocked' ? <Unlock className="w-4 h-4 text-green-600" /> : <Lock className="w-4 h-4 text-orange-500" />}
                        </button>
-                       <button onClick={() => handleDelete(u, 'team')} className="py-3 sm:px-3 sm:py-2 bg-red-50 rounded-xl hover:bg-red-100 transition-colors flex items-center justify-center">
+                       <button onClick={() => handleDelete(u, 'team')} className="flex-1 sm:flex-initial py-3 sm:px-3 sm:py-2 bg-red-50 rounded-xl hover:bg-red-100 transition-colors flex items-center justify-center">
                          <Trash2 className="w-4 h-4 text-red-500" />
                        </button>
                      </>
@@ -1604,7 +1604,7 @@ export function AdminUsers() {
                      </p>
                    </div>
                  </div>
-                 <div className="grid grid-cols-3 gap-2 shrink-0 border-t border-gray-100 pt-3 mt-3 w-full sm:w-auto sm:border-0 sm:pt-0 sm:mt-0 sm:flex sm:flex-nowrap">
+                 <div className="flex flex-wrap sm:flex-nowrap gap-2 shrink-0 border-t border-gray-100 pt-3 mt-3 w-full sm:w-auto sm:border-0 sm:pt-0 sm:mt-0">
                    <button onClick={() => { 
                      setEditingUser(c); 
                      setFormData({ 
@@ -1619,11 +1619,11 @@ export function AdminUsers() {
                        convite: c.convite || ''
                      }); 
                      setShowAddForm(true); 
-                   }} className="text-[10px] uppercase font-bold text-[#007AFF] py-3 sm:px-3 sm:py-2 bg-blue-50 rounded-xl hover:bg-blue-100 transition-colors flex items-center justify-center">Editar</button>
-                   <button onClick={() => handleToggleBlock(c, 'client')} className="py-3 sm:px-3 sm:py-2 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors flex items-center justify-center">
+                   }} className="flex-1 sm:flex-initial text-[10px] uppercase font-bold text-[#007AFF] py-3 sm:px-3 sm:py-2 bg-blue-50 rounded-xl hover:bg-blue-100 transition-colors flex items-center justify-center">Editar</button>
+                   <button onClick={() => handleToggleBlock(c, 'client')} className="flex-1 sm:flex-initial py-3 sm:px-3 sm:py-2 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors flex items-center justify-center">
                      {c.role === 'blocked' ? <Unlock className="w-4 h-4 text-green-600" /> : <Lock className="w-4 h-4 text-orange-500" />}
                    </button>
-                   <button onClick={() => handleDelete(c, 'client')} className="py-3 sm:px-3 sm:py-2 bg-red-50 rounded-xl hover:bg-red-100 transition-colors flex items-center justify-center">
+                   <button onClick={() => handleDelete(c, 'client')} className="flex-1 sm:flex-initial py-3 sm:px-3 sm:py-2 bg-red-50 rounded-xl hover:bg-red-100 transition-colors flex items-center justify-center">
                      <Trash2 className="w-4 h-4 text-red-500" />
                    </button>
                  </div>
@@ -1901,7 +1901,7 @@ export default function AdminApp() {
                 <h2 className="text-2xl font-extrabold text-[#1a1b1f] tracking-tight">{location.pathname === '/' ? 'Dashboard' : location.pathname === '/products' ? 'Produtos' : location.pathname === '/etoken' ? 'eToken' : location.pathname === '/orders' ? 'Vendas' : location.pathname === '/credits' ? 'Logs' : location.pathname === '/users' ? 'Equipe' : 'Minha Loja'}</h2>
             </div>
             <div className="flex items-center gap-4 md:gap-8 justify-end">
-                <div className="relative hidden lg:block">
+                <div className="relative ">
                    <input type="text" placeholder="Pesquisar transações..." className="bg-white border-none h-11 w-72 pl-12 pr-4 rounded-2xl text-sm focus:ring-2 focus:ring-[#0058bc]/20 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.04),_0_2px_10px_-2px_rgba(0,0,0,0.02)] transition-all outline-none text-[#1a1b1f]" />
                    <Search className="w-5 h-5 absolute left-4 top-3 text-[#414755] opacity-40" />
                 </div>
@@ -1911,7 +1911,7 @@ export default function AdminApp() {
                    </button>
                    <div className="h-8 w-px bg-[#c1c6d7]/30 mx-0 md:mx-2"></div>
                    <div className="flex items-center gap-3 bg-white pl-4 pr-1 py-1 rounded-2xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.04),_0_2px_10px_-2px_rgba(0,0,0,0.02)]">
-                      <div className="text-right hidden sm:block">
+                      <div className="text-right">
                          <p className="text-xs font-extrabold leading-tight text-[#1a1b1f]">{user.name}</p>
                          <p className="text-[10px] text-[#414755] font-medium capitalize">{user.role}</p>
                       </div>
