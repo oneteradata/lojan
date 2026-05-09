@@ -230,15 +230,18 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveCont
 // -- Overview Component --
 function AdminOverview({ user, onRefreshUser }: { user: any, onLogout?: () => void, onRefreshUser?: () => void }) {
   const [stats, setStats] = useState({ products: 0, orders: 0, stock: 0, likes: 0, monthlySales: [] });
+  const [recentOrders, setRecentOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchStats = async () => {
     setLoading(true);
     try {
       if (onRefreshUser) onRefreshUser();
-      const res = await apiFetch('/api/stats');
+      const [res, ordersRes] = await Promise.all([apiFetch('/api/stats'), apiFetch('/api/orders')]);
       const data = await res.json();
       if (data.success) setStats(data.stats);
+      const ordersData = await ordersRes.json();
+      if (ordersData.success) setRecentOrders(ordersData.sales.slice(0, 5));
     } catch (e) {}
     setLoading(false);
   };
@@ -337,29 +340,7 @@ function AdminOverview({ user, onRefreshUser }: { user: any, onLogout?: () => vo
                    <th className="pb-5">Status</th>
                  </tr>
                </thead>
-               <tbody className="text-sm">
-                 <tr className="group hover:bg-[#faf9fe]/50 transition-colors">
-                   <td className="py-5 font-mono text-xs font-bold text-[#414755]">#NB-8821</td>
-                   <td className="py-5 font-bold">Carlos Oliveira</td>
-                   <td className="py-5 font-medium text-[#414755]">12 Out, 2023</td>
-                   <td className="py-5 font-extrabold">R$ 840,00</td>
-                   <td className="py-5"><span className="bg-[#ffdbcc] text-[#7c2e00] px-3 py-1.5 rounded-xl text-[10px] font-extrabold uppercase">Concluído</span></td>
-                 </tr>
-                 <tr className="group hover:bg-[#faf9fe]/50 transition-colors">
-                   <td className="py-5 font-mono text-xs font-bold text-[#414755]">#NB-8819</td>
-                   <td className="py-5 font-bold">Ana Souza</td>
-                   <td className="py-5 font-medium text-[#414755]">12 Out, 2023</td>
-                   <td className="py-5 font-extrabold">R$ 1.250,00</td>
-                   <td className="py-5"><span className="bg-[#e2dfff] text-[#3631b4] px-3 py-1.5 rounded-xl text-[10px] font-extrabold uppercase">Pendente</span></td>
-                 </tr>
-                 <tr className="group hover:bg-[#faf9fe]/50 transition-colors">
-                   <td className="py-5 font-mono text-xs font-bold text-[#414755]">#NB-8815</td>
-                   <td className="py-5 font-bold">Marcos Lima</td>
-                   <td className="py-5 font-medium text-[#414755]">11 Out, 2023</td>
-                   <td className="py-5 font-extrabold">R$ 432,10</td>
-                   <td className="py-5"><span className="bg-[#ffdad6] text-[#93000a] px-3 py-1.5 rounded-xl text-[10px] font-extrabold uppercase">Cancelado</span></td>
-                 </tr>
-               </tbody>
+               <tbody className="text-sm">{recentOrders.length > 0 ? recentOrders.map(o => (<tr key={o.id} className="group hover:bg-[#faf9fe]/50 transition-colors"><td className="py-5 font-mono text-xs font-bold text-[#414755]">#{o.id}</td><td className="py-5 font-bold">{o.customer_name || 'Desconhecido'}</td><td className="py-5 font-medium text-[#414755]">{new Date(o.created_at).toLocaleDateString('pt-BR')}</td><td className="py-5 font-extrabold">R$ {parseFloat(o.total_price).toFixed(2).replace('.', ',')}</td><td className="py-5"><span className={cn("px-3 py-1.5 rounded-xl text-[10px] font-extrabold uppercase", o.status === 'Entregue' ? 'bg-[#e2ffff] text-[#006b6b]' : o.status === 'Concluído' ? 'bg-[#ffdbcc] text-[#7c2e00]' : o.status === 'Pendente' ? 'bg-[#ffdad6] text-[#93000a]' : 'bg-[#e2dfff] text-[#3631b4]')}>{o.status}</span></td></tr>)) : (<tr><td colSpan={5} className="py-5 text-center text-gray-500">Nenhum pedido recente.</td></tr>)}</tbody>
              </table>
            </div>
         </div>
@@ -1002,8 +983,12 @@ function AdminOrders() {
       .then(r => r.json())
       .then(d => {
          if (d && d.success) {
-            setPurchases(d.purchases || []);
-            setSales(d.sales || []);
+            const allSales = d.sales || [];
+            const allPurchases = d.purchases || [];
+            const completedSales = allSales.filter((o: any) => o.status === 'Entregue');
+            const pendingSales = allSales.filter((o: any) => o.status !== 'Entregue');
+            setPurchases([...allPurchases, ...pendingSales].filter((o, index, self) => index === self.findIndex((t) => t.id === o.id)));
+            setSales(completedSales);
             // Se não tiver compras e tiver vendas, muda pra vendas logo
             if (d.purchases?.length === 0 && d.sales?.length > 0) {
                setActiveTab('sales');
@@ -1092,7 +1077,7 @@ function AdminOrders() {
                     </div>
                     <div className="text-right">
                       <p className="font-bold text-[#007AFF]">{o.total_price}</p>
-                      <span className="text-[10px] bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-full font-bold uppercase">{o.status}</span>
+                      <span className={cn("text-[10px] px-2 py-0.5 rounded-full font-bold uppercase", o.status === 'Pendente' ? 'bg-red-100 text-red-700 animate-pulse border border-red-200' : o.status === 'Entregue' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700')}>{o.status}</span>
                     </div>
                  </div>
                ))}
@@ -1190,25 +1175,66 @@ function AdminOrders() {
 
        {/* INVISIBLE RECEIPT FOR PRINTING */}
        {selectedOrder && (
-          <div id="receipt-print" className="hidden p-4 text-sm w-[300px] border border-black bg-white m-0 text-black">
-             <div className="text-center font-bold text-lg mb-2 uppercase">PEDIDO #{selectedOrder.id}</div>
-             <div className="text-center text-xs mb-4">{new Date(selectedOrder.created_at).toLocaleString('pt-BR')}</div>
-             <div className="text-xs mb-2 pb-2 border-b border-black border-dashed">
-                Cliente: {selectedOrder.customer_name || 'Desconhecido'}
+          <div id="receipt-print" className="hidden p-8 w-full max-w-[800px] mx-auto bg-white m-0 text-black font-sans border-2 border-black">
+             <div className="flex justify-between items-center border-b-4 border-black pb-6 mb-6">
+                <div>
+                   <h1 className="text-4xl font-extrabold uppercase tracking-widest">Etiqueta de Envio</h1>
+                   <p className="text-lg font-bold mt-2">Pedido #{selectedOrder.id}</p>
+                   <p className="text-sm text-gray-600">Data: {new Date(selectedOrder.created_at).toLocaleString('pt-BR')}</p>
+                </div>
+                <img src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=https://ais-pre-kjzo6ypjmq5gasz4w766dq-44027131642.us-west1.run.app/loja/order/${selectedOrder.id}`} className="w-32 h-32" />
              </div>
-             <div className="space-y-1 mb-2 pb-2 border-b border-black border-dashed">
-                {selectedOrder.items && selectedOrder.items.map((item: any) => (
-                   <div key={item.id} className="flex justify-between text-xs">
-                      <span>{item.quantity}x {(item.name || item.product_name || 'Produto').substring(0,20)}</span>
-                      <span>{parseFloat(item.price || 0).toFixed(2)}</span>
-                   </div>
-                ))}
+
+             <div className="grid grid-cols-2 gap-8 mb-8">
+                <div className="border-2 border-black p-6 rounded-xl">
+                   <h3 className="text-sm font-bold uppercase tracking-widest text-gray-500 mb-4">Destinatário</h3>
+                   <p className="text-xl font-bold mb-2">{selectedOrder.customer_name || 'Usuário Final'}</p>
+                   <p className="text-md">{selectedOrder.customer_email}</p>
+                   {selectedOrder.telefone && <p className="text-md">Tel: {selectedOrder.telefone}</p>}
+                   {selectedOrder.endereco && (
+                      <div className="mt-4 text-md">
+                         <p>{selectedOrder.endereco}, {selectedOrder.numero}</p>
+                         <p>{selectedOrder.bairro}</p>
+                         <p>{selectedOrder.cidade} - CEP: {selectedOrder.cep}</p>
+                      </div>
+                   )}
+                </div>
+                <div className="border-2 border-black p-6 rounded-xl">
+                   <h3 className="text-sm font-bold uppercase tracking-widest text-gray-500 mb-4">Remetente</h3>
+                   <p className="text-xl font-bold mb-2">Maison Valentina</p>
+                   <p className="text-md">Logística e Distribuição</p>
+                </div>
              </div>
-             <div className="flex justify-between font-bold mt-2">
-                <span>TOTAL:</span>
-                <span>{selectedOrder.total_price}</span>
+
+             <div className="border-2 border-black rounded-xl overflow-hidden">
+                <table className="w-full text-left">
+                   <thead className="bg-black text-white">
+                      <tr>
+                         <th className="p-4 font-bold uppercase tracking-widest text-sm">Qtd</th>
+                         <th className="p-4 font-bold uppercase tracking-widest text-sm">Produto / Detalhes</th>
+                         <th className="p-4 font-bold uppercase tracking-widest text-sm text-right">Valor</th>
+                      </tr>
+                   </thead>
+                   <tbody className="divide-y border-black">
+                      {selectedOrder.items && selectedOrder.items.map((item: any) => (
+                         <tr key={item.id}>
+                            <td className="p-4 font-bold text-lg">{item.quantity}x</td>
+                            <td className="p-4">
+                               <p className="font-bold text-lg">{item.name || item.product_name || 'Produto'}</p>
+                               {item.variations && <p className="text-sm text-gray-600 mt-1">{JSON.stringify(item.variations)}</p>}
+                            </td>
+                            <td className="p-4 text-right font-bold text-lg">{parseFloat(item.price || 0).toFixed(2)}</td>
+                         </tr>
+                      ))}
+                   </tbody>
+                </table>
+                <div className="bg-gray-100 p-4 flex justify-between items-center border-t-2 border-black">
+                   <span className="font-bold uppercase tracking-widest">Total do Pedido:</span>
+                   <span className="text-2xl font-extrabold">{selectedOrder.total_price}</span>
+                </div>
              </div>
-             <div className="text-center text-[10px] mt-6">--- OBRIGADO PELA COMPRA ---</div>
+
+             <div className="text-center mt-12 text-sm font-bold uppercase tracking-widest text-gray-500">Obrigado por comprar conosco.</div>
           </div>
        )}
     </motion.div>
@@ -1698,6 +1724,7 @@ export function AdminUsers() {
 // -- Main Router Shell --
 export default function AdminApp() {
   const [user, setUser] = useState<any>(null);
+  const [pendingCount, setPendingCount] = useState(0);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -1748,7 +1775,7 @@ export default function AdminApp() {
           </button>
           
           <button onClick={() => navigate('/orders')} className={cn("flex w-full items-center gap-4 px-5 py-3.5 rounded-2xl transition-all", location.pathname === '/orders' ? "bg-[#0058bc] text-white shadow-lg shadow-[#0058bc]/20" : "text-[#414755] hover:bg-white hover:shadow-sm")}>
-            <ShoppingCart className="w-5 h-5" />
+            <div className="relative"><ShoppingCart className="w-5 h-5" />{pendingCount > 0 && <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5 rounded-full bg-red-600 ring-2 ring-white"></span>}</div>
             <span className={cn("text-sm", location.pathname === '/orders' ? "font-bold" : "font-semibold")}>Vendas</span>
           </button>
 
