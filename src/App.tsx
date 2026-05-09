@@ -68,6 +68,7 @@ function Storefront() {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [companyName, setCompanyName] = useState('');
+  const [requestedRole, setRequestedRole] = useState('user');
   const [companyLogo, setCompanyLogo] = useState('');
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [authError, setAuthError] = useState('');
@@ -101,7 +102,7 @@ function Storefront() {
     setAuthError('');
     
     const endpoint = isRegistering ? '/api/register' : '/api/login';
-    const bodyPayload = isRegistering ? { name, email, password, company_name: companyName, company_logo: companyLogo } : { email, password };
+    const bodyPayload = isRegistering ? { name, email, password, company_name: companyName, company_logo: companyLogo, requested_role: requestedRole } : { email, password };
 
     try {
       const res = await apiFetch(endpoint, {
@@ -415,7 +416,16 @@ function Storefront() {
                       />
                       <label className="absolute text-[10px] uppercase tracking-wider text-gray-500 top-2 left-4 peer-focus:text-[#007AFF] transition-colors">Nome</label>
                     </div>
-                    <div className="relative group">
+                    <div className="flex gap-4 p-2 bg-gray-50 rounded-xl mb-2">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                           <input type="radio" name="role" checked={requestedRole === 'user'} onChange={() => setRequestedRole('user')} className="accent-[#007AFF]" />
+                           <span className="text-sm font-medium">Conta de Vendedor</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                           <input type="radio" name="role" checked={requestedRole === 'delivery'} onChange={() => setRequestedRole('delivery')} className="accent-[#007AFF]" />
+                           <span className="text-sm font-medium">Entregador Parceiro</span>
+                        </label>
+                    </div><div className="relative group">
                       <input 
                         type="text" 
                         placeholder="Nome da Empresa (opcional)" 
@@ -645,11 +655,7 @@ function Storefront() {
               >
                 <div className="overflow-hidden mb-4 relative aspect-[3/4] bg-gray-100">
                   {isVideo ? (
-                    <video 
-                      src={imgSrc} 
-                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 mixes-multiply"
-                      autoPlay muted loop playsInline
-                    />
+                    <video src={imgSrc + '#t=0.1'} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 mixes-multiply" muted playsInline preload="metadata" />
                   ) : (
                     <img 
                       src={imgSrc} 

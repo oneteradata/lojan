@@ -7,6 +7,7 @@ import { twMerge } from "tailwind-merge";
 import { AdminCredits } from "./AdminCredits";
 import { AdminLogs } from "./AdminLogs";
 import { AdminInteractions } from "./AdminInteractions";
+import { AdminDeliveries } from "./AdminDeliveries";
 import { AdminWallet } from "./AdminWallet";
 import { Wallet, MessageSquare } from "lucide-react";
 
@@ -450,7 +451,7 @@ function AdminProducts({ user, onRefreshUser }: { user: any, onRefreshUser?: () 
                       return <div className="absolute top-2 left-2 bg-black/50 text-white text-[9px] font-bold px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity z-10 uppercase">{daysRemaining} dias restantes</div>;
                     })()}
                     {isVideo ? (
-                       <video src={displayUrl} className="w-full aspect-square object-cover bg-gray-100" muted loop autoPlay playsInline />
+                       <video src={displayUrl + '#t=0.1'} className="w-full aspect-square object-cover bg-gray-100" muted playsInline preload="metadata" />
                     ) : (
                        <img src={displayUrl} className="w-full aspect-square object-cover bg-gray-100" />
                     )}
@@ -647,7 +648,7 @@ function ProductModal({ item, user, onClose }: { item?: any, user?: any, onClose
                   {media.map((m, i) => (
                     <div key={i} className="relative w-24 h-24 shrink-0 rounded-2xl overflow-hidden bg-white shadow-sm border border-gray-100 group">
                       {m.type === 'video' ? (
-                        <video src={m.url} className="w-full h-full object-cover" muted loop autoPlay playsInline preload="metadata" />
+                        <video src={m.url} className="w-full h-full object-cover" muted playsInline preload="metadata" controls />
                       ) : (
                         <img src={m.url} className="w-full h-full object-cover" />
                       )}
@@ -1764,20 +1765,24 @@ export default function AdminApp() {
             <span className={cn("text-sm", location.pathname === '/' ? "font-bold" : "font-semibold")}>Início</span>
           </button>
           
-          <button onClick={() => navigate('/products')} className={cn("flex w-full items-center gap-4 px-5 py-3.5 rounded-2xl transition-all", location.pathname === '/products' ? "bg-[#0058bc] text-white shadow-lg shadow-[#0058bc]/20" : "text-[#414755] hover:bg-white hover:shadow-sm")}>
-            <Package className="w-5 h-5" />
-            <span className={cn("text-sm", location.pathname === '/products' ? "font-bold" : "font-semibold")}>Produtos</span>
-          </button>
+          {user.role !== 'delivery' && (
+             <button onClick={() => navigate('/products')} className={cn("flex w-full items-center gap-4 px-5 py-3.5 rounded-2xl transition-all", location.pathname === '/products' ? "bg-[#0058bc] text-white shadow-lg shadow-[#0058bc]/20" : "text-[#414755] hover:bg-white hover:shadow-sm")}>
+               <Package className="w-5 h-5" />
+               <span className={cn("text-sm", location.pathname === '/products' ? "font-bold" : "font-semibold")}>Produtos</span>
+             </button>
+          )}
           
           <button onClick={() => navigate('/etoken')} className={cn("flex w-full items-center gap-4 px-5 py-3.5 rounded-2xl transition-all", location.pathname === '/etoken' ? "bg-[#0058bc] text-white shadow-lg shadow-[#0058bc]/20" : "text-[#414755] hover:bg-white hover:shadow-sm")}>
             <Wallet className="w-5 h-5" />
             <span className={cn("text-sm", location.pathname === '/etoken' ? "font-bold" : "font-semibold")}>eToken</span>
           </button>
           
-          <button onClick={() => navigate('/orders')} className={cn("flex w-full items-center gap-4 px-5 py-3.5 rounded-2xl transition-all", location.pathname === '/orders' ? "bg-[#0058bc] text-white shadow-lg shadow-[#0058bc]/20" : "text-[#414755] hover:bg-white hover:shadow-sm")}>
-            <div className="relative"><ShoppingCart className="w-5 h-5" />{pendingCount > 0 && <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5 rounded-full bg-red-600 ring-2 ring-white"></span>}</div>
-            <span className={cn("text-sm", location.pathname === '/orders' ? "font-bold" : "font-semibold")}>Vendas</span>
-          </button>
+          {user.role !== 'delivery' && (
+             <button onClick={() => navigate('/orders')} className={cn("flex w-full items-center gap-4 px-5 py-3.5 rounded-2xl transition-all", location.pathname === '/orders' ? "bg-[#0058bc] text-white shadow-lg shadow-[#0058bc]/20" : "text-[#414755] hover:bg-white hover:shadow-sm")}>
+               <div className="relative"><ShoppingCart className="w-5 h-5" />{pendingCount > 0 && <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5 rounded-full bg-red-600 ring-2 ring-white"></span>}</div>
+               <span className={cn("text-sm", location.pathname === '/orders' ? "font-bold" : "font-semibold")}>Vendas</span>
+             </button>
+          )}
 
           <button onClick={() => navigate('/credits')} className={cn("flex w-full items-center gap-4 px-5 py-3.5 rounded-2xl transition-all", location.pathname === '/credits' ? "bg-[#0058bc] text-white shadow-lg shadow-[#0058bc]/20" : "text-[#414755] hover:bg-white hover:shadow-sm")}>
             <Landmark className="w-5 h-5" />
@@ -1845,7 +1850,7 @@ export default function AdminApp() {
         
         <div className="flex-1 pb-24 md:pb-8">
           <Routes>
-            <Route path="/" element={<AdminOverview user={user} onRefreshUser={refreshUser} onLogout={() => { localStorage.removeItem('token'); setUser(null); }} />} />
+            <Route path="/" element={user.role === 'delivery' ? <AdminDeliveries user={user} /> : <AdminOverview user={user} onRefreshUser={refreshUser} onLogout={() => { localStorage.removeItem('token'); setUser(null); }} />} />
             <Route path="/products" element={<AdminProducts user={user} onRefreshUser={refreshUser} />} />
             <Route path="/orders" element={<AdminOrders />} />
             <Route path="/etoken" element={<AdminWallet user={user} onRefreshUser={refreshUser} />} />
@@ -1861,16 +1866,20 @@ export default function AdminApp() {
       <nav className="md:hidden fixed bottom-6 left-6 right-6 h-18 bg-white/80 backdrop-blur-2xl rounded-3xl flex items-center justify-around z-50 shadow-2xl border border-white/50 px-2">
          <button onClick={() => navigate('/')} className={cn("flex flex-col items-center gap-1", location.pathname === '/' ? "text-[#0058bc]" : "text-[#414755] opacity-60")}>
              <LayoutDashboard className="w-5 h-5" />
-             <span className="text-[10px] font-extrabold">Início</span>
+             <span className="text-[10px] font-extrabold">{user.role === 'delivery' ? 'Entregas' : 'Início'}</span>
          </button>
-         <button onClick={() => navigate('/products')} className={cn("flex flex-col items-center gap-1", location.pathname === '/products' ? "text-[#0058bc]" : "text-[#414755] opacity-60")}>
-             <Package className="w-5 h-5" />
-             <span className="text-[10px] font-extrabold">Produtos</span>
-         </button>
-         <button onClick={() => navigate('/orders')} className={cn("flex flex-col items-center gap-1", location.pathname === '/orders' ? "text-[#0058bc]" : "text-[#414755] opacity-60")}>
-             <ShoppingCart className="w-5 h-5" />
-             <span className="text-[10px] font-extrabold">Vendas</span>
-         </button>
+         {user.role !== 'delivery' && (
+           <>
+             <button onClick={() => navigate('/products')} className={cn("flex flex-col items-center gap-1", location.pathname === '/products' ? "text-[#0058bc]" : "text-[#414755] opacity-60")}>
+                 <Package className="w-5 h-5" />
+                 <span className="text-[10px] font-extrabold">Produtos</span>
+             </button>
+             <button onClick={() => navigate('/orders')} className={cn("flex flex-col items-center gap-1", location.pathname === '/orders' ? "text-[#0058bc]" : "text-[#414755] opacity-60")}>
+                 <ShoppingCart className="w-5 h-5" />
+                 <span className="text-[10px] font-extrabold">Vendas</span>
+             </button>
+           </>
+         )}
          {user.role === 'admin' ? (
            <>
            <button onClick={() => navigate('/interactions')} className={cn("flex flex-col items-center gap-1", location.pathname === '/interactions' ? "text-[#0058bc]" : "text-[#414755] opacity-60")}>

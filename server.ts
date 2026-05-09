@@ -516,6 +516,7 @@ async function startServer() {
       if (!dbConnected) throw new Error("DB offline");
       const userEmail = req.user.email;
       const isAdmin = req.user.role === 'admin';
+      const isDelivery = req.user.role === 'delivery';
       
       const productObj = await pool.query('SELECT * FROM products WHERE id = $1', [req.params.id]);
       if (productObj.rows.length === 0) return res.status(404).json({ success: false, error: 'Produto não encontrado' });
@@ -589,6 +590,18 @@ async function startServer() {
     }
   });
 
+  // Update order status
+  app.put('/api/orders/:id/status', requireAuth, async (req: any, res) => {
+    try {
+      const { status } = req.body;
+      const result = await pool.query('UPDATE orders SET status = $1 WHERE id = $2 RETURNING *', [status, req.params.id]);
+      res.json({ success: true, order: result.rows[0] });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Failed to update order status' });
+    }
+  });
+
   // Dashboard Stats
   app.get('/api/stats', requireAuth, async (req: any, res) => {
     try {
@@ -643,11 +656,12 @@ async function startServer() {
       if (!dbConnected) throw new Error("DB offline");
       const userId = req.user.id;
       const isAdmin = req.user.role === 'admin';
+      const isDelivery = req.user.role === 'delivery';
 
       let sales: any[] = [];
       let purchases: any[] = [];
 
-      if (isAdmin) {
+      if (isAdmin || isDelivery) {
           const dbResult = await pool.query(`
             SELECT DISTINCT o.*, 
             COALESCE(u.name, uc.nome_completo) as customer_name, 
@@ -1258,7 +1272,7 @@ async function startServer() {
 
   // Registro de usuários
   app.post('/api/register', async (req, res) => {
-    const { name, email, password, company_name, company_logo } = req.body;
+    const { name, email, password, company_name, company_logo, requested_role } = req.body;
     
     if (!name || !email || !password) {
       return res.status(400).json({ success: false, error: 'Preencha todos os campos obrigatórios.' });
@@ -1266,7 +1280,7 @@ async function startServer() {
 
     try {
       if (!dbConnected) {
-        const user = { id: Date.now(), name, email, role: 'user', company_name, company_logo };
+        const user = { id: Date.now(), name, email, role: requested_role === 'delivery' ? 'delivery' : 'user', company_name, company_logo };
         const token = jwt.sign(user, JWT_SECRET, { expiresIn: '1d' });
         return res.json({ success: true, user, token });
       }
@@ -1281,7 +1295,7 @@ async function startServer() {
       // Insere o novo usuário
       const insertResult = await pool.query(
         'INSERT INTO users (name, email, password, role, company_name, company_logo, is_approved) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, name, email, role, company_name, company_logo, is_approved',
-        [name, email, password, 'user', company_name || null, company_logo || null, false]
+        [name, email, password, requested_role === 'delivery' ? 'delivery' : 'user', company_name || null, company_logo || null, false]
       );
       
       const user = insertResult.rows[0];
