@@ -275,6 +275,8 @@ async function initDB() {
     // Atualiza tabela para suportar opções selecionadas (fallback dev)
     try { await pool.query(`ALTER TABLE order_items ADD COLUMN chosen_options JSONB DEFAULT '[]';`); } catch (e) {}
     try { await pool.query(`ALTER TABLE order_items ADD COLUMN final_price NUMERIC;`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE orders ADD COLUMN requires_delivery BOOLEAN DEFAULT false;`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE orders ADD COLUMN delivery_user_id INTEGER REFERENCES users(id);`); } catch (e) {}
     try { await pool.query(`ALTER TABLE orders ADD COLUMN seller_id INTEGER;`); } catch (e) {}
     try { await pool.query(`ALTER TABLE orders ADD COLUMN default_shipping JSONB;`); } catch (e) {}
 
@@ -590,6 +592,57 @@ async function startServer() {
     }
   });
 
+  app.put('/api/orders/:id/request-delivery', requireAuth, async (req: any, res) => {
+    try {
+      if (!dbConnected) throw new Error("DB offline");
+      const orderId = req.params.id;
+      // seller verification
+      const checkResult = await pool.query(`
+        SELECT 1 FROM orders o
+        JOIN order_items oi ON oi.order_id = o.id
+        JOIN products p ON p.id = oi.product_id
+        WHERE o.id = $1 AND p.user_id = $2 LIMIT 1
+      `, [orderId, req.user.id]);
+      
+      const isSeller = checkResult.rows.length > 0;
+      const isAdmin = req.user.role === 'admin';
+      
+      if (!isAdmin && !isSeller) {
+         return res.status(403).json({ success: false, error: 'Acesso negado' });
+      }
+
+      await pool.query('UPDATE orders SET requires_delivery = true WHERE id = $1', [orderId]);
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error(err);
+      res.status(500).json({ success: false, error: 'Erro ao solicitar entrega' });
+    }
+  });
+
+  app.put('/api/orders/:id/accept-delivery', requireAuth, async (req: any, res) => {
+    try {
+      if (!dbConnected) throw new Error("DB offline");
+      const orderId = req.params.id;
+      if (req.user.role !== 'delivery') {
+         return res.status(403).json({ success: false, error: 'Apenas entregadores.' });
+      }
+
+      // Check if already claimed
+      const orderRes = await pool.query('SELECT delivery_user_id FROM orders WHERE id = $1 FOR UPDATE', [orderId]);
+      if (orderRes.rows.length === 0) return res.status(404).json({ success: false, error: 'Pedido não encontrado' });
+      
+      if (orderRes.rows[0].delivery_user_id) {
+         return res.status(400).json({ success: false, error: 'Pedido já foi aceito por outro entregador.' });
+      }
+
+      await pool.query('UPDATE orders SET delivery_user_id = $1, status = $2 WHERE id = $3', [req.user.id, 'Em Trânsito', orderId]);
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error(err);
+      res.status(500).json({ success: false, error: 'Erro ao aceitar entrega' });
+    }
+  });
+
   // Update order status
   app.put('/api/orders/:id/status', requireAuth, async (req: any, res) => {
     try {
@@ -661,7 +714,7 @@ async function startServer() {
       let sales: any[] = [];
       let purchases: any[] = [];
 
-      if (isAdmin || isDelivery) {
+      if (isAdmin) {
           const dbResult = await pool.query(`
             SELECT DISTINCT o.*, 
             COALESCE(u.name, uc.nome_completo) as customer_name, 
@@ -675,6 +728,20 @@ async function startServer() {
           `);
           sales = dbResult.rows;
           purchases = dbResult.rows; // Admin sees everything everywhere
+      } else if (isDelivery) {
+          const dbResult = await pool.query(`
+            SELECT DISTINCT o.*, 
+            COALESCE(u.name, uc.nome_completo) as customer_name, 
+            COALESCE(u.email, uc.email) as customer_email,
+            uc.telefone, uc.endereco, uc.bairro, uc.cidade, uc.numero, uc.cep,
+            (SELECT p.user_id FROM order_items oi JOIN products p ON oi.product_id::text = p.id::text WHERE oi.order_id::text = o.id::text LIMIT 1) as seller_id
+            FROM orders o 
+            LEFT JOIN users u ON u.id::text = o.user_id::text 
+            LEFT JOIN user_client uc ON uc.id::text = o.user_id::text
+            WHERE o.requires_delivery = true AND (o.delivery_user_id IS NULL OR o.delivery_user_id = $1)
+            ORDER BY o.id DESC
+          `, [req.user.id]);
+          sales = dbResult.rows;
       } else {
           // Sales: where the product seller is the user
           const salesResult = await pool.query(`

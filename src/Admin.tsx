@@ -89,8 +89,14 @@ function AdminLogin({ onLogin }: { onLogin: (user: any) => void }) {
       });
       const data = await res.json();
       if (data.success) {
+        if (data.message) {
+            alert(data.message);
+            setIsRegistering(false);
+            setLoading(false);
+            return;
+        }
         if (data.token) localStorage.setItem('token', data.token);
-        if (isRegistering) {
+        if (isRegistering && data.user) {
             alert(`Cadastrado(a) com sucesso! Seu ID de cadastro é: ${data.user.id}`);
         }
         onLogin(data.user);
@@ -1037,6 +1043,29 @@ function AdminOrders() {
     } catch(e) {}
   };
 
+  const handleRequestDelivery = async (orderId: string) => {
+    try {
+      const res = await apiFetch(`/api/orders/${orderId}/request-delivery`, { method: 'PUT' });
+      const data = await res.json();
+      if(data.success) {
+         setSelectedOrder((prev: any) => ({ ...prev, requires_delivery: true }));
+         alert('Entrega solicitada com sucesso!');
+         apiFetch('/api/orders').then(r => r.json()).then(d => {
+            if (d && d.success) {
+               const allSales = d.sales || [];
+               const allPurchases = d.purchases || [];
+               setPurchases([...allPurchases, ...allSales.filter((o: any) => o.status !== 'Entregue')].filter((o, index, self) => index === self.findIndex((t) => t.id === o.id)));
+               setSales(allSales.filter((o: any) => o.status === 'Entregue'));
+            }
+         });
+      } else {
+         alert(data.error || 'Erro ao solicitar.');
+      }
+    } catch(err) {
+      alert('Erro de conexão.');
+    }
+  };
+
   const currentList = activeTab === 'purchases' ? purchases : sales;
 
   return (
@@ -1177,7 +1206,19 @@ function AdminOrders() {
                   </div>
                </div>
 
-               <div className="p-4 border-t border-gray-100 bg-white">
+               <div className="p-4 border-t border-gray-100 bg-white space-y-2">
+                  {!selectedOrder.requires_delivery && selectedOrder.status !== 'Entregue' && (
+                     <button onClick={() => handleRequestDelivery(selectedOrder.id)} className="w-full bg-[#007AFF] hover:bg-[#0066cc] text-white font-bold rounded-2xl py-4 flex justify-center items-center gap-2">
+                        <Package className="w-5 h-5" />
+                        Solicitar Entrega
+                     </button>
+                  )}
+                  {selectedOrder.requires_delivery && (
+                     <div className="w-full bg-blue-50 text-blue-700 font-bold rounded-2xl py-4 flex justify-center items-center gap-2 text-sm text-center px-4">
+                        <Package className="w-5 h-5 shrink-0" />
+                        {selectedOrder.delivery_user_id ? 'Entregador já a caminho ou assumiu o pedido.' : 'Entrega solicitada. Aguardando entregador.'}
+                     </div>
+                  )}
                   <button onClick={handlePrint} className="w-full bg-[#1D1D1F] hover:bg-black text-white font-bold rounded-2xl py-4 flex justify-center items-center gap-2">
                      <List className="w-5 h-5" />
                      Imprimir Recibo

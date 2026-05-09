@@ -51,6 +51,25 @@ export function AdminDeliveries({ user }: { user: any }) {
     }
   };
 
+  const handleAcceptDelivery = async (orderId: string) => {
+    try {
+       const res = await fetch(`/api/orders/${orderId}/accept-delivery`, {
+          method: 'PUT',
+          headers: {
+             'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+       });
+       const data = await res.json();
+       if(data.success) {
+          fetchDeliveries();
+       } else {
+          alert(data.error);
+       }
+    } catch (e) {
+       alert('Erro ao aceitar entrega');
+    }
+  };
+
   useEffect(() => {
     if (scanning) {
       const scanner = new Html5QrcodeScanner('reader', { qrbox: { width: 250, height: 250 }, fps: 5 }, false);
@@ -139,10 +158,17 @@ export function AdminDeliveries({ user }: { user: any }) {
                   </div>
 
                   {d.status !== 'Entregue' && (
-                     <button onClick={() => handleMarkAsDelivered(d.id)} className="w-full py-4 bg-[#007AFF] text-white rounded-2xl font-extrabold text-[11px] uppercase tracking-widest hover:bg-[#0066cc] shadow-lg shadow-[#007AFF]/20 transition-all flex items-center justify-center gap-2">
-                        <Check className="w-4 h-4" />
-                        Confirmar Entrega
-                     </button>
+                     d.delivery_user_id ? (
+                        <button onClick={() => handleMarkAsDelivered(d.id)} className="w-full py-4 bg-[#007AFF] text-white rounded-2xl font-extrabold text-[11px] uppercase tracking-widest hover:bg-[#0066cc] shadow-lg shadow-[#007AFF]/20 transition-all flex items-center justify-center gap-2">
+                           <Check className="w-4 h-4" />
+                           Confirmar Entrega
+                        </button>
+                     ) : (
+                        <button onClick={() => handleAcceptDelivery(d.id)} className="w-full py-4 bg-orange-500 text-white rounded-2xl font-extrabold text-[11px] uppercase tracking-widest hover:bg-orange-600 shadow-lg shadow-orange-500/20 transition-all flex items-center justify-center gap-2">
+                           <Package className="w-4 h-4" />
+                           Aceitar Entrega
+                        </button>
+                     )
                   )}
                </div>
             ))}

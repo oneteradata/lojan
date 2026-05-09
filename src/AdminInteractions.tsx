@@ -3,11 +3,19 @@ import { motion } from 'motion/react';
 import { RefreshCw, Search, Heart, MessageSquare, Share2 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { apiFetch } from './utils';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
+
+const apiFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  const token = localStorage.getItem('token');
+  const headers = { 
+    ...init?.headers,
+    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+  };
+  return fetch(input, { ...init, headers });
+};
 
 export function AdminInteractions({ user }: { user: any }) {
   const [interactions, setInteractions] = useState<any[]>([]);
