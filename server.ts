@@ -57,6 +57,8 @@ pool.on('error', (err) => {
 });
 
 let dbConnected = false;
+const fallbackUsers: any[] = [];
+
 
 function normalizeUserWallet(user: any) {
   if (!user) return;
@@ -898,7 +900,19 @@ async function startServer() {
 
   app.get('/api/me', requireAuth, async (req: any, res) => {
     try {
-      if (!dbConnected) throw new Error("DB offline");
+      if (!dbConnected) {
+         let fallbackUser;
+         if (req.user.email === 'admin@valentina.com') {
+             fallbackUser = { id: 1, name: 'Admin Valentina', email: 'admin@valentina.com', role: 'admin' };
+         } else {
+             fallbackUser = fallbackUsers.find(u => u.id === req.user.id);
+         }
+         
+         if (fallbackUser) {
+             return res.json({ success: true, user: fallbackUser });
+         }
+         return res.status(404).json({ success: false, error: 'Usuário não encontrado' });
+      }
       const dbResult = await pool.query('SELECT id, name, email, role, company_name, company_logo, wallet, is_approved FROM users WHERE id = $1', [req.user.id]);
       if (dbResult.rows.length > 0) {
         const user = dbResult.rows[0];
@@ -1300,7 +1314,14 @@ async function startServer() {
            const token = jwt.sign(user, JWT_SECRET, { expiresIn: '1d' });
            return res.json({ success: true, user, token });
         }
-        return res.status(401).json({ success: false, error: 'Credenciais inválidas. Tente admin@valentina.com e admin' });
+        
+        const fallbackUser = fallbackUsers.find(u => u.email === email && u.password === password);
+        if (fallbackUser) {
+           const token = jwt.sign(fallbackUser, JWT_SECRET, { expiresIn: '1d' });
+           return res.json({ success: true, user: fallbackUser, token });
+        }
+
+        return res.status(401).json({ success: false, error: 'Credenciais inválidas. Tente admin@valentina.com e admin ou crie uma conta' });
       }
 
       let dbResult;
@@ -1354,7 +1375,12 @@ async function startServer() {
 
     try {
       if (!dbConnected) {
-        const user = { id: Date.now(), name, email, role: requested_role === 'delivery' ? 'delivery' : 'user', company_name, company_logo };
+        const existing = fallbackUsers.find(u => u.email === email);
+        if (existing) {
+           return res.status(400).json({ success: false, error: 'Este e-mail já está em uso.' });
+        }
+        const user = { id: Date.now(), name, email, password, role: requested_role === 'delivery' ? 'delivery' : 'user', company_name, company_logo };
+        fallbackUsers.push(user);
         const token = jwt.sign(user, JWT_SECRET, { expiresIn: '1d' });
         return res.json({ success: true, user, token });
       }
