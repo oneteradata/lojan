@@ -1718,8 +1718,8 @@ export default function AdminApp() {
       {/* SideNavBar Component */}
       <aside className="hidden md:flex h-[calc(100vh-32px)] w-72 fixed left-4 top-4 z-40 bg-white/60 backdrop-blur-xl flex-col py-8 rounded-[2rem] shadow-[0_10px_40px_-10px_rgba(0,0,0,0.04),_0_2px_10px_-2px_rgba(0,0,0,0.02)] border border-white/50">
         <div className="px-8 mb-12">
-          <h1 className="text-2xl font-extrabold text-[#0058bc] tracking-tighter">NovaBank</h1>
-          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#414755] opacity-60">Premium Banking</p>
+          <h1 className="text-2xl font-extrabold text-[#0058bc] tracking-tighter">Vitrine Brasil</h1>
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#414755] opacity-60">sua vitrine para o mundo</p>
         </div>
         <nav className="flex-grow space-y-1.5 px-3">
           <button onClick={() => navigate('/')} className={cn("flex w-full items-center gap-4 px-5 py-3.5 rounded-2xl transition-all", location.pathname === '/' ? "bg-[#0058bc] text-white shadow-lg shadow-[#0058bc]/20" : "text-[#414755] hover:bg-white hover:shadow-sm")}>
@@ -1744,7 +1744,7 @@ export default function AdminApp() {
 
           <button onClick={() => navigate('/credits')} className={cn("flex w-full items-center gap-4 px-5 py-3.5 rounded-2xl transition-all", location.pathname === '/credits' ? "bg-[#0058bc] text-white shadow-lg shadow-[#0058bc]/20" : "text-[#414755] hover:bg-white hover:shadow-sm")}>
             <Landmark className="w-5 h-5" />
-            <span className={cn("text-sm", location.pathname === '/credits' ? "font-bold" : "font-semibold")}>Pedidos</span>
+            <span className={cn("text-sm", location.pathname === '/credits' ? "font-bold" : "font-semibold")}>Logs</span>
           </button>
 
           {user.role === 'admin' && (
@@ -1779,7 +1779,7 @@ export default function AdminApp() {
       <main className="flex-grow md:ml-[312px] min-h-screen pr-4 flex flex-col">
         <header className="bg-[#faf9fe]/80 backdrop-blur-md sticky top-0 z-50 w-full h-20 flex justify-between items-center px-4 md:px-8">
             <div className="flex items-center gap-4">
-                <h2 className="text-2xl font-extrabold text-[#1a1b1f] tracking-tight">{location.pathname === '/' ? 'Dashboard' : location.pathname === '/products' ? 'Produtos' : location.pathname === '/etoken' ? 'eToken' : location.pathname === '/orders' ? 'Vendas' : location.pathname === '/credits' ? 'Pedidos' : location.pathname === '/users' ? 'Equipe' : 'Minha Loja'}</h2>
+                <h2 className="text-2xl font-extrabold text-[#1a1b1f] tracking-tight">{location.pathname === '/' ? 'Dashboard' : location.pathname === '/products' ? 'Produtos' : location.pathname === '/etoken' ? 'eToken' : location.pathname === '/orders' ? 'Vendas' : location.pathname === '/credits' ? 'Logs' : location.pathname === '/users' ? 'Equipe' : 'Minha Loja'}</h2>
             </div>
             <div className="flex items-center gap-4 md:gap-8 justify-end">
                 <div className="relative hidden lg:block">

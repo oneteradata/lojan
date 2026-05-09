@@ -205,13 +205,13 @@ export function AdminWallet({ user, onRefreshUser }: { user: any, onRefreshUser?
                   </button>
                 </div>
                 <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 flex flex-col gap-4">
-                   {logs.length > 0 ? logs.map(log => {
+                   {logs.filter(l => ['transferencia', 'recebimento_transferencia', 'pagamento_aprovado', 'pagamento_recusado', 'pagamento_timeout'].includes(l.event_name)).length > 0 ? logs.filter(l => ['transferencia', 'recebimento_transferencia', 'pagamento_aprovado', 'pagamento_recusado', 'pagamento_timeout'].includes(l.event_name)).map(log => {
                      const isDebit = log.event_name?.includes('recusado') || log.event_name?.includes('timeout') || log.event_name?.includes('erro');
                      const isCredit = log.event_name?.includes('aprovado') || log.event_name === 'produto_adicionado';
                      const isTransfer = log.event_name === 'transferencia';
                      
                      return (
-                       <div key={log.id} className="flex justify-between items-center border-b border-gray-50 pb-4 last:border-0 last:pb-0">
+                       <div key={log.id} onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(String(log.id)); alert('ID ' + log.id + ' copiado!' ); }} className="flex justify-between items-center border-b border-gray-50 pb-4 last:border-0 last:pb-0 cursor-pointer hover:bg-gray-50 transition-colors p-2 rounded-xl group relative">
                          <div className="flex items-center gap-3">
                            <div className={cn(
                              "w-10 h-10 rounded-full flex items-center justify-center shrink-0", 
@@ -223,12 +223,12 @@ export function AdminWallet({ user, onRefreshUser }: { user: any, onRefreshUser?
                              {isTransfer ? <ArrowUpRight className="w-5 h-5"/> : (isCredit ? <ArrowDownLeft className="w-5 h-5" /> : <List className="w-5 h-5" />)}
                            </div>
                            <div>
-                             <p className="text-sm font-bold text-[#1D1D1F]">{(log.event_name || 'Registro').replace(/_/g, ' ').toUpperCase()}</p>
+                             <p className="text-sm font-bold text-[#1D1D1F]">{(log.event_name || 'Registro').replace(/_/g, ' ').toUpperCase()} <span className="text-[10px] font-mono text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity">#{log.id}</span></p>
                              <p className="text-[10px] text-gray-500 line-clamp-1">{log.details}</p>
                            </div>
                          </div>
                          <div className="text-right shrink-0 ml-4">
-                           <p className="text-xs text-gray-400 font-medium">{new Date(log.created_at).toLocaleDateString('pt-BR', {day: '2-digit', month: 'short'})}</p>
+                           <p className="text-xs text-gray-400 font-medium">{new Date(log.created_at).toLocaleString('pt-BR')}</p>
                          </div>
                        </div>
                      )
