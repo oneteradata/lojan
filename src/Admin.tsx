@@ -1019,9 +1019,7 @@ function AdminOrders() {
     window.print();
   };
 
-  const handleStatusChange = async (orderId: number, currentStatus: string) => {
-    // Apenas exemplo, precisa de endpoint para atualizar
-    const nextStatus = currentStatus === 'Pendente' ? 'Em andamento' : currentStatus === 'Em andamento' ? 'Concluído' : 'Pendente';
+  const handleStatusChange = async (orderId: number, nextStatus: string) => {
     try {
        await apiFetch(`/api/orders/${orderId}`, {
           method: 'PATCH',
@@ -1163,14 +1161,19 @@ function AdminOrders() {
                      </div>
                   </div>
 
-                  {activeTab === 'sales' && (
-                     <button
-                        onClick={() => handleStatusChange(selectedOrder.id, selectedOrder.status)}
-                        className="w-full mt-4 bg-[#007AFF] hover:bg-[#0058bc] text-white font-bold rounded-2xl py-4 flex justify-center items-center gap-2 transition-colors"
+                  <div className="mt-4">
+                     <label className="block text-xs font-bold text-gray-500 mb-2 uppercase">Alterar Status</label>
+                     <select
+                        value={selectedOrder.status}
+                        onChange={(e) => handleStatusChange(selectedOrder.id, e.target.value)}
+                        className="w-full bg-white border border-gray-200 font-semibold text-sm rounded-xl focus:ring-blue-500 focus:border-blue-500 block p-3 outline-none"
                      >
-                        Avançar Status do Pedido
-                     </button>
-                  )}
+                        <option value="Pendente">Pendente</option>
+                        <option value="Em andamento">Em andamento</option>
+                        <option value="Processo de entrega">Processo de entrega</option>
+                        <option value="Entregue">Entregue</option>
+                     </select>
+                  </div>
                </div>
 
                <div className="p-4 border-t border-gray-100 bg-white">

@@ -1295,9 +1295,9 @@ async function startServer() {
       } else {
          const checkRes = await pool.query(`
             SELECT 1 FROM orders o
-            JOIN order_items oi ON o.id::text = oi.order_id::text
-            JOIN products p ON oi.product_id::text = p.id::text
-            WHERE o.id::text = $1::text AND p.user_id::text = $2::text LIMIT 1
+            LEFT JOIN order_items oi ON o.id::text = oi.order_id::text
+            LEFT JOIN products p ON oi.product_id::text = p.id::text
+            WHERE o.id::text = $1::text AND (p.user_id::text = $2::text OR o.seller_id::text = $2::text OR o.user_id::text = $2::text) LIMIT 1
          `, [orderId, userId]);
          if (checkRes.rows.length > 0) {
             authorized = true;
