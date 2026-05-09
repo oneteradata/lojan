@@ -35,6 +35,7 @@ function AdminLogin({ onLogin }: { onLogin: (user: any) => void }) {
   const [password, setPassword] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [companyLogo, setCompanyLogo] = useState('');
+  const [requestedRole, setRequestedRole] = useState('user');
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -79,7 +80,7 @@ function AdminLogin({ onLogin }: { onLogin: (user: any) => void }) {
     setLoading(true);
     try {
       const endpoint = isRegistering ? '/api/register' : '/api/login';
-      const body = isRegistering ? { name, email, password, company_name: companyName, company_logo: companyLogo } : { email, password };
+      const body = isRegistering ? { name, email, password, company_name: companyName, company_logo: companyLogo, requested_role: requestedRole } : { email, password };
       
       const res = await apiFetch(endpoint, {
         method: 'POST',
@@ -120,6 +121,19 @@ function AdminLogin({ onLogin }: { onLogin: (user: any) => void }) {
         <form onSubmit={handleSubmit} className="flex flex-col gap-5">
           {isRegistering && (
             <>
+              <div>
+                <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">TIPO DE CONTA</label>
+                <div className="flex gap-4 p-2 bg-[#F5F5F7] rounded-2xl mb-2">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                       <input type="radio" name="role" checked={requestedRole === 'user'} onChange={() => setRequestedRole('user')} className="accent-[#007AFF]" />
+                       <span className="text-sm font-medium">Conta de Vendedor</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                       <input type="radio" name="role" checked={requestedRole === 'delivery'} onChange={() => setRequestedRole('delivery')} className="accent-[#007AFF]" />
+                       <span className="text-sm font-medium">Entregador Parceiro</span>
+                    </label>
+                </div>
+              </div>
               <div>
                 <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">NOME</label>
                 <input 
