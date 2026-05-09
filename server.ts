@@ -621,7 +621,7 @@ async function startServer() {
          return res.status(403).json({ success: false, error: 'Função de solicitar entrega desativada para sua conta.' });
       }
 
-      await pool.query('UPDATE orders SET requires_delivery = true WHERE id = $1', [orderId]);
+      await pool.query("UPDATE orders SET requires_delivery = true, status = 'Em andamento' WHERE id = $1", [orderId]);
       res.json({ success: true });
     } catch (err: any) {
       console.error(err);

@@ -1023,7 +1023,49 @@ function AdminOrders() {
   }, []);
 
   const handlePrint = () => {
-    window.print();
+    const el = document.getElementById('receipt-print');
+    if (!el) return;
+    
+    // Create an iframe, append it to body, write html, print, remove.
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    document.body.appendChild(iframe);
+    
+    const contentWindow = iframe.contentWindow;
+    if (!contentWindow) return;
+    
+    contentWindow.document.open();
+    contentWindow.document.write(`
+      <html>
+        <head>
+          <title>Recibo</title>
+          <script src="https://cdn.tailwindcss.com"></script>
+          <style>
+              @page { margin: 0; }
+              body { margin: 20px; font-family: sans-serif; }
+          </style>
+        </head>
+        <body>
+          <div class="p-8 w-full max-w-[800px] mx-auto bg-white m-0 text-black font-sans border-2 border-black">
+             ${el.innerHTML}
+          </div>
+          <script>
+            window.onload = () => {
+               setTimeout(() => {
+                 window.print();
+                 // setTimeout(() => window.parent.document.body.removeChild(window.frameElement), 1000);
+               }, 500);
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    contentWindow.document.close();
   };
 
   const handleStatusChange = async (orderId: number, nextStatus: string) => {
@@ -1048,7 +1090,7 @@ function AdminOrders() {
       const res = await apiFetch(`/api/orders/${orderId}/request-delivery`, { method: 'PUT' });
       const data = await res.json();
       if(data.success) {
-         setSelectedOrder((prev: any) => ({ ...prev, requires_delivery: true }));
+         setSelectedOrder((prev: any) => ({ ...prev, requires_delivery: true, status: 'Em andamento' }));
          alert('Entrega solicitada com sucesso!');
          apiFetch('/api/orders').then(r => r.json()).then(d => {
             if (d && d.success) {
@@ -1070,17 +1112,6 @@ function AdminOrders() {
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-4 md:p-8 h-full flex flex-col relative w-full overflow-hidden">
-       <style>{`
-          @media print {
-             body * { display: none !important; }
-             #receipt-print, #receipt-print * { display: block !important; }
-             #receipt-print {
-                position: absolute; left: 0; top: 0;
-                width: 300px; /* Thermal printer approx */
-                font-family: monospace; color: #000;
-             }
-          }
-       `}</style>
        <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h2 className="text-3xl font-bold text-[#1D1D1F] tracking-tight">Vendas e Pedidos</h2>
@@ -1245,20 +1276,21 @@ function AdminOrders() {
                 <div className="border-2 border-black p-6 rounded-xl">
                    <h3 className="text-sm font-bold uppercase tracking-widest text-gray-500 mb-4">Destinatário</h3>
                    <p className="text-xl font-bold mb-2">{selectedOrder.customer_name || 'Usuário Final'}</p>
-                   <p className="text-md">{selectedOrder.customer_email}</p>
+                   {selectedOrder.customer_email && <p className="text-md">{selectedOrder.customer_email}</p>}
                    {selectedOrder.telefone && <p className="text-md">Tel: {selectedOrder.telefone}</p>}
-                   {selectedOrder.endereco && (
-                      <div className="mt-4 text-md">
-                         <p>{selectedOrder.endereco}, {selectedOrder.numero}</p>
-                         <p>{selectedOrder.bairro}</p>
-                         <p>{selectedOrder.cidade} - CEP: {selectedOrder.cep}</p>
-                      </div>
-                   )}
+                   <div className="mt-4 text-md">
+                      <p>{selectedOrder.endereco || 'n/d'}, {selectedOrder.numero || 'n/d'}</p>
+                      <p>{selectedOrder.bairro || 'n/d'}</p>
+                      <p>{selectedOrder.cidade || 'n/d'} - CEP: {selectedOrder.cep || 'n/d'}</p>
+                   </div>
                 </div>
                 <div className="border-2 border-black p-6 rounded-xl">
                    <h3 className="text-sm font-bold uppercase tracking-widest text-gray-500 mb-4">Remetente</h3>
-                   <p className="text-xl font-bold mb-2">Maison Valentina</p>
-                   <p className="text-md">Logística e Distribuição</p>
+                   <p className="text-xl font-bold mb-2">Empresa ID: {selectedOrder.seller_id || 'n/d'}</p>
+                   <p className="text-md">Setor de Entregas</p>
+                   <div className="mt-4 text-md">
+                      <p>Bairro: {selectedOrder.seller_bairro || 'n/d'}</p>
+                   </div>
                 </div>
              </div>
 
