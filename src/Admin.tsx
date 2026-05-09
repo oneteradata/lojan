@@ -1936,39 +1936,53 @@ export default function AdminApp() {
       </main>
 
       {/* Mobile Bottom Nav */}
-      <nav className="md:hidden fixed bottom-6 left-6 right-6 h-18 bg-white/80 backdrop-blur-2xl rounded-3xl flex items-center justify-around z-50 shadow-2xl border border-white/50 px-2">
-         <button onClick={() => navigate('/')} className={cn("flex flex-col items-center gap-1", location.pathname === '/' ? "text-[#0058bc]" : "text-[#414755] opacity-60")}>
+      <nav className="md:hidden fixed bottom-6 left-6 right-6 h-18 bg-white/80 backdrop-blur-2xl rounded-3xl flex items-center justify-start z-50 shadow-2xl border border-white/50 px-4 overflow-x-auto gap-6 sm:gap-8 hide-scrollbar">
+         <button onClick={() => navigate('/')} className={cn("flex flex-col items-center gap-1 shrink-0", location.pathname === '/' ? "text-[#0058bc]" : "text-[#414755] opacity-60")}>
              <LayoutDashboard className="w-5 h-5" />
              <span className="text-[10px] font-extrabold">{user.role === 'delivery' ? 'Entregas' : 'Início'}</span>
          </button>
          {user.role !== 'delivery' && (
-           <>
-             <button onClick={() => navigate('/products')} className={cn("flex flex-col items-center gap-1", location.pathname === '/products' ? "text-[#0058bc]" : "text-[#414755] opacity-60")}>
+             <button onClick={() => navigate('/products')} className={cn("flex flex-col items-center gap-1 shrink-0", location.pathname === '/products' ? "text-[#0058bc]" : "text-[#414755] opacity-60")}>
                  <Package className="w-5 h-5" />
                  <span className="text-[10px] font-extrabold">Produtos</span>
              </button>
-             <button onClick={() => navigate('/orders')} className={cn("flex flex-col items-center gap-1", location.pathname === '/orders' ? "text-[#0058bc]" : "text-[#414755] opacity-60")}>
-                 <ShoppingCart className="w-5 h-5" />
+         )}
+         
+         <button onClick={() => navigate('/etoken')} className={cn("flex flex-col items-center gap-1 shrink-0", location.pathname === '/etoken' ? "text-[#0058bc]" : "text-[#414755] opacity-60")}>
+             <Wallet className="w-5 h-5" />
+             <span className="text-[10px] font-extrabold">eToken</span>
+         </button>
+
+         {user.role !== 'delivery' && (
+             <button onClick={() => navigate('/orders')} className={cn("flex flex-col items-center gap-1 shrink-0", location.pathname === '/orders' ? "text-[#0058bc]" : "text-[#414755] opacity-60")}>
+                 <div className="relative"><ShoppingCart className="w-5 h-5" />{pendingCount > 0 && <span className="absolute -top-1 -right-1 flex h-2 w-2 rounded-full bg-red-600"></span>}</div>
                  <span className="text-[10px] font-extrabold">Vendas</span>
              </button>
-             <button onClick={() => navigate('/interactions')} className={cn("flex flex-col items-center gap-1", location.pathname === '/interactions' ? "text-[#0058bc]" : "text-[#414755] opacity-60")}>
+         )}
+
+         <button onClick={() => navigate('/credits')} className={cn("flex flex-col items-center gap-1 shrink-0", location.pathname === '/credits' ? "text-[#0058bc]" : "text-[#414755] opacity-60")}>
+             <Landmark className="w-5 h-5" />
+             <span className="text-[10px] font-extrabold">Créditos</span>
+         </button>
+
+         {user.role !== 'delivery' && (
+             <button onClick={() => navigate('/interactions')} className={cn("flex flex-col items-center gap-1 shrink-0", location.pathname === '/interactions' ? "text-[#0058bc]" : "text-[#414755] opacity-60")}>
                  <MessageSquare className="w-5 h-5" />
                  <span className="text-[10px] font-extrabold">Info</span>
              </button>
-           </>
          )}
-         {user.role === 'admin' ? (
+
+         {user.role === 'admin' && (
            <>
-           <button onClick={() => navigate('/users')} className={cn("flex flex-col items-center gap-1", location.pathname === '/users' ? "text-[#0058bc]" : "text-[#414755] opacity-60")}>
-               <Users className="w-5 h-5" />
-               <span className="text-[10px] font-extrabold">Conta</span>
-           </button>
+             <button onClick={() => navigate('/users')} className={cn("flex flex-col items-center gap-1 shrink-0", location.pathname === '/users' ? "text-[#0058bc]" : "text-[#414755] opacity-60")}>
+                 <Users className="w-5 h-5" />
+                 <span className="text-[10px] font-extrabold">Equipe</span>
+             </button>
+             <button onClick={() => navigate('/logs')} className={cn("flex flex-col items-center gap-1 shrink-0", location.pathname === '/logs' ? "text-[#0058bc]" : "text-[#414755] opacity-60")}>
+                 <List className="w-5 h-5" />
+                 <span className="text-[10px] font-extrabold">Logs</span>
+             </button>
            </>
-         ) : (
-           <button onClick={() => navigate('/etoken')} className={cn("flex flex-col items-center gap-1", location.pathname === '/etoken' ? "text-[#0058bc]" : "text-[#414755] opacity-60")}>
-               <Wallet className="w-5 h-5" />
-               <span className="text-[10px] font-extrabold">Conta</span>
-           </button>
          )}
       </nav>
     </div>

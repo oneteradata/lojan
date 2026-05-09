@@ -348,22 +348,22 @@ function Storefront() {
       )}
 
       {/* Navigation */}
-      <header className={`fixed w-full z-50 p-6 flex justify-between items-center transition-all duration-300 ${isScrolled ? 'bg-white text-gray-900 border-b border-gray-200 shadow-sm' : 'text-gray-900 border-b border-transparent bg-white/80 backdrop-blur-md'} ${user ? 'top-[40px] md:top-[44px]' : 'top-0'}`}>
-        <div className="flex gap-6 hidden md:flex">
-          <a href="#categories-section" onClick={scrollToCategories} className="nav-link text-xs tracking-widest uppercase">Coleções</a>
-          <a href="#products-section" onClick={scrollToProducts} className="nav-link text-xs tracking-widest uppercase">Maison</a>
-          <a href="/" className="nav-link text-xs tracking-widest uppercase text-[#007AFF] font-bold">Vitrine admin</a>
+      <header className={`fixed w-full z-50 p-4 sm:p-6 flex flex-col sm:flex-row gap-4 sm:gap-0 justify-between items-center transition-all duration-300 ${isScrolled ? 'bg-white text-gray-900 border-b border-gray-200 shadow-sm' : 'text-gray-900 border-b border-transparent bg-white/80 backdrop-blur-md'} ${user ? 'top-[40px] md:top-[44px]' : 'top-0'}`}>
+        <div className="flex gap-4 sm:gap-6 items-center flex-wrap justify-center order-2 sm:order-1">
+          <a href="#categories-section" onClick={scrollToCategories} className="nav-link text-[10px] sm:text-xs tracking-widest uppercase">Coleções</a>
+          <a href="#products-section" onClick={scrollToProducts} className="nav-link text-[10px] sm:text-xs tracking-widest uppercase">Maison</a>
+          <a href="/" className="nav-link text-[10px] sm:text-xs tracking-widest uppercase text-[#007AFF] font-bold">Vitrine admin</a>
         </div>
         
-        <div className="md:hidden">
+        <div className="hidden md:hidden">
           <Menu className="w-5 h-5" strokeWidth={1.5} />
         </div>
 
-        <div className="absolute left-1/2 -translate-x-1/2">
-          <h1 className="font-serif text-3xl tracking-wide cursor-pointer text-[#007AFF]" onClick={() => window.scrollTo({top: 0, behavior: 'smooth'})}>VALENTINA</h1>
+        <div className="order-1 sm:order-2 sm:absolute sm:left-1/2 sm:-translate-x-1/2">
+          <h1 className="font-serif text-2xl sm:text-3xl tracking-wide cursor-pointer text-[#007AFF]" onClick={() => window.scrollTo({top: 0, behavior: 'smooth'})}>VALENTINA</h1>
         </div>
 
-        <div className="flex gap-6 items-center">
+        <div className="flex gap-4 sm:gap-6 items-center order-3 mt-2 sm:mt-0">
           <Search className="w-4 h-4 cursor-pointer hover:text-[#007AFF] transition-colors" strokeWidth={1.5} />
           {user ? (
             <span className="text-xs uppercase tracking-widest text-[#007AFF]  font-bold" title={`ID: ${user.id}`}>Olá, {user.name.split(' ')[0]} (ID: {user.id})</span>

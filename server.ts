@@ -607,10 +607,13 @@ async function startServer() {
         WHERE o.id = $1 AND p.user_id = $2 LIMIT 1
       `, [orderId, req.user.id]);
       
+      const buyerCheck = await pool.query(`SELECT 1 FROM orders WHERE id = $1 AND user_id = $2`, [orderId, req.user.id]);
+
       const isSeller = checkResult.rows.length > 0;
+      const isBuyer = buyerCheck.rows.length > 0;
       const isAdmin = req.user.role === 'admin';
       
-      if (!isAdmin && !isSeller) {
+      if (!isAdmin && !isSeller && !isBuyer) {
          return res.status(403).json({ success: false, error: 'Acesso negado' });
       }
 
