@@ -602,12 +602,12 @@ async function startServer() {
       // seller verification
       const checkResult = await pool.query(`
         SELECT 1 FROM orders o
-        JOIN order_items oi ON oi.order_id = o.id
-        JOIN products p ON p.id = oi.product_id
-        WHERE o.id = $1 AND p.user_id = $2 LIMIT 1
+        JOIN order_items oi ON oi.order_id::text = o.id::text
+        JOIN products p ON p.id::text = oi.product_id::text
+        WHERE o.id::text = $1::text AND p.user_id::text = $2::text LIMIT 1
       `, [orderId, req.user.id]);
       
-      const buyerCheck = await pool.query(`SELECT 1 FROM orders WHERE id = $1 AND user_id = $2`, [orderId, req.user.id]);
+      const buyerCheck = await pool.query(`SELECT 1 FROM orders WHERE id::text = $1::text AND user_id::text = $2::text`, [orderId, req.user.id]);
 
       const isSeller = checkResult.rows.length > 0;
       const isBuyer = buyerCheck.rows.length > 0;
@@ -621,7 +621,7 @@ async function startServer() {
          return res.status(403).json({ success: false, error: 'Função de solicitar entrega desativada para sua conta.' });
       }
 
-      await pool.query("UPDATE orders SET requires_delivery = true, status = 'Em andamento' WHERE id = $1", [orderId]);
+      await pool.query("UPDATE orders SET requires_delivery = true, status = 'Em andamento' WHERE id::text = $1::text", [orderId]);
       res.json({ success: true });
     } catch (err: any) {
       console.error(err);
@@ -1083,7 +1083,7 @@ async function startServer() {
       }
 
       await pool.query(
-        'INSERT INTO product_interactions (product_id, user_id, user_name, user_email, interaction_type, content) VALUES (, , , , , )',
+        'INSERT INTO product_interactions (product_id, user_id, user_name, user_email, interaction_type, content) VALUES ($1, $2, $3, $4, $5, $6)',
         [product_id, user_id, user_name, user_email, interaction_type, content || '']
       );
       res.json({ success: true });
@@ -1329,9 +1329,9 @@ async function startServer() {
 
       let dbResult;
       if (!isNaN(Number(email))) {
-        dbResult = await pool.query('SELECT id, name, email, role, is_approved, company_name, company_logo, wallet FROM users WHERE (email = $1 OR id = $2) AND password = $3', [email, Number(email), password]);
+        dbResult = await pool.query('SELECT id, name, email, role, is_approved, company_name, company_logo, wallet, can_transfer, can_request, can_request_delivery FROM users WHERE (email = $1 OR id = $2) AND password = $3', [email, Number(email), password]);
       } else {
-        dbResult = await pool.query('SELECT id, name, email, role, is_approved, company_name, company_logo, wallet FROM users WHERE email = $1 AND password = $2', [email, password]);
+        dbResult = await pool.query('SELECT id, name, email, role, is_approved, company_name, company_logo, wallet, can_transfer, can_request, can_request_delivery FROM users WHERE email = $1 AND password = $2', [email, password]);
       }
 
       if (dbResult.rows.length > 0) {
