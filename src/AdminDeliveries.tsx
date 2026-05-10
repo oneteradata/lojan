@@ -71,19 +71,45 @@ export function AdminDeliveries({ user }: { user: any }) {
   };
 
   useEffect(() => {
+    let scanner: Html5QrcodeScanner | null = null;
+    let isMounted = true;
+
     if (scanning) {
-      const scanner = new Html5QrcodeScanner('reader', { qrbox: { width: 250, height: 250 }, fps: 5 }, false);
-      scanner.render((decodedText) => {
-         // Assume the QR contains the Order ID or URL with it.
-         // Let's just extract numbers
-         const match = decodedText.match(/\d+/);
-         if(match) {
-            setSearchCode(match[0]);
-            setScanning(false);
-            scanner.clear();
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+        .then((stream) => {
+          if (!isMounted) {
+            stream.getTracks().forEach(track => track.stop());
+            return;
+          }
+          // Stop stream so scanner can take over
+          stream.getTracks().forEach(track => track.stop());
+          
+          scanner = new Html5QrcodeScanner('reader', { qrbox: { width: 250, height: 250 }, fps: 5 }, false);
+          scanner.render((decodedText) => {
+             const match = decodedText.match(/\d+/);
+             if(match) {
+                setSearchCode(match[0]);
+                setScanning(false);
+                if (scanner) {
+                   scanner.clear().catch(() => {});
+                   scanner = null;
+                }
+             }
+          }, (error) => {});
+        })
+        .catch((err) => {
+          if (isMounted) {
+             alert('Permissão de câmera negada ou câmera não encontrada.');
+             setScanning(false);
+          }
+        });
+        
+      return () => {
+         isMounted = false;
+         if (scanner) {
+            scanner.clear().catch(() => {});
          }
-      }, (error) => {});
-      return () => { scanner.clear().catch(e => {}); };
+      };
     }
   }, [scanning]);
 
