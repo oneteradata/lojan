@@ -431,17 +431,60 @@ async function startServer() {
          }
       }
       
+      const matchingTokens = userTokens.filter((t: string) => t.length === requiredTypeLength);
+      
+      if (matchingTokens.length < requiredAmount) {
+        await logAction(userId, userEmail, 'criar_produto_falhou', `Tentou cadastrar produto (${duration} dias) mas não tem tokens suficientes (tem ${matchingTokens.length}, precisa ${requiredAmount} do tipo ${requiredTypeLength})`);
+        return res.status(400).json({ success: false, error: `Saldo insuficiente para modalidade de ${duration} dias. Necessário ${requiredAmount} token(s) do tipo ${requiredTypeLength}.` });
+      }
+
       const imagesString = (media || []).map((m: any) => m.url).join(',');
       const result = await pool.query(`
         INSERT INTO products (name, category, price, tokens, stock, details, media, variations, image, user_id, user_name, business_model, tables, seats_per_table, is_available, req_token_amount, req_token_type, duration_days)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, true, $15, $16, $17) RETURNING *
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, false, $15, $16, $17) RETURNING *
       `, [
         name, category, String(price || '0'), parseInt(tokens) || 0, parseInt(stock) || 0, details, 
         JSON.stringify(media || []), JSON.stringify(variations || []), imagesString, userId, userName, business_model || 'Venda', tables || null, seats_per_table || null, requiredAmount, requiredTypeLength, duration
       ]);
-      await logAction(userId, userEmail, 'produto_adicionado', `Produto ${result.rows[0].name} criado com sucesso`);
+      await logAction(userId, userEmail, 'produto_adicionado', `Produto ${result.rows[0].name} criado (pendente webhook) para ${duration} dias (necessita ${requiredAmount} tokens do tipo ${requiredTypeLength})`);
       
-      res.json({ success: true, product: result.rows[0] });
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 seconds
+        const webhookUrl = `https://system.voryx.com.br/webhook/pagamentodetokenemcadastro?userId=${userId}&email=${encodeURIComponent(userEmail)}&productId=${result.rows[0].id}&amount=${requiredAmount}&typeLength=${requiredTypeLength}`;
+        console.log(`Iniciando webhook: ${webhookUrl}`);
+        const webhookRes = await fetch(webhookUrl, { 
+          method: 'GET',
+          signal: controller.signal 
+        });
+        clearTimeout(timeoutId);
+        
+        const status = webhookRes.status;
+        const text = await webhookRes.text();
+        console.log(`Webhook retorno: STATUS ${status}, BODY ${text}`);
+        
+        let paymentSuccess = false;
+        if (status === 200 && !text.includes('100')) {
+           paymentSuccess = true;
+        } else if (status === 100 || status.toString() === '100' || text.includes('100')) {
+           paymentSuccess = false;
+        }
+
+        if (paymentSuccess) {
+           await pool.query('UPDATE products SET is_available = true WHERE id = $1', [result.rows[0].id]);
+           result.rows[0].is_available = true;
+           await pool.query(`UPDATE logs SET status = true WHERE event_name = 'produto_adicionado' AND details LIKE $1`, [`%${result.rows[0].name}%`]).catch(()=>null);
+           await logAction(userId, userEmail, 'pagamento_aprovado', `Pagamento do produto ${result.rows[0].name} aprovado.`);
+           res.json({ success: true, product: result.rows[0] });
+        } else {
+           await logAction(userId, userEmail, 'pagamento_recusado', `Pagamento do produto ${result.rows[0].name} recusado ou falhou no webhook. STATUS: ${status}`);
+           res.json({ success: false, error: 'Ocorreu um erro no pagamento. Tente novamente mais tarde.', product: result.rows[0] });
+        }
+      } catch (e: any) {
+         console.error("Erro webhook:", e);
+         await logAction(userId, userEmail, 'pagamento_timeout', `Pagamento do produto ${result.rows[0].name} excedeu o tempo limite.`);
+         res.json({ success: false, error: 'Aguardou muito tempo e o pagamento não foi confirmado. O produto ficou pendente.', product: result.rows[0] });
+      }
     } catch (err: any) {
       console.error('Erro ao criar:', err);
       res.status(500).json({ success: false, error: 'Erro ao criar produto: ' + err.message });
