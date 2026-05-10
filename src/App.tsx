@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'motion/react';
-import { Search, ShoppingBag, Heart, Share2, User, Menu, ArrowRight, Eye, EyeOff, LogOut, RefreshCw, MessageCircle } from 'lucide-react';
+import { Search, ShoppingBag, Heart, Share2, User, Menu, ArrowRight, Eye, EyeOff, LogOut, RefreshCw } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import AdminApp from './Admin';
@@ -22,26 +22,14 @@ function Storefront() {
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const [interactionText, setInteractionText] = useState('');
 
-  useEffect(() => {
-     if (selectedProduct && selectedProduct.id && !selectedProduct._viewTracked) {
-        handleInteraction('view', undefined, selectedProduct.id);
-        setSelectedProduct((prev: any) => prev ? { ...prev, _viewTracked: true } : prev);
-     }
-  }, [selectedProduct?.id]);
-
-  const handleInteraction = async (type: string, contentStr?: string, productId?: number) => {
-    const isAuthRequired = type === 'like' || type === 'comment';
-    if (isAuthRequired && !user) { alert('Faça login para interagir.'); return; }
-    
-    const targetProductId = productId || selectedProduct?.id;
-    if (!targetProductId) return;
-
+  const handleInteraction = async (type: string, contentStr?: string) => {
+    if (!user) { alert('Faça login para interagir.'); return; }
     try {
       const res = await apiFetch('/api/interactions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          product_id: targetProductId,
+          product_id: selectedProduct.id,
           interaction_type: type,
           content: contentStr || ''
         })
@@ -49,28 +37,8 @@ function Storefront() {
       if (res.ok && type === 'comment') {
          setInteractionText('');
          alert('Comentário enviado!');
-         
-         setProducts(prev => prev.map(p => p.id === targetProductId ? { ...p, comments_count: parseInt(p.comments_count || 0) + 1 } : p));
-         if (targetProductId === selectedProduct?.id) {
-             setSelectedProduct((prev: any) => prev ? { ...prev, comments_count: parseInt(prev.comments_count || 0) + 1 } : prev);
-         }
       } else if (res.ok && type === 'like') {
          alert('Você curtiu este produto!');
-         
-         setProducts(prev => prev.map(p => p.id === targetProductId ? { ...p, likes_count: parseInt(p.likes_count || 0) + 1 } : p));
-         if (targetProductId === selectedProduct?.id) {
-             setSelectedProduct((prev: any) => prev ? { ...prev, likes_count: parseInt(prev.likes_count || 0) + 1 } : prev);
-         }
-      } else if (res.ok && type === 'view') {
-         setProducts(prev => prev.map(p => p.id === targetProductId ? { ...p, views_count: parseInt(p.views_count || 0) + 1 } : p));
-         if (targetProductId === selectedProduct?.id) {
-             setSelectedProduct((prev: any) => prev ? { ...prev, views_count: parseInt(prev.views_count || 0) + 1 } : prev);
-         }
-      } else if (res.ok && type === 'click') {
-         setProducts(prev => prev.map(p => p.id === targetProductId ? { ...p, clicks_count: parseInt(p.clicks_count || 0) + 1 } : p));
-         if (targetProductId === selectedProduct?.id) {
-             setSelectedProduct((prev: any) => prev ? { ...prev, clicks_count: parseInt(prev.clicks_count || 0) + 1 } : prev);
-         }
       } else if (res.ok && type === 'share') {
          alert('Compartilhado com sucesso!');
       }
@@ -681,7 +649,6 @@ function Storefront() {
                 transition={{ duration: 0.6, delay: i * 0.1 }}
                 className="group cursor-pointer"
                 onClick={() => {
-                   handleInteraction('click', undefined, product.id);
                    setSelectedProduct({ ...product, image: imgSrc, isVideo, price: priceLabel });
                    setSelectedVariations({});
                 }}
@@ -706,11 +673,6 @@ function Storefront() {
                 <div className="flex justify-between items-start mt-1">
                   <p className="font-sans text-sm text-gray-600 font-medium">{priceLabel}</p>
                   {product.user_name && <p className="font-sans text-[9px] uppercase tracking-widest text-[#007AFF] font-bold opacity-80">Por {product.user_name}</p>}
-                </div>
-                <div className="flex items-center gap-3 mt-3 opacity-60 text-xs text-gray-500 font-sans">
-                  <div className="flex items-center gap-1"><Eye className="w-3 h-3" /> {product.views_count || 0}</div>
-                  <div className="flex items-center gap-1"><Heart className="w-3 h-3" /> {product.likes_count || 0}</div>
-                  <div className="flex items-center gap-1"><MessageCircle className="w-3 h-3" /> {product.comments_count || 0}</div>
                 </div>
               </motion.div>
             );
@@ -767,13 +729,6 @@ function Storefront() {
               <p className="text-gray-600 text-sm leading-relaxed mb-10">
                 {selectedProduct.details || selectedProduct.description || 'Uma peça exclusiva da coleção Valentina. Confeccionada com os mais altos padrões de luxo em nosso ateliê, pensada para trazer elegância e sofisticação instantânea ao seu guarda-roupa.'}
               </p>
-
-              <div className="flex items-center gap-6 mb-10 text-sm font-medium text-gray-500">
-                  <div className="flex items-center gap-2" title="Visualizações"><Eye className="w-4 h-4 text-gray-400" /> {selectedProduct.views_count || 0}</div>
-                  <div className="flex items-center gap-2" title="Cliques"><ArrowRight className="w-4 h-4 text-gray-400" /> {selectedProduct.clicks_count || 0}</div>
-                  <div className="flex items-center gap-2" title="Curtidas"><Heart className="w-4 h-4 text-red-300" /> {selectedProduct.likes_count || 0}</div>
-                  <div className="flex items-center gap-2" title="Comentários"><MessageCircle className="w-4 h-4 text-gray-400" /> {selectedProduct.comments_count || 0}</div>
-              </div>
 
               {selectedProduct.variations && selectedProduct.variations.length > 0 && typeof selectedProduct.variations !== 'string' && (
                 <div className="flex flex-col gap-6 mb-10">
