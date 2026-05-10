@@ -340,7 +340,25 @@ async function startServer() {
   app.get('/api/products', async (req, res) => {
     try {
       if (!dbConnected) throw new Error("DB offline");
-      const dbResult = await pool.query('SELECT * FROM products WHERE is_available = true ORDER BY id DESC');
+      const dbResult = await pool.query(`
+        WITH interaction_stats AS (
+          SELECT product_id,
+                 COUNT(CASE WHEN interaction_type = 'like' THEN 1 END) as likes_count,
+                 COUNT(CASE WHEN interaction_type = 'view' THEN 1 END) as views_count,
+                 COUNT(CASE WHEN interaction_type = 'click' THEN 1 END) as clicks_count,
+                 COUNT(CASE WHEN interaction_type = 'comment' THEN 1 END) as comments_count
+          FROM product_interactions
+          GROUP BY product_id
+        )
+        SELECT p.*, 
+               COALESCE(i.likes_count, 0) as likes_count,
+               COALESCE(i.views_count, 0) as views_count,
+               COALESCE(i.clicks_count, 0) as clicks_count,
+               COALESCE(i.comments_count, 0) as comments_count
+        FROM products p
+        LEFT JOIN interaction_stats i ON p.id = i.product_id
+        WHERE p.is_available = true ORDER BY p.id DESC
+      `);
       res.json(dbResult.rows);
     } catch (err) {
       res.status(500).json({ error: 'Erro de conexão com o banco de dados.' });
@@ -355,14 +373,34 @@ async function startServer() {
       const userId = req.user.id;
       let dbResult;
       
+      const queryBase = `
+        WITH interaction_stats AS (
+          SELECT product_id,
+                 COUNT(CASE WHEN interaction_type = 'like' THEN 1 END) as likes_count,
+                 COUNT(CASE WHEN interaction_type = 'view' THEN 1 END) as views_count,
+                 COUNT(CASE WHEN interaction_type = 'click' THEN 1 END) as clicks_count,
+                 COUNT(CASE WHEN interaction_type = 'comment' THEN 1 END) as comments_count
+          FROM product_interactions
+          GROUP BY product_id
+        )
+        SELECT p.*, 
+               COALESCE(i.likes_count, 0) as likes_count,
+               COALESCE(i.views_count, 0) as views_count,
+               COALESCE(i.clicks_count, 0) as clicks_count,
+               COALESCE(i.comments_count, 0) as comments_count
+        FROM products p
+        LEFT JOIN interaction_stats i ON p.id = i.product_id
+      `;
+
       if (userRole === 'admin') {
-        dbResult = await pool.query('SELECT * FROM products ORDER BY id DESC');
+        dbResult = await pool.query(`${queryBase} ORDER BY p.id DESC`);
       } else {
-        dbResult = await pool.query('SELECT * FROM products WHERE user_id = $1 ORDER BY id DESC', [userId]);
+        dbResult = await pool.query(`${queryBase} WHERE p.user_id = $1 ORDER BY p.id DESC`, [userId]);
       }
       res.json(dbResult.rows);
-    } catch (err) {
-      res.status(500).json({ error: 'Erro de conexão.' });
+    } catch (err: any) {
+      console.error('/api/admin/products error:', err);
+      res.status(500).json({ error: 'Erro de conexão.', details: err.message });
     }
   });
 
@@ -1070,21 +1108,37 @@ async function startServer() {
   });
 
   // POST /api/interactions
-  app.post('/api/interactions', requireAuth, async (req: any, res) => {
+  app.post('/api/interactions', async (req: any, res) => {
     try {
       if (!dbConnected) throw new Error("DB offline");
       const { product_id, interaction_type, content } = req.body;
-      const user_id = req.user.id;
-      const user_email = req.user.email;
-      const user_name = req.user.name;
 
+      // check if type requires auth
+      if (['like', 'comment'].includes(interaction_type)) {
+         requireAuth(req, res, async () => {
+            const user_id = req.user.id;
+            const user_email = req.user.email;
+            const user_name = req.user.name;
+            if (!product_id || !interaction_type) {
+               return res.status(400).json({ success: false, error: 'product_id e interaction_type são obrigatórios' });
+            }
+            await pool.query(
+              'INSERT INTO product_interactions (product_id, user_id, user_name, user_email, interaction_type, content) VALUES ($1, $2, $3, $4, $5, $6)',
+              [product_id, user_id, user_name, user_email, interaction_type, content || '']
+            );
+            return res.json({ success: true });
+         });
+         return;
+      }
+
+      // Anonymous tracking for views and clicks
       if (!product_id || !interaction_type) {
          return res.status(400).json({ success: false, error: 'product_id e interaction_type são obrigatórios' });
       }
 
       await pool.query(
-        'INSERT INTO product_interactions (product_id, user_id, user_name, user_email, interaction_type, content) VALUES (, , , , , )',
-        [product_id, user_id, user_name, user_email, interaction_type, content || '']
+        'INSERT INTO product_interactions (product_id, interaction_type, content) VALUES ($1, $2, $3)',
+        [product_id, interaction_type, content || '']
       );
       res.json({ success: true });
     } catch (err: any) {
@@ -1225,6 +1279,24 @@ async function startServer() {
       res.json({ success: true, request: updateResult.rows[0] });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.get('/api/debug-query', async (req, res) => {
+    try {
+      const queryBase = `
+        SELECT p.*,
+          (SELECT COUNT(*) FROM product_interactions pi WHERE pi.product_id = p.id AND interaction_type = 'like') as likes_count,
+          (SELECT COUNT(*) FROM product_interactions pi WHERE pi.product_id = p.id AND interaction_type = 'view') as views_count,
+          (SELECT COUNT(*) FROM product_interactions pi WHERE pi.product_id = p.id AND interaction_type = 'click') as clicks_count,
+          (SELECT COUNT(*) FROM product_interactions pi WHERE pi.product_id = p.id AND interaction_type = 'comment') as comments_count
+        FROM products p
+      `;
+      const userId = Number(req.query.userId) || 1;
+      const dbResult = await pool.query(`${queryBase} WHERE p.user_id = $1 ORDER BY p.id DESC`, [userId]);
+      res.json({ success: true, count: dbResult.rows.length, rows: dbResult.rows });
+    } catch(err: any) {
+      res.status(500).json({ success: false, error: err.message, stack: err.stack });
     }
   });
 
