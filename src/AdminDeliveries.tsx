@@ -7,7 +7,7 @@ import { twMerge } from "tailwind-merge";
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
-import { Html5QrcodeScanner } from 'html5-qrcode'; // We can install this
+import { Scanner } from '@yudiel/react-qr-scanner';
 
 export function AdminDeliveries({ user }: { user: any }) {
   const [deliveries, setDeliveries] = useState<any[]>([]);
@@ -70,49 +70,7 @@ export function AdminDeliveries({ user }: { user: any }) {
     }
   };
 
-  useEffect(() => {
-    let scanner: Html5QrcodeScanner | null = null;
-    let isMounted = true;
-
-    if (scanning) {
-      navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
-        .then((stream) => {
-          if (!isMounted) {
-            stream.getTracks().forEach(track => track.stop());
-            return;
-          }
-          // Stop stream so scanner can take over
-          stream.getTracks().forEach(track => track.stop());
-          
-          scanner = new Html5QrcodeScanner('reader', { qrbox: { width: 250, height: 250 }, fps: 5 }, false);
-          scanner.render((decodedText) => {
-             const match = decodedText.match(/\d+/);
-             if(match) {
-                setSearchCode(match[0]);
-                setScanning(false);
-                if (scanner) {
-                   scanner.clear().catch(() => {});
-                   scanner = null;
-                }
-             }
-          }, (error) => {});
-        })
-        .catch((err) => {
-          if (isMounted) {
-             alert('Permissão de câmera negada ou câmera não encontrada.');
-             setScanning(false);
-          }
-        });
-        
-      return () => {
-         isMounted = false;
-         if (scanner) {
-            scanner.clear().catch(() => {});
-         }
-      };
-    }
-  }, [scanning]);
-
+  
   const currentDeliveries = deliveries.filter(d => 
      (activeTab === 'pendente' ? d.status !== 'Entregue' : d.status === 'Entregue') &&
      (searchCode ? d.id.toString().includes(searchCode) : true)
@@ -143,7 +101,23 @@ export function AdminDeliveries({ user }: { user: any }) {
 
       {scanning && (
          <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 overflow-hidden">
-            <div id="reader" className="w-full max-w-md mx-auto"></div>
+            <div className="w-full max-w-md mx-auto aspect-square rounded-2xl overflow-hidden bg-black/5 flex items-center justify-center">
+               <Scanner
+                  onScan={(detectedCodes) => {
+                     if (detectedCodes && detectedCodes.length > 0) {
+                        const match = detectedCodes[0].rawValue.match(/d+/);
+                        if (match) {
+                           setSearchCode(match[0]);
+                           setScanning(false);
+                        }
+                     }
+                  }}
+                  onError={(err) => {
+                     console.error(err);
+                  }}
+                  constraints={{ facingMode: 'environment' }}
+               />
+            </div>
          </div>
       )}
       
