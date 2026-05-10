@@ -431,10 +431,15 @@ async function startServer() {
          }
       }
       
-      const matchingTokens = userTokens.filter((t: string) => t.length === requiredTypeLength);
+      const matchingTokensIndices: number[] = [];
+      for (let i = 0; i < userTokens.length; i++) {
+        if (userTokens[i] && userTokens[i].length === requiredTypeLength) {
+          matchingTokensIndices.push(i);
+        }
+      }
       
-      if (matchingTokens.length < requiredAmount) {
-        await logAction(userId, userEmail, 'criar_produto_falhou', `Tentou cadastrar produto (${duration} dias) mas não tem tokens suficientes (tem ${matchingTokens.length}, precisa ${requiredAmount} do tipo ${requiredTypeLength})`);
+      if (matchingTokensIndices.length < requiredAmount) {
+        await logAction(userId, userEmail, 'criar_produto_falhou', `Tentou cadastrar produto (${duration} dias) mas não tem tokens suficientes (tem ${matchingTokensIndices.length}, precisa ${requiredAmount} do tipo ${requiredTypeLength})`);
         return res.status(400).json({ success: false, error: `Saldo insuficiente para modalidade de ${duration} dias. Necessário ${requiredAmount} token(s) do tipo ${requiredTypeLength}.` });
       }
 
@@ -471,19 +476,50 @@ async function startServer() {
         }
 
         if (paymentSuccess) {
+           // Realiza a cobrança (dedução dos tokens) no DB local
+           for (let i = 0; i < requiredAmount; i++) {
+             const idxToRemove = matchingTokensIndices.pop();
+             if (idxToRemove !== undefined) {
+                userTokens[idxToRemove] = null as any; 
+             }
+           }
+           const finalTokens = userTokens.filter(t => t !== null);
+           
+           // Atualiza a carteira baseado no formato identificado
+           if (walletFormat === 'array_of_objects' && targetArrayIndex !== -1) {
+              const tokensObj: any = {};
+              finalTokens.forEach((t, i) => tokensObj[`token_${i}`] = t);
+              rawWallet[targetArrayIndex].wallet = tokensObj;
+           } else if (walletFormat === 'tokens_array') {
+              rawWallet.tokens = finalTokens;
+           } else if (walletFormat === 'object_with_key' && targetObjKey) {
+              const tokensObj: any = {};
+              finalTokens.forEach((t, i) => tokensObj[`token_${i}`] = t);
+              rawWallet[targetObjKey] = tokensObj;
+           } else if (walletFormat === 'root_strings') {
+              // Limpa tokens antigos e insere novos
+              for (const k in rawWallet) { if (k.startsWith('token_')) delete rawWallet[k]; }
+              finalTokens.forEach((t, i) => rawWallet[`token_${i}`] = t);
+           } else {
+              // Fallback tokens array
+              rawWallet.tokens = finalTokens;
+           }
+
+           await pool.query('UPDATE users SET wallet = $1 WHERE id = $2', [JSON.stringify(rawWallet), userId]);
            await pool.query('UPDATE products SET is_available = true WHERE id = $1', [result.rows[0].id]);
+           
            result.rows[0].is_available = true;
            await pool.query(`UPDATE logs SET status = true WHERE event_name = 'produto_adicionado' AND details LIKE $1`, [`%${result.rows[0].name}%`]).catch(()=>null);
            await logAction(userId, userEmail, 'pagamento_aprovado', `Pagamento do produto ${result.rows[0].name} aprovado.`);
            res.json({ success: true, product: result.rows[0] });
         } else {
-           await logAction(userId, userEmail, 'pagamento_recusado', `Pagamento do produto ${result.rows[0].name} recusado ou falhou no webhook. STATUS: ${status}`);
-           res.json({ success: false, error: 'Ocorreu um erro no pagamento. Tente novamente mais tarde.', product: result.rows[0] });
+           await logAction(userId, userEmail, 'pagamento_recusado', `Pagamento do produto ${result.rows[0].name} recusado ou falhou no webhook. STATUS: ${status}, BODY: ${text}`);
+           res.json({ success: false, error: '100', product: result.rows[0] });
         }
       } catch (e: any) {
          console.error("Erro webhook:", e);
          await logAction(userId, userEmail, 'pagamento_timeout', `Pagamento do produto ${result.rows[0].name} excedeu o tempo limite.`);
-         res.json({ success: false, error: 'Aguardou muito tempo e o pagamento não foi confirmado. O produto ficou pendente.', product: result.rows[0] });
+         res.json({ success: false, error: '100', product: result.rows[0] });
       }
     } catch (err: any) {
       console.error('Erro ao criar:', err);
