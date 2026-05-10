@@ -602,9 +602,15 @@ async function startServer() {
       // seller verification
       const checkResult = await pool.query(`
         SELECT 1 FROM orders o
-        JOIN order_items oi ON oi.order_id::text = o.id::text
-        JOIN products p ON p.id::text = oi.product_id::text
-        WHERE o.id::text = $1::text AND p.user_id::text = $2::text LIMIT 1
+        WHERE o.id::text = $1::text AND (
+          o.seller_id::text = $2::text OR
+          EXISTS (
+            SELECT 1 FROM order_items oi
+            JOIN products p ON oi.product_id::text = p.id::text
+            WHERE oi.order_id::text = o.id::text AND p.user_id::text = $2::text
+          )
+        )
+        LIMIT 1
       `, [orderId, req.user.id]);
       
       const buyerCheck = await pool.query(`SELECT 1 FROM orders WHERE id::text = $1::text AND user_id::text = $2::text`, [orderId, req.user.id]);
@@ -613,7 +619,13 @@ async function startServer() {
       const isBuyer = buyerCheck.rows.length > 0;
       const isAdmin = req.user.role === 'admin';
       
-      if (!isAdmin && !isSeller && !isBuyer) {
+      // Check if user has explicit permission or if they are a 'user' and not explicitly denied
+      const hasPermission = req.user.can_request_delivery === true || 
+                            req.user.can_request_delivery === 'true' || 
+                            req.user.can_request_delivery === 1 ||
+                            (req.user.role === 'user' && req.user.can_request_delivery !== false);
+      
+      if (!isAdmin && !isSeller && !isBuyer && !hasPermission) {
          return res.status(403).json({ success: false, error: 'Acesso negado' });
       }
 
