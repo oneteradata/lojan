@@ -340,15 +340,7 @@ async function startServer() {
   app.get('/api/products', async (req, res) => {
     try {
       if (!dbConnected) throw new Error("DB offline");
-      const dbResult = await pool.query(`
-        SELECT p.*,
-          (SELECT COUNT(*) FROM product_interactions pi WHERE pi.product_id = p.id AND interaction_type = 'like') as likes_count,
-          (SELECT COUNT(*) FROM product_interactions pi WHERE pi.product_id = p.id AND interaction_type = 'view') as views_count,
-          (SELECT COUNT(*) FROM product_interactions pi WHERE pi.product_id = p.id AND interaction_type = 'click') as clicks_count,
-          (SELECT COUNT(*) FROM product_interactions pi WHERE pi.product_id = p.id AND interaction_type = 'comment') as comments_count
-        FROM products p 
-        WHERE p.is_available = true ORDER BY p.id DESC
-      `);
+      const dbResult = await pool.query('SELECT * FROM products WHERE is_available = true ORDER BY id DESC');
       res.json(dbResult.rows);
     } catch (err) {
       res.status(500).json({ error: 'Erro de conexão com o banco de dados.' });
@@ -363,19 +355,10 @@ async function startServer() {
       const userId = req.user.id;
       let dbResult;
       
-      const queryBase = `
-        SELECT p.*,
-          (SELECT COUNT(*) FROM product_interactions pi WHERE pi.product_id = p.id AND interaction_type = 'like') as likes_count,
-          (SELECT COUNT(*) FROM product_interactions pi WHERE pi.product_id = p.id AND interaction_type = 'view') as views_count,
-          (SELECT COUNT(*) FROM product_interactions pi WHERE pi.product_id = p.id AND interaction_type = 'click') as clicks_count,
-          (SELECT COUNT(*) FROM product_interactions pi WHERE pi.product_id = p.id AND interaction_type = 'comment') as comments_count
-        FROM products p
-      `;
-
       if (userRole === 'admin') {
-        dbResult = await pool.query(`${queryBase} ORDER BY p.id DESC`);
+        dbResult = await pool.query('SELECT * FROM products ORDER BY id DESC');
       } else {
-        dbResult = await pool.query(`${queryBase} WHERE p.user_id = $1 ORDER BY p.id DESC`, [userId]);
+        dbResult = await pool.query('SELECT * FROM products WHERE user_id = $1 ORDER BY id DESC', [userId]);
       }
       res.json(dbResult.rows);
     } catch (err) {
@@ -1087,37 +1070,21 @@ async function startServer() {
   });
 
   // POST /api/interactions
-  app.post('/api/interactions', async (req: any, res) => {
+  app.post('/api/interactions', requireAuth, async (req: any, res) => {
     try {
       if (!dbConnected) throw new Error("DB offline");
       const { product_id, interaction_type, content } = req.body;
+      const user_id = req.user.id;
+      const user_email = req.user.email;
+      const user_name = req.user.name;
 
-      // check if type requires auth
-      if (['like', 'comment'].includes(interaction_type)) {
-         requireAuth(req, res, async () => {
-            const user_id = req.user.id;
-            const user_email = req.user.email;
-            const user_name = req.user.name;
-            if (!product_id || !interaction_type) {
-               return res.status(400).json({ success: false, error: 'product_id e interaction_type são obrigatórios' });
-            }
-            await pool.query(
-              'INSERT INTO product_interactions (product_id, user_id, user_name, user_email, interaction_type, content) VALUES ($1, $2, $3, $4, $5, $6)',
-              [product_id, user_id, user_name, user_email, interaction_type, content || '']
-            );
-            return res.json({ success: true });
-         });
-         return;
-      }
-
-      // Anonymous tracking for views and clicks
       if (!product_id || !interaction_type) {
          return res.status(400).json({ success: false, error: 'product_id e interaction_type são obrigatórios' });
       }
 
       await pool.query(
-        'INSERT INTO product_interactions (product_id, interaction_type, content) VALUES ($1, $2, $3)',
-        [product_id, interaction_type, content || '']
+        'INSERT INTO product_interactions (product_id, user_id, user_name, user_email, interaction_type, content) VALUES (, , , , , )',
+        [product_id, user_id, user_name, user_email, interaction_type, content || '']
       );
       res.json({ success: true });
     } catch (err: any) {
