@@ -168,6 +168,12 @@ async function initDB() {
     try { await pool.query(`ALTER TABLE users ADD COLUMN can_transfer BOOLEAN DEFAULT true;`); } catch (e) {}
     try { await pool.query(`ALTER TABLE users ADD COLUMN can_request BOOLEAN DEFAULT true;`); } catch (e) {}
     try { await pool.query(`ALTER TABLE users ADD COLUMN can_request_delivery BOOLEAN DEFAULT true;`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE users ADD COLUMN telefone VARCHAR(255);`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE users ADD COLUMN endereco VARCHAR(255);`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE users ADD COLUMN bairro VARCHAR(255);`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE users ADD COLUMN cidade VARCHAR(255);`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE users ADD COLUMN numero VARCHAR(50);`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE users ADD COLUMN cep VARCHAR(50);`); } catch (e) {}
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS user_client (
@@ -749,7 +755,11 @@ async function startServer() {
             COALESCE(u.email, uc.email) as customer_email,
             uc.telefone, uc.endereco, uc.bairro, uc.cidade, uc.numero, uc.cep, uc.telegram,
             (SELECT p.user_id FROM order_items oi JOIN products p ON oi.product_id::text = p.id::text WHERE oi.order_id::text = o.id::text LIMIT 1) as seller_id,
-            (SELECT seller_uc.bairro FROM user_client seller_uc WHERE seller_uc.id::text = (SELECT p.user_id FROM order_items oi JOIN products p ON oi.product_id::text = p.id::text WHERE oi.order_id::text = o.id::text LIMIT 1)::text LIMIT 1) as seller_bairro
+            (SELECT seller_u.bairro FROM users seller_u WHERE seller_u.id::text = (SELECT p.user_id FROM order_items oi JOIN products p ON oi.product_id::text = p.id::text WHERE oi.order_id::text = o.id::text LIMIT 1)::text LIMIT 1) as seller_bairro,
+            (SELECT seller_u.endereco FROM users seller_u WHERE seller_u.id::text = (SELECT p.user_id FROM order_items oi JOIN products p ON oi.product_id::text = p.id::text WHERE oi.order_id::text = o.id::text LIMIT 1)::text LIMIT 1) as seller_endereco,
+            (SELECT seller_u.numero FROM users seller_u WHERE seller_u.id::text = (SELECT p.user_id FROM order_items oi JOIN products p ON oi.product_id::text = p.id::text WHERE oi.order_id::text = o.id::text LIMIT 1)::text LIMIT 1) as seller_numero,
+            (SELECT seller_u.cidade FROM users seller_u WHERE seller_u.id::text = (SELECT p.user_id FROM order_items oi JOIN products p ON oi.product_id::text = p.id::text WHERE oi.order_id::text = o.id::text LIMIT 1)::text LIMIT 1) as seller_cidade,
+            (SELECT seller_u.cep FROM users seller_u WHERE seller_u.id::text = (SELECT p.user_id FROM order_items oi JOIN products p ON oi.product_id::text = p.id::text WHERE oi.order_id::text = o.id::text LIMIT 1)::text LIMIT 1) as seller_cep
             FROM orders o 
             LEFT JOIN users u ON u.id::text = o.user_id::text 
             LEFT JOIN user_client uc ON uc.id::text = o.user_id::text
@@ -764,7 +774,11 @@ async function startServer() {
             COALESCE(u.email, uc.email) as customer_email,
             uc.telefone, uc.endereco, uc.bairro, uc.cidade, uc.numero, uc.cep, uc.telegram,
             (SELECT p.user_id FROM order_items oi JOIN products p ON oi.product_id::text = p.id::text WHERE oi.order_id::text = o.id::text LIMIT 1) as seller_id,
-            (SELECT seller_uc.bairro FROM user_client seller_uc WHERE seller_uc.id::text = (SELECT p.user_id FROM order_items oi JOIN products p ON oi.product_id::text = p.id::text WHERE oi.order_id::text = o.id::text LIMIT 1)::text LIMIT 1) as seller_bairro
+            (SELECT seller_u.bairro FROM users seller_u WHERE seller_u.id::text = (SELECT p.user_id FROM order_items oi JOIN products p ON oi.product_id::text = p.id::text WHERE oi.order_id::text = o.id::text LIMIT 1)::text LIMIT 1) as seller_bairro,
+            (SELECT seller_u.endereco FROM users seller_u WHERE seller_u.id::text = (SELECT p.user_id FROM order_items oi JOIN products p ON oi.product_id::text = p.id::text WHERE oi.order_id::text = o.id::text LIMIT 1)::text LIMIT 1) as seller_endereco,
+            (SELECT seller_u.numero FROM users seller_u WHERE seller_u.id::text = (SELECT p.user_id FROM order_items oi JOIN products p ON oi.product_id::text = p.id::text WHERE oi.order_id::text = o.id::text LIMIT 1)::text LIMIT 1) as seller_numero,
+            (SELECT seller_u.cidade FROM users seller_u WHERE seller_u.id::text = (SELECT p.user_id FROM order_items oi JOIN products p ON oi.product_id::text = p.id::text WHERE oi.order_id::text = o.id::text LIMIT 1)::text LIMIT 1) as seller_cidade,
+            (SELECT seller_u.cep FROM users seller_u WHERE seller_u.id::text = (SELECT p.user_id FROM order_items oi JOIN products p ON oi.product_id::text = p.id::text WHERE oi.order_id::text = o.id::text LIMIT 1)::text LIMIT 1) as seller_cep
             FROM orders o 
             LEFT JOIN users u ON u.id::text = o.user_id::text 
             LEFT JOIN user_client uc ON uc.id::text = o.user_id::text
@@ -1286,13 +1300,13 @@ async function startServer() {
   });
 
   app.post('/api/user_client', requireAuth, requireAdmin, async (req, res) => {
-    const { email, senha_mestre, nome_completo, primeiro_nome, data_nascimento, telegram, melhor_horario, interesses, convite } = req.body;
+    const { email, senha_mestre, nome_completo, primeiro_nome, data_nascimento, telegram, melhor_horario, interesses, convite, telefone, endereco, bairro, cidade, numero, cep } = req.body;
     if (!email || !senha_mestre) return res.status(400).json({ success: false, error: 'Email e senha mestre são obrigatórios.' });
     try {
       if (!dbConnected) throw new Error("DB offline");
       const insertResult = await pool.query(
-        'INSERT INTO user_client (email, senha_mestre, nome_completo, primeiro_nome, data_nascimento, telegram, melhor_horario, interesses, convite) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *',
-        [email, senha_mestre, nome_completo || null, primeiro_nome || null, data_nascimento || null, telegram || null, melhor_horario || null, interesses || null, convite || null]
+        'INSERT INTO user_client (email, senha_mestre, nome_completo, primeiro_nome, data_nascimento, telegram, melhor_horario, interesses, convite, telefone, endereco, bairro, cidade, numero, cep) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) RETURNING *',
+        [email, senha_mestre, nome_completo || null, primeiro_nome || null, data_nascimento || null, telegram || null, melhor_horario || null, interesses || null, convite || null, telefone || null, endereco || null, bairro || null, cidade || null, numero || null, cep || null]
       );
       res.json({ success: true, user: insertResult.rows[0] });
     } catch (err: any) {
@@ -1301,12 +1315,12 @@ async function startServer() {
   });
 
   app.put('/api/user_client/:id', requireAuth, requireAdmin, async (req, res) => {
-    const { email, senha_mestre, nome_completo, primeiro_nome, data_nascimento, telegram, melhor_horario, interesses, convite, role } = req.body;
+    const { email, senha_mestre, nome_completo, primeiro_nome, data_nascimento, telegram, melhor_horario, interesses, convite, role, telefone, endereco, bairro, cidade, numero, cep } = req.body;
     try {
       if (!dbConnected) throw new Error("DB offline");
       const u = await pool.query(
-        'UPDATE user_client SET email = $1, senha_mestre = $2, nome_completo = $3, primeiro_nome = $4, data_nascimento = $5, telegram = $6, melhor_horario = $7, interesses = $8, convite = $9, role = $10 WHERE id = $11 RETURNING *',
-        [email, senha_mestre, nome_completo || null, primeiro_nome || null, data_nascimento || null, telegram || null, melhor_horario || null, interesses || null, convite || null, role || 'client', req.params.id]
+        'UPDATE user_client SET email = $1, senha_mestre = $2, nome_completo = $3, primeiro_nome = $4, data_nascimento = $5, telegram = $6, melhor_horario = $7, interesses = $8, convite = $9, role = $10, telefone = $11, endereco = $12, bairro = $13, cidade = $14, numero = $15, cep = $16 WHERE id = $17 RETURNING *',
+        [email, senha_mestre, nome_completo || null, primeiro_nome || null, data_nascimento || null, telegram || null, melhor_horario || null, interesses || null, convite || null, role || 'client', telefone || null, endereco || null, bairro || null, cidade || null, numero || null, cep || null, req.params.id]
       );
       return res.json({ success: true, user: u.rows[0] });
     } catch (err: any) {
@@ -1388,7 +1402,7 @@ async function startServer() {
 
   // Registro de usuários
   app.post('/api/register', async (req, res) => {
-    const { name, email, password, company_name, company_logo, requested_role } = req.body;
+    const { name, email, password, company_name, company_logo, requested_role, telefone, endereco, bairro, cidade, numero, cep } = req.body;
     
     if (!name || !email || !password) {
       return res.status(400).json({ success: false, error: 'Preencha todos os campos obrigatórios.' });
@@ -1415,8 +1429,8 @@ async function startServer() {
 
       // Insere o novo usuário
       const insertResult = await pool.query(
-        'INSERT INTO users (name, email, password, role, company_name, company_logo, is_approved) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, name, email, role, company_name, company_logo, is_approved',
-        [name, email, password, requested_role === 'delivery' ? 'delivery' : 'user', company_name || null, company_logo || null, false]
+        'INSERT INTO users (name, email, password, role, company_name, company_logo, is_approved, telefone, endereco, bairro, cidade, numero, cep) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id, name, email, role, company_name, company_logo, is_approved',
+        [name, email, password, requested_role === 'delivery' ? 'delivery' : 'user', company_name || null, company_logo || null, false, telefone || null, endereco || null, bairro || null, cidade || null, numero || null, cep || null]
       );
       
       const user = insertResult.rows[0];

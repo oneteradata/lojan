@@ -36,9 +36,33 @@ function AdminLogin({ onLogin }: { onLogin: (user: any) => void }) {
   const [companyName, setCompanyName] = useState('');
   const [companyLogo, setCompanyLogo] = useState('');
   const [requestedRole, setRequestedRole] = useState('user');
+  
+  const [telefone, setTelefone] = useState('');
+  const [cep, setCep] = useState('');
+  const [endereco, setEndereco] = useState('');
+  const [numero, setNumero] = useState('');
+  const [bairro, setBairro] = useState('');
+  const [cidade, setCidade] = useState('');
+
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const cleanCep = cep.replace(/\D/g, '');
+    if (cleanCep.length === 8) {
+      fetch(`https://viacep.com.br/ws/${cleanCep}/json/`)
+        .then(res => res.json())
+        .then(data => {
+          if (!data.erro) {
+            setCidade(data.localidade || '');
+            setBairro(data.bairro || '');
+            setEndereco(data.logradouro || '');
+          }
+        })
+        .catch(() => {});
+    }
+  }, [cep]);
 
   const handleLogoUpload = async (e: any) => {
     const file = e.target.files?.[0];
@@ -80,7 +104,9 @@ function AdminLogin({ onLogin }: { onLogin: (user: any) => void }) {
     setLoading(true);
     try {
       const endpoint = isRegistering ? '/api/register' : '/api/login';
-      const body = isRegistering ? { name, email, password, company_name: companyName, company_logo: companyLogo, requested_role: requestedRole } : { email, password };
+      const body = isRegistering 
+        ? { name, email, password, company_name: companyName, company_logo: companyLogo, requested_role: requestedRole, telefone, endereco, bairro, cidade, numero, cep } 
+        : { email, password };
       
       const res = await apiFetch(endpoint, {
         method: 'POST',
@@ -173,6 +199,32 @@ function AdminLogin({ onLogin }: { onLogin: (user: any) => void }) {
                   />
                   {uploadingLogo && <span className="text-[10px] text-[#007AFF] font-bold">ENVIANDO...</span>}
                   {companyLogo && <img src={companyLogo} alt="Logo" className="w-10 h-10 object-cover rounded-md" />}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3 mt-4">
+                <div className="col-span-2 sm:col-span-1">
+                  <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">TELEFONE (OPCIONAL)</label>
+                  <input type="text" value={telefone} onChange={e => setTelefone(e.target.value)} placeholder="(00) 00000-0000" className="w-full bg-[#F5F5F7] border border-transparent focus:border-[#007AFF]/30 focus:bg-white rounded-2xl px-4 py-3.5 text-sm outline-none transition-all" />
+                </div>
+                <div className="col-span-2 sm:col-span-1">
+                  <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">CEP (OPCIONAL)</label>
+                  <input type="text" value={cep} onChange={e => setCep(e.target.value)} placeholder="00000-000" className="w-full bg-[#F5F5F7] border border-transparent focus:border-[#007AFF]/30 focus:bg-white rounded-2xl px-4 py-3.5 text-sm outline-none transition-all" />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">ENDEREÇO (OPCIONAL)</label>
+                  <input type="text" value={endereco} onChange={e => setEndereco(e.target.value)} placeholder="Rua, Avenida..." className="w-full bg-[#F5F5F7] border border-transparent focus:border-[#007AFF]/30 focus:bg-white rounded-2xl px-4 py-3.5 text-sm outline-none transition-all" />
+                </div>
+                <div className="col-span-2 sm:col-span-1">
+                  <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">NÚMERO (OPCIONAL)</label>
+                  <input type="text" value={numero} onChange={e => setNumero(e.target.value)} placeholder="123" className="w-full bg-[#F5F5F7] border border-transparent focus:border-[#007AFF]/30 focus:bg-white rounded-2xl px-4 py-3.5 text-sm outline-none transition-all" />
+                </div>
+                <div className="col-span-2 sm:col-span-1">
+                  <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">BAIRRO (OPCIONAL)</label>
+                  <input type="text" value={bairro} onChange={e => setBairro(e.target.value)} placeholder="Bairro" className="w-full bg-[#F5F5F7] border border-transparent focus:border-[#007AFF]/30 focus:bg-white rounded-2xl px-4 py-3.5 text-sm outline-none transition-all" />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">CIDADE (OPCIONAL)</label>
+                  <input type="text" value={cidade} onChange={e => setCidade(e.target.value)} placeholder="Sua Cidade" className="w-full bg-[#F5F5F7] border border-transparent focus:border-[#007AFF]/30 focus:bg-white rounded-2xl px-4 py-3.5 text-sm outline-none transition-all" />
                 </div>
               </div>
             </>
@@ -1193,10 +1245,17 @@ function AdminOrders() {
                             )}
 
                         </div>
-                        <div className="text-right">
+                        <div className="text-right flex flex-col items-end">
                            <p className="text-[10px] text-gray-400 font-bold tracking-widest uppercase">Data</p>
                            <p className="text-sm font-semibold">{new Date(selectedOrder.created_at).toLocaleString('pt-BR')}</p>
                            <span className="text-[10px] bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded flex w-fit ml-auto mt-2 font-bold uppercase">{selectedOrder.status}</span>
+                           {(selectedOrder.seller_endereco || selectedOrder.seller_bairro || selectedOrder.seller_cidade) && (
+                              <div className="mt-2 text-xs text-gray-500 border-t pt-2 border-gray-100 text-right">
+                                 <p className="font-semibold text-gray-800">Endereço de Retirada (Vendedor):</p>
+                                 <p>{selectedOrder.seller_endereco}{selectedOrder.seller_numero ? `, ${selectedOrder.seller_numero}` : ''}</p>
+                                 <p>{selectedOrder.seller_bairro && `${selectedOrder.seller_bairro} - `}{selectedOrder.seller_cidade}</p>
+                              </div>
+                           )}
                         </div>
                      </div>
                      <div className="space-y-4">
@@ -1318,16 +1377,26 @@ function AdminOrders() {
                   ) : (
                      <>
                         {!selectedOrder.requires_delivery && selectedOrder.status !== 'Entregue' && selectedOrder.status !== 'Cancelado' && (
-                           <button onClick={() => handleRequestDelivery(selectedOrder.id)} className="w-full bg-[#007AFF] hover:bg-[#0066cc] text-white font-bold rounded-2xl py-4 flex justify-center items-center gap-2">
+                           <button onClick={() => handleRequestDelivery(selectedOrder.id)} className="w-full bg-[#007AFF] hover:bg-[#0066cc] text-white font-bold rounded-2xl py-4 flex justify-center items-center gap-2 mb-2">
                               <Package className="w-5 h-5" />
                               Solicitar Entrega
                            </button>
                         )}
                         {selectedOrder.requires_delivery && (
-                           <div className="w-full bg-blue-50 text-blue-700 font-bold rounded-2xl py-4 flex justify-center items-center gap-2 text-sm text-center px-4">
+                           <div className="w-full bg-blue-50 text-blue-700 font-bold rounded-2xl py-4 flex justify-center items-center gap-2 text-sm text-center px-4 mb-2">
                               <Package className="w-5 h-5 shrink-0" />
                               {selectedOrder.delivery_user_id ? 'Entregador já a caminho ou assumiu o pedido.' : 'Entrega solicitada. Aguardando entregador.'}
                            </div>
+                        )}
+                        {selectedOrder.requires_delivery && user.role === 'delivery' && (
+                           <a 
+                             href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(`${selectedOrder.seller_endereco}, ${selectedOrder.seller_numero}, ${selectedOrder.seller_cidade}`)}&destination=${encodeURIComponent(`${selectedOrder.endereco}, ${selectedOrder.numero}, ${selectedOrder.cidade}`)}`}
+                             target="_blank" 
+                             rel="noopener noreferrer"
+                             className="w-full bg-green-600 hover:bg-green-700 text-white font-bold rounded-2xl py-4 flex justify-center items-center gap-2 mb-2"
+                           >
+                             📍 Traçar Rota (Calcular Distância)
+                           </a>
                         )}
                      </>
                   )}
@@ -1370,7 +1439,9 @@ function AdminOrders() {
                    <p className="text-xl font-bold mb-2">Empresa ID: {selectedOrder.seller_id || 'n/d'}</p>
                    <p className="text-md">Setor de Entregas</p>
                    <div className="mt-4 text-md">
+                      <p>{selectedOrder.seller_endereco || 'n/d'}, {selectedOrder.seller_numero || 'n/d'}</p>
                       <p>Bairro: {selectedOrder.seller_bairro || 'n/d'}</p>
+                      <p>{selectedOrder.seller_cidade || 'n/d'} - CEP: {selectedOrder.seller_cep || 'n/d'}</p>
                    </div>
                 </div>
              </div>
@@ -1423,9 +1494,9 @@ export function AdminUsers() {
   const [searchText, setSearchText] = useState('');
   const [copiedId, setCopiedId] = useState<number | null>(null);
   
-  const defaultTeamFormState = { name: '', email: '', password: '', role: 'user', company_name: '', company_logo: '', is_approved: false, can_transfer: true, can_request: true, can_request_delivery: true };
+  const defaultTeamFormState = { name: '', email: '', password: '', role: 'user', company_name: '', company_logo: '', is_approved: false, can_transfer: true, can_request: true, can_request_delivery: true, telefone: '', cep: '', endereco: '', numero: '', bairro: '', cidade: '' };
   const defaultClientFormState = { 
-    email: '', senha_mestre: '', nome_completo: '', primeiro_nome: '', data_nascimento: '', telegram: '', melhor_horario: '', interesses: '', convite: ''
+    email: '', senha_mestre: '', nome_completo: '', primeiro_nome: '', data_nascimento: '', telegram: '', melhor_horario: '', interesses: '', convite: '', telefone: '', cep: '', endereco: '', numero: '', bairro: '', cidade: ''
   };
   const [formData, setFormData] = useState<any>(defaultTeamFormState);
 
@@ -1678,7 +1749,13 @@ export function AdminUsers() {
                            is_approved: u.is_approved,
                            can_transfer: u.can_transfer !== false,
                            can_request: u.can_request !== false,
-                           can_request_delivery: u.can_request_delivery !== false
+                           can_request_delivery: u.can_request_delivery !== false,
+                           telefone: u.telefone || '',
+                           cep: u.cep || '',
+                           endereco: u.endereco || '',
+                           numero: u.numero || '',
+                           bairro: u.bairro || '',
+                           cidade: u.cidade || ''
                          }); 
                          setShowAddForm(true); 
                        }} className="flex-1 sm:flex-initial text-[10px] uppercase font-bold text-[#007AFF] py-3 sm:px-3 sm:py-2 bg-blue-50 rounded-xl hover:bg-blue-100 transition-colors flex items-center justify-center">Editar</button>
@@ -1729,7 +1806,13 @@ export function AdminUsers() {
                        melhor_horario: c.melhor_horario || '',
                        interesses: c.interesses || '',
                        senha_mestre: c.senha_mestre || '',
-                       convite: c.convite || ''
+                       convite: c.convite || '',
+                       telefone: c.telefone || '',
+                       cep: c.cep || '',
+                       endereco: c.endereco || '',
+                       numero: c.numero || '',
+                       bairro: c.bairro || '',
+                       cidade: c.cidade || ''
                      }); 
                      setShowAddForm(true); 
                    }} className="flex-1 sm:flex-initial text-[10px] uppercase font-bold text-[#007AFF] py-3 sm:px-3 sm:py-2 bg-blue-50 rounded-xl hover:bg-blue-100 transition-colors flex items-center justify-center">Editar</button>
@@ -1893,6 +1976,47 @@ export function AdminUsers() {
                      </div>
                    </>
                  )}
+
+                 <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-gray-100">
+                   <div className="col-span-2">
+                      <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Telefone</label>
+                      <input value={formData.telefone || ''} onChange={e => setFormData({...formData, telefone: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                   </div>
+                   <div>
+                      <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">CEP</label>
+                      <input value={formData.cep || ''} onChange={e => {
+                        const rawCep = e.target.value;
+                        setFormData({...formData, cep: rawCep});
+                        const cleanCep = rawCep.replace(/\D/g, '');
+                        if (cleanCep.length === 8) {
+                          fetch(`https://viacep.com.br/ws/${cleanCep}/json/`)
+                            .then(res => res.json())
+                            .then(data => {
+                              if (!data.erro) {
+                                 setFormData((prev: any) => ({...prev, cep: rawCep, cidade: data.localidade || '', bairro: data.bairro || '', endereco: data.logradouro || ''}));
+                              }
+                            })
+                            .catch(() => {});
+                        }
+                      }} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                   </div>
+                   <div className="col-span-2">
+                      <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Endereço</label>
+                      <input value={formData.endereco || ''} onChange={e => setFormData({...formData, endereco: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                   </div>
+                   <div>
+                      <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Número</label>
+                      <input value={formData.numero || ''} onChange={e => setFormData({...formData, numero: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                   </div>
+                   <div>
+                      <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Bairro</label>
+                      <input value={formData.bairro || ''} onChange={e => setFormData({...formData, bairro: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                   </div>
+                   <div className="col-span-2">
+                      <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Cidade</label>
+                      <input value={formData.cidade || ''} onChange={e => setFormData({...formData, cidade: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                   </div>
+                 </div>
 
                  <button type="submit" disabled={loading} className="w-full bg-[#007AFF] text-white font-semibold rounded-2xl py-4 mt-6 disabled:opacity-70">
                    {loading ? 'Salvando...' : `Salvar ${activeTab === 'team' ? 'Usuário' : 'Cliente'}`}

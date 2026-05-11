@@ -70,8 +70,30 @@ function Storefront() {
   const [companyName, setCompanyName] = useState('');
   const [requestedRole, setRequestedRole] = useState('user');
   const [companyLogo, setCompanyLogo] = useState('');
+  const [telefone, setTelefone] = useState('');
+  const [cep, setCep] = useState('');
+  const [endereco, setEndereco] = useState('');
+  const [numero, setNumero] = useState('');
+  const [bairro, setBairro] = useState('');
+  const [cidade, setCidade] = useState('');
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [authError, setAuthError] = useState('');
+
+  useEffect(() => {
+    const cleanCep = cep.replace(/\D/g, '');
+    if (cleanCep.length === 8) {
+      fetch(`https://viacep.com.br/ws/${cleanCep}/json/`)
+        .then(res => res.json())
+        .then(data => {
+          if (!data.erro) {
+            setCidade(data.localidade || '');
+            setBairro(data.bairro || '');
+            setEndereco(data.logradouro || '');
+          }
+        })
+        .catch(() => {});
+    }
+  }, [cep]);
 
   // Cart state
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -102,7 +124,7 @@ function Storefront() {
     setAuthError('');
     
     const endpoint = isRegistering ? '/api/register' : '/api/login';
-    const bodyPayload = isRegistering ? { name, email, password, company_name: companyName, company_logo: companyLogo, requested_role: requestedRole } : { email, password };
+    const bodyPayload = isRegistering ? { name, email, password, company_name: companyName, company_logo: companyLogo, requested_role: requestedRole, telefone, endereco, bairro, cidade, numero, cep } : { email, password };
 
     try {
       const res = await apiFetch(endpoint, {
@@ -447,6 +469,34 @@ function Storefront() {
                     </div>
                     {uploadingLogo && <span className="text-[10px] text-[#007AFF] flex items-center gap-2"><RefreshCw className="w-3 h-3 animate-spin"/> Enviando logo...</span>}
                     {companyLogo && <img src={companyLogo} alt="Logo" className="h-12 w-12 object-cover rounded-full border border-gray-200 self-center" />}
+
+                    <div className="grid grid-cols-2 gap-3 pt-3 border-t border-gray-100">
+                      <div className="col-span-2 relative group">
+                        <input value={telefone} onChange={e => setTelefone(e.target.value)} type="text" placeholder="(00) 00000-0000" className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 pt-5 pb-2 text-sm text-gray-900 peer focus:border-[#007AFF]/50 focus:bg-white transition-all outline-none" required />
+                        <label className="absolute text-[10px] uppercase tracking-wider text-gray-500 top-2 left-4 peer-focus:text-[#007AFF] transition-colors">Telefone</label>
+                      </div>
+                      <div className="relative group">
+                        <input value={cep} onChange={e => setCep(e.target.value)} type="text" placeholder="00000-000" className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 pt-5 pb-2 text-sm text-gray-900 peer focus:border-[#007AFF]/50 focus:bg-white transition-all outline-none" />
+                        <label className="absolute text-[10px] uppercase tracking-wider text-gray-500 top-2 left-4 peer-focus:text-[#007AFF] transition-colors">CEP</label>
+                      </div>
+                      <div className="col-span-2 relative group">
+                        <input value={endereco} onChange={e => setEndereco(e.target.value)} type="text" placeholder="Rua..." className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 pt-5 pb-2 text-sm text-gray-900 peer focus:border-[#007AFF]/50 focus:bg-white transition-all outline-none" required />
+                        <label className="absolute text-[10px] uppercase tracking-wider text-gray-500 top-2 left-4 peer-focus:text-[#007AFF] transition-colors">Endereço</label>
+                      </div>
+                      <div className="relative group">
+                        <input value={numero} onChange={e => setNumero(e.target.value)} type="text" placeholder="Nº" className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 pt-5 pb-2 text-sm text-gray-900 peer focus:border-[#007AFF]/50 focus:bg-white transition-all outline-none" required />
+                        <label className="absolute text-[10px] uppercase tracking-wider text-gray-500 top-2 left-4 peer-focus:text-[#007AFF] transition-colors">Número</label>
+                      </div>
+                      <div className="relative group">
+                        <input value={bairro} onChange={e => setBairro(e.target.value)} type="text" placeholder="Bairro..." className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 pt-5 pb-2 text-sm text-gray-900 peer focus:border-[#007AFF]/50 focus:bg-white transition-all outline-none" required />
+                        <label className="absolute text-[10px] uppercase tracking-wider text-gray-500 top-2 left-4 peer-focus:text-[#007AFF] transition-colors">Bairro</label>
+                      </div>
+                      <div className="col-span-2 relative group">
+                        <input value={cidade} onChange={e => setCidade(e.target.value)} type="text" placeholder="Sua Cidade..." className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 pt-5 pb-2 text-sm text-gray-900 peer focus:border-[#007AFF]/50 focus:bg-white transition-all outline-none" required />
+                        <label className="absolute text-[10px] uppercase tracking-wider text-gray-500 top-2 left-4 peer-focus:text-[#007AFF] transition-colors">Cidade</label>
+                      </div>
+                    </div>
+
                   </motion.div>
                 )}
                 
