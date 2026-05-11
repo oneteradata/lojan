@@ -747,7 +747,7 @@ async function startServer() {
             SELECT DISTINCT o.*, 
             COALESCE(u.name, uc.nome_completo) as customer_name, 
             COALESCE(u.email, uc.email) as customer_email,
-            uc.telefone, uc.endereco, uc.bairro, uc.cidade, uc.numero, uc.cep,
+            uc.telefone, uc.endereco, uc.bairro, uc.cidade, uc.numero, uc.cep, uc.telegram,
             (SELECT p.user_id FROM order_items oi JOIN products p ON oi.product_id::text = p.id::text WHERE oi.order_id::text = o.id::text LIMIT 1) as seller_id,
             (SELECT seller_uc.bairro FROM user_client seller_uc WHERE seller_uc.id::text = (SELECT p.user_id FROM order_items oi JOIN products p ON oi.product_id::text = p.id::text WHERE oi.order_id::text = o.id::text LIMIT 1)::text LIMIT 1) as seller_bairro
             FROM orders o 
@@ -762,7 +762,7 @@ async function startServer() {
             SELECT DISTINCT o.*, 
             COALESCE(u.name, uc.nome_completo) as customer_name, 
             COALESCE(u.email, uc.email) as customer_email,
-            uc.telefone, uc.endereco, uc.bairro, uc.cidade, uc.numero, uc.cep,
+            uc.telefone, uc.endereco, uc.bairro, uc.cidade, uc.numero, uc.cep, uc.telegram,
             (SELECT p.user_id FROM order_items oi JOIN products p ON oi.product_id::text = p.id::text WHERE oi.order_id::text = o.id::text LIMIT 1) as seller_id,
             (SELECT seller_uc.bairro FROM user_client seller_uc WHERE seller_uc.id::text = (SELECT p.user_id FROM order_items oi JOIN products p ON oi.product_id::text = p.id::text WHERE oi.order_id::text = o.id::text LIMIT 1)::text LIMIT 1) as seller_bairro
             FROM orders o 
@@ -778,7 +778,7 @@ async function startServer() {
             SELECT DISTINCT o.*, 
             COALESCE(u.name, uc.nome_completo) as customer_name, 
             COALESCE(u.email, uc.email) as customer_email,
-            uc.telefone, uc.endereco, uc.bairro, uc.cidade, uc.numero, uc.cep,
+            uc.telefone, uc.endereco, uc.bairro, uc.cidade, uc.numero, uc.cep, uc.telegram,
             $1 as seller_id
             FROM orders o 
             LEFT JOIN users u ON u.id::text = o.user_id::text 
@@ -797,7 +797,7 @@ async function startServer() {
             SELECT DISTINCT o.*, 
             COALESCE(u.name, uc.nome_completo) as customer_name, 
             COALESCE(u.email, uc.email) as customer_email,
-            uc.telefone, uc.endereco, uc.bairro, uc.cidade, uc.numero, uc.cep,
+            uc.telefone, uc.endereco, uc.bairro, uc.cidade, uc.numero, uc.cep, uc.telegram,
             (SELECT p.user_id FROM order_items oi JOIN products p ON oi.product_id::text = p.id::text WHERE oi.order_id::text = o.id::text LIMIT 1) as seller_id
             FROM orders o 
             LEFT JOIN users u ON u.id::text = o.user_id::text 

@@ -1002,6 +1002,7 @@ function AdminOrders() {
   const [sales, setSales] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'purchases'|'sales'>('purchases');
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
+  const [reservationCode, setReservationCode] = useState('');
 
   useEffect(() => {
     apiFetch('/api/orders')
@@ -1242,17 +1243,81 @@ function AdminOrders() {
                </div>
 
                <div className="p-4 border-t border-gray-100 bg-white space-y-2">
-                  {!selectedOrder.requires_delivery && selectedOrder.status !== 'Entregue' && (
-                     <button onClick={() => handleRequestDelivery(selectedOrder.id)} className="w-full bg-[#007AFF] hover:bg-[#0066cc] text-white font-bold rounded-2xl py-4 flex justify-center items-center gap-2">
-                        <Package className="w-5 h-5" />
-                        Solicitar Entrega
-                     </button>
-                  )}
-                  {selectedOrder.requires_delivery && (
-                     <div className="w-full bg-blue-50 text-blue-700 font-bold rounded-2xl py-4 flex justify-center items-center gap-2 text-sm text-center px-4">
-                        <Package className="w-5 h-5 shrink-0" />
-                        {selectedOrder.delivery_user_id ? 'Entregador já a caminho ou assumiu o pedido.' : 'Entrega solicitada. Aguardando entregador.'}
-                     </div>
+                  {selectedOrder.payment_method === 'reserva' ? (
+                     <>
+                        {selectedOrder.status === 'Pendente' && (
+                           <div className="flex gap-2 w-full">
+                              <button onClick={() => handleStatusChange(selectedOrder.id, 'Em andamento')} className="flex-1 bg-green-500 hover:bg-green-600 text-white font-bold rounded-2xl py-4 flex justify-center items-center gap-2">
+                                 Aprovar Reserva
+                              </button>
+                              <button onClick={() => handleStatusChange(selectedOrder.id, 'Cancelado')} className="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold rounded-2xl py-4 flex justify-center items-center gap-2">
+                                 Rejeitar
+                              </button>
+                           </div>
+                        )}
+                        {(selectedOrder.status === 'Em andamento' || selectedOrder.status === 'Processo de entrega') && (
+                           <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 flex flex-col gap-3">
+                              <h4 className="font-bold text-[#1D1D1F] text-sm">Reserva Aprovada</h4>
+                              <div className="text-xs text-gray-700 bg-white p-3 rounded-xl border border-gray-100 space-y-1">
+                                 {selectedOrder.customer_name && <p><span className="font-bold">Cliente:</span> {selectedOrder.customer_name}</p>}
+                                 {selectedOrder.telefone && <p><span className="font-bold">Contato:</span> {selectedOrder.telefone}</p>}
+                                 {selectedOrder.telegram && <p><span className="font-bold">Telegram:</span> {selectedOrder.telegram}</p>}
+                                 {selectedOrder.customer_email && <p><span className="font-bold">Email:</span> {selectedOrder.customer_email}</p>}
+                                 {selectedOrder.user_id && <p><span className="font-bold">ID:</span> {selectedOrder.user_id}</p>}
+                                 <p className="text-[10px] text-gray-400 mt-2">Dados da tabela user_client/orders</p>
+                              </div>
+                              <label className="text-xs font-bold text-gray-500 mt-1 uppercase">Validar Codigo do Cliente (000-000)</label>
+                              <div className="flex gap-2">
+                                 <input 
+                                    type="text" 
+                                    placeholder="000-000" 
+                                    value={reservationCode} 
+                                    onChange={(e) => setReservationCode(e.target.value)} 
+                                    className="flex-1 bg-white border border-blue-200 focus:border-blue-500 font-semibold text-sm rounded-xl px-3 py-2 outline-none"
+                                 />
+                                 <button 
+                                    onClick={() => {
+                                       if (reservationCode === selectedOrder.order_code) {
+                                          handleStatusChange(selectedOrder.id, 'Entregue');
+                                          alert('Reserva confirmada com sucesso! Pedido concluído.');
+                                          setReservationCode('');
+                                       } else {
+                                          alert('Código inválido para esta reserva!');
+                                       }
+                                    }}
+                                    className="bg-[#007AFF] hover:bg-[#0066CC] text-white px-4 py-2 font-bold rounded-xl"
+                                 >
+                                    Confirmar
+                                 </button>
+                              </div>
+                           </div>
+                        )}
+                        {selectedOrder.status === 'Entregue' && (
+                           <div className="w-full bg-green-50 text-green-700 font-bold rounded-2xl py-4 flex justify-center items-center gap-2 text-sm text-center px-4">
+                              Reserva concluída e confirmada.
+                           </div>
+                        )}
+                        {selectedOrder.status === 'Cancelado' && (
+                           <div className="w-full bg-red-50 text-red-700 font-bold rounded-2xl py-4 flex justify-center items-center gap-2 text-sm text-center px-4">
+                              Reserva rejeitada / cancelada.
+                           </div>
+                        )}
+                     </>
+                  ) : (
+                     <>
+                        {!selectedOrder.requires_delivery && selectedOrder.status !== 'Entregue' && selectedOrder.status !== 'Cancelado' && (
+                           <button onClick={() => handleRequestDelivery(selectedOrder.id)} className="w-full bg-[#007AFF] hover:bg-[#0066cc] text-white font-bold rounded-2xl py-4 flex justify-center items-center gap-2">
+                              <Package className="w-5 h-5" />
+                              Solicitar Entrega
+                           </button>
+                        )}
+                        {selectedOrder.requires_delivery && (
+                           <div className="w-full bg-blue-50 text-blue-700 font-bold rounded-2xl py-4 flex justify-center items-center gap-2 text-sm text-center px-4">
+                              <Package className="w-5 h-5 shrink-0" />
+                              {selectedOrder.delivery_user_id ? 'Entregador já a caminho ou assumiu o pedido.' : 'Entrega solicitada. Aguardando entregador.'}
+                           </div>
+                        )}
+                     </>
                   )}
                   <button onClick={handlePrint} className="w-full bg-[#1D1D1F] hover:bg-black text-white font-bold rounded-2xl py-4 flex justify-center items-center gap-2">
                      <List className="w-5 h-5" />
