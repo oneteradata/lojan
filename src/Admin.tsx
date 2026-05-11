@@ -1234,10 +1234,22 @@ function AdminOrders() {
                         onChange={(e) => handleStatusChange(selectedOrder.id, e.target.value)}
                         className="w-full bg-white border border-gray-200 font-semibold text-sm rounded-xl focus:ring-blue-500 focus:border-blue-500 block p-3 outline-none"
                      >
-                        <option value="Pendente">Pendente</option>
-                        <option value="Em andamento">Em andamento</option>
-                        <option value="Processo de entrega">Processo de entrega</option>
-                        <option value="Entregue">Entregue</option>
+                        {selectedOrder.payment_method === 'reserva' ? (
+                           <>
+                              <option value="Pendente">Pendente</option>
+                              <option value="Aprovado">Aprovado</option>
+                              <option value="Reprovado">Reprovado</option>
+                              <option value="Check-in">Check-in</option>
+                           </>
+                        ) : (
+                           <>
+                              <option value="Pendente">Pendente</option>
+                              <option value="Em andamento">Em andamento</option>
+                              <option value="Processo de entrega">Processo de entrega</option>
+                              <option value="Entregue">Entregue</option>
+                              <option value="Cancelado">Cancelado</option>
+                           </>
+                        )}
                      </select>
                   </div>
                </div>
@@ -1247,15 +1259,15 @@ function AdminOrders() {
                      <>
                         {selectedOrder.status === 'Pendente' && (
                            <div className="flex gap-2 w-full">
-                              <button onClick={() => handleStatusChange(selectedOrder.id, 'Em andamento')} className="flex-1 bg-green-500 hover:bg-green-600 text-white font-bold rounded-2xl py-4 flex justify-center items-center gap-2">
+                              <button onClick={() => handleStatusChange(selectedOrder.id, 'Aprovado')} className="flex-1 bg-green-500 hover:bg-green-600 text-white font-bold rounded-2xl py-4 flex justify-center items-center gap-2">
                                  Aprovar Reserva
                               </button>
-                              <button onClick={() => handleStatusChange(selectedOrder.id, 'Cancelado')} className="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold rounded-2xl py-4 flex justify-center items-center gap-2">
+                              <button onClick={() => handleStatusChange(selectedOrder.id, 'Reprovado')} className="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold rounded-2xl py-4 flex justify-center items-center gap-2">
                                  Rejeitar
                               </button>
                            </div>
                         )}
-                        {(selectedOrder.status === 'Em andamento' || selectedOrder.status === 'Processo de entrega') && (
+                        {selectedOrder.status === 'Aprovado' && (
                            <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 flex flex-col gap-3">
                               <h4 className="font-bold text-[#1D1D1F] text-sm">Reserva Aprovada</h4>
                               <div className="text-xs text-gray-700 bg-white p-3 rounded-xl border border-gray-100 space-y-1">
@@ -1278,8 +1290,8 @@ function AdminOrders() {
                                  <button 
                                     onClick={() => {
                                        if (reservationCode === selectedOrder.order_code) {
-                                          handleStatusChange(selectedOrder.id, 'Entregue');
-                                          alert('Reserva confirmada com sucesso! Pedido concluído.');
+                                          handleStatusChange(selectedOrder.id, 'Check-in');
+                                          alert('Reserva confirmada com sucesso! Cliente fez Check-in.');
                                           setReservationCode('');
                                        } else {
                                           alert('Código inválido para esta reserva!');
@@ -1292,12 +1304,12 @@ function AdminOrders() {
                               </div>
                            </div>
                         )}
-                        {selectedOrder.status === 'Entregue' && (
+                        {(selectedOrder.status === 'Entregue' || selectedOrder.status === 'Check-in') && (
                            <div className="w-full bg-green-50 text-green-700 font-bold rounded-2xl py-4 flex justify-center items-center gap-2 text-sm text-center px-4">
-                              Reserva concluída e confirmada.
+                              Reserva concluída (Check-in realizado).
                            </div>
                         )}
-                        {selectedOrder.status === 'Cancelado' && (
+                        {(selectedOrder.status === 'Cancelado' || selectedOrder.status === 'Reprovado') && (
                            <div className="w-full bg-red-50 text-red-700 font-bold rounded-2xl py-4 flex justify-center items-center gap-2 text-sm text-center px-4">
                               Reserva rejeitada / cancelada.
                            </div>
