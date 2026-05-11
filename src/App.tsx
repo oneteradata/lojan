@@ -204,6 +204,7 @@ function Storefront() {
   };
 
   const handleAddToCart = (product: any) => {
+    fetch(`/api/products/${product.id}/click`, { method: 'POST', headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }).catch(() => null);
     let addedPrice = 0;
     const chosenOptions: string[] = [];
     if (product.variations && typeof product.variations !== 'string') {
@@ -699,6 +700,7 @@ function Storefront() {
                 transition={{ duration: 0.6, delay: i * 0.1 }}
                 className="group cursor-pointer"
                 onClick={() => {
+                   fetch(`/api/products/${product.id}/view`, { method: 'POST', headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }).catch(() => null);
                    setSelectedProduct({ ...product, image: imgSrc, isVideo, price: priceLabel });
                    setSelectedVariations({});
                 }}

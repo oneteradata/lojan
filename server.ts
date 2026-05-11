@@ -211,6 +211,20 @@ async function initDB() {
         content TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
+
+      CREATE TABLE IF NOT EXISTS product_views (
+        id SERIAL PRIMARY KEY,
+        product_id INTEGER,
+        user_id INTEGER,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS product_clicks (
+        id SERIAL PRIMARY KEY,
+        product_id INTEGER,
+        user_id INTEGER,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
     
       CREATE TABLE IF NOT EXISTS logs (
         id SERIAL PRIMARY KEY,
@@ -325,6 +339,9 @@ setInterval(async () => {
     }
     if (expiredRes.rows.length > 0) {
        const ids = expiredRes.rows.map((r: any) => r.id);
+       await pool.query("DELETE FROM product_interactions WHERE product_id = ANY($1)", [ids]);
+       await pool.query("DELETE FROM product_views WHERE product_id = ANY($1)", [ids]);
+       await pool.query("DELETE FROM product_clicks WHERE product_id = ANY($1)", [ids]);
        await pool.query("DELETE FROM products WHERE id = ANY($1)", [ids]);
        console.log(`Cron: Deleted ${ids.length} expired products.`);
     }
@@ -362,9 +379,24 @@ async function startServer() {
       let dbResult;
       
       if (userRole === 'admin') {
-        dbResult = await pool.query('SELECT * FROM products ORDER BY id DESC');
+        dbResult = await pool.query(`
+          SELECT p.*,
+                 (SELECT COUNT(*) FROM product_views WHERE product_id = p.id) as views_count,
+                 (SELECT COUNT(*) FROM product_clicks WHERE product_id = p.id) as clicks_count,
+                 (SELECT COUNT(*) FROM product_interactions WHERE product_id = p.id) as interactions_count
+          FROM products p
+          ORDER BY p.id DESC
+        `);
       } else {
-        dbResult = await pool.query('SELECT * FROM products WHERE user_id = $1 ORDER BY id DESC', [userId]);
+        dbResult = await pool.query(`
+          SELECT p.*,
+                 (SELECT COUNT(*) FROM product_views WHERE product_id = p.id) as views_count,
+                 (SELECT COUNT(*) FROM product_clicks WHERE product_id = p.id) as clicks_count,
+                 (SELECT COUNT(*) FROM product_interactions WHERE product_id = p.id) as interactions_count
+          FROM products p
+          WHERE p.user_id = $1
+          ORDER BY p.id DESC
+        `, [userId]);
       }
       res.json(dbResult.rows);
     } catch (err) {
@@ -514,6 +546,9 @@ async function startServer() {
             return res.status(403).json({ success: false, error: 'Sem permissão para deletar este produto.' });
          }
       }
+      await pool.query('DELETE FROM product_interactions WHERE product_id = $1', [req.params.id]);
+      await pool.query('DELETE FROM product_views WHERE product_id = $1', [req.params.id]);
+      await pool.query('DELETE FROM product_clicks WHERE product_id = $1', [req.params.id]);
       const dbResult = await pool.query('DELETE FROM products WHERE id = $1 RETURNING id', [req.params.id]);
       if (dbResult.rows.length > 0) {
           await logAction(req.user.id, userEmail, 'produto_removido', `Produto ${req.params.id} removido`);
@@ -1118,6 +1153,28 @@ async function startServer() {
         'INSERT INTO product_interactions (product_id, user_id, user_name, user_email, interaction_type, content) VALUES ($1, $2, $3, $4, $5, $6)',
         [product_id, user_id, user_name, user_email, interaction_type, content || '']
       );
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.post('/api/products/:id/view', async (req: any, res) => {
+    try {
+      if (!dbConnected) throw new Error("DB offline");
+      const user_id = req.user ? req.user.id : null;
+      await pool.query('INSERT INTO product_views (product_id, user_id) VALUES ($1, $2)', [req.params.id, user_id]);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.post('/api/products/:id/click', async (req: any, res) => {
+    try {
+      if (!dbConnected) throw new Error("DB offline");
+      const user_id = req.user ? req.user.id : null;
+      await pool.query('INSERT INTO product_clicks (product_id, user_id) VALUES ($1, $2)', [req.params.id, user_id]);
       res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });

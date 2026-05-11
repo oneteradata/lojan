@@ -535,6 +535,17 @@ function AdminProducts({ user, onRefreshUser }: { user: any, onRefreshUser?: () 
                          </p>
                          {p.user_name && <p className="text-[9px] text-[#86868B] uppercase font-bold truncate max-w-[80px]">By {p.user_name}</p>}
                        </div>
+                       <div className="flex items-center gap-3 mt-2 text-[10px] text-gray-500 font-semibold border-t border-gray-100 pt-2">
+                         <div className="flex items-center gap-1" title="Visualizações">
+                            <span className="text-[9px] uppercase tracking-wider">👁️</span> {p.views_count || 0}
+                         </div>
+                         <div className="flex items-center gap-1" title="Cliques">
+                            <span className="text-[9px] uppercase tracking-wider">👆</span> {p.clicks_count || 0}
+                         </div>
+                         <div className="flex items-center gap-1" title="Interações/Comentários">
+                            <span className="text-[9px] uppercase tracking-wider">💬</span> {p.interactions_count || 0}
+                         </div>
+                       </div>
                     </div>
                  </div>
                  );
