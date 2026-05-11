@@ -476,36 +476,6 @@ async function startServer() {
         }
 
         if (paymentSuccess) {
-           // Realiza a cobrança (dedução dos tokens) no DB local
-           for (let i = 0; i < requiredAmount; i++) {
-             const idxToRemove = matchingTokensIndices.pop();
-             if (idxToRemove !== undefined) {
-                userTokens[idxToRemove] = null as any; 
-             }
-           }
-           const finalTokens = userTokens.filter(t => t !== null);
-           
-           // Atualiza a carteira baseado no formato identificado
-           if (walletFormat === 'array_of_objects' && targetArrayIndex !== -1) {
-              const tokensObj: any = {};
-              finalTokens.forEach((t, i) => tokensObj[`token_${i}`] = t);
-              rawWallet[targetArrayIndex].wallet = tokensObj;
-           } else if (walletFormat === 'tokens_array') {
-              rawWallet.tokens = finalTokens;
-           } else if (walletFormat === 'object_with_key' && targetObjKey) {
-              const tokensObj: any = {};
-              finalTokens.forEach((t, i) => tokensObj[`token_${i}`] = t);
-              rawWallet[targetObjKey] = tokensObj;
-           } else if (walletFormat === 'root_strings') {
-              // Limpa tokens antigos e insere novos
-              for (const k in rawWallet) { if (k.startsWith('token_')) delete rawWallet[k]; }
-              finalTokens.forEach((t, i) => rawWallet[`token_${i}`] = t);
-           } else {
-              // Fallback tokens array
-              rawWallet.tokens = finalTokens;
-           }
-
-           await pool.query('UPDATE users SET wallet = $1 WHERE id = $2', [JSON.stringify(rawWallet), userId]);
            await pool.query('UPDATE products SET is_available = true WHERE id = $1', [result.rows[0].id]);
            
            result.rows[0].is_available = true;

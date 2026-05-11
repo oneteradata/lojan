@@ -535,7 +535,11 @@ function ProductModal({ item, user, onClose }: { item?: any, user?: any, onClose
       });
       const data = await res.json();
       if (!data.success) {
-        alert(data.error || 'Erro ao salvar produto');
+        if (data.error === '100') {
+           alert('Erro no processamento do token (Erro 100) ou tempo esgotado.');
+        } else {
+           alert(data.error || 'Erro ao salvar produto');
+        }
         if (data.product) onClose(); // se o produto foi criado, feche o modal
       } else {
         onClose();
