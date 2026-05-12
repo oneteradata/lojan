@@ -92,7 +92,7 @@ function normalizeUserWallet(user: any) {
   user.wallet = { tokens: userTokens };
 }
 
-async function logAction(userId: number | null, userEmail: string | null, eventName: string, details: string) {
+async function logAction(userId: string | number | null, userEmail: string | null, eventName: string, details: string) {
   try {
     if (!dbConnected) return;
     await pool.query('INSERT INTO logs (user_id, user_email, event_name, details) VALUES ($1, $2, $3, $4)', 
@@ -270,6 +270,7 @@ async function initDB() {
     try { await pool.query(`ALTER TABLE system_settings ADD COLUMN cost_30d_amount INTEGER DEFAULT 2;`); } catch (e) {}
     try { await pool.query(`ALTER TABLE system_settings ADD COLUMN cost_30d_type INTEGER DEFAULT 256;`); } catch (e) {}
     try { await pool.query(`ALTER TABLE products ADD COLUMN duration_days INTEGER DEFAULT 7;`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE logs ALTER COLUMN user_id TYPE VARCHAR(255);`); } catch (e) {}
     try { await pool.query(`ALTER TABLE logs ADD COLUMN status BOOLEAN DEFAULT false;`); } catch (e) {}
     try { await pool.query(`ALTER TABLE products ADD COLUMN is_available BOOLEAN DEFAULT false;`); } catch (e) {}
     try { await pool.query(`ALTER TABLE products ADD COLUMN req_token_amount INTEGER DEFAULT 1;`); } catch (e) {}
@@ -1047,6 +1048,26 @@ async function startServer() {
         return res.status(400).json({ success: false, error: 'Não é possível transferir para si mesmo.' });
       }
 
+      // Webhook validation
+      try {
+        const webhookResp = await fetch('https://system.voryx.com.br/webhook/transferencia', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+             remetente_id: senderId,
+             quantidade: amountInt,
+             tipo_token: tokenLenInt
+          })
+        });
+
+        if (webhookResp.status === 100 || webhookResp.status !== 200) {
+           return res.status(400).json({ success: false, error: 'existe uma moeda inválida' });
+        }
+      } catch (webhookErr) {
+        console.error("Webhook transfer error", webhookErr);
+        return res.status(400).json({ success: false, error: 'existe uma moeda inválida' });
+      }
+
       // Check sender limits
       const senderRes = await pool.query('SELECT wallet, name, email FROM users WHERE id = $1', [senderId]);
       if (senderRes.rows.length === 0) return res.status(404).json({ success: false, error: 'Remetente não encontrado.' });
@@ -1066,7 +1087,7 @@ async function startServer() {
 
       const matchingIndices = [];
       for (let i = 0; i < userTokens.length; i++) {
-        if (userTokens[i].length === tokenLenInt) {
+        if (typeof userTokens[i] === 'string' && userTokens[i].length === tokenLenInt) {
           matchingIndices.push(i);
         }
       }
@@ -1119,21 +1140,6 @@ async function startServer() {
 
       await logAction(senderId, sender.email, 'transferencia', `Enviou ${amountInt} eToken(s) E${tokenLenInt} para ID ${receiver_id}`);
       await logAction(receiver_id, receiver.email, 'recebimento_transferencia', `Recebeu ${amountInt} eToken(s) E${tokenLenInt} do ID ${senderId}`);
-
-      // Webhook call
-      try {
-        await fetch('https://system.voryx.com.br/webhook/transferencia', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-             remetente_id: senderId,
-             quantidade: amountInt,
-             tipo_token: tokenLenInt
-          })
-        });
-      } catch (webhookErr) {
-        console.error("Webhook transfer error", webhookErr);
-      }
 
       res.json({ success: true });
     } catch (err: any) {
