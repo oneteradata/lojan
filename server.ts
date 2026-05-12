@@ -198,6 +198,7 @@ async function initDB() {
     try { await pool.query(`ALTER TABLE user_client ADD COLUMN cidade VARCHAR(255);`); } catch (e) {}
     try { await pool.query(`ALTER TABLE user_client ADD COLUMN numero VARCHAR(50);`); } catch (e) {}
     try { await pool.query(`ALTER TABLE user_client ADD COLUMN cep VARCHAR(50);`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE user_client ADD COLUMN wallet JSONB DEFAULT '{"tokens": []}';`); } catch (e) {}
 
     // Novas tabelas
     await pool.query(`
@@ -1088,7 +1089,15 @@ async function startServer() {
       rawWallet.tokens = newSenderTokens;
 
       // Receiver
-      const receiverRes = await pool.query('SELECT wallet, email FROM users WHERE id = $1', [receiver_id]);
+      let receiverType = 'users';
+      let receiverRes = await pool.query('SELECT wallet, email FROM users WHERE id::text = $1', [receiver_id]);
+      if (receiverRes.rows.length === 0) {
+         receiverRes = await pool.query('SELECT wallet, email FROM user_client WHERE id::text = $1', [receiver_id]);
+         if (receiverRes.rows.length > 0) {
+            receiverType = 'user_client';
+         }
+      }
+
       if (receiverRes.rows.length === 0) return res.status(404).json({ success: false, error: 'Destinatário não encontrado.' });
       const receiver = receiverRes.rows[0];
       
@@ -1101,10 +1110,30 @@ async function startServer() {
 
       // Save
       await pool.query('UPDATE users SET wallet = $1 WHERE id = $2', [JSON.stringify(rawWallet), senderId]);
-      await pool.query('UPDATE users SET wallet = $1 WHERE id = $2', [JSON.stringify(recWallet), receiver_id]);
+      
+      if (receiverType === 'user_client') {
+         await pool.query('UPDATE user_client SET wallet = $1 WHERE id::text = $2', [JSON.stringify(recWallet), receiver_id]);
+      } else {
+         await pool.query('UPDATE users SET wallet = $1 WHERE id::text = $2', [JSON.stringify(recWallet), receiver_id]);
+      }
 
       await logAction(senderId, sender.email, 'transferencia', `Enviou ${amountInt} eToken(s) E${tokenLenInt} para ID ${receiver_id}`);
       await logAction(receiver_id, receiver.email, 'recebimento_transferencia', `Recebeu ${amountInt} eToken(s) E${tokenLenInt} do ID ${senderId}`);
+
+      // Webhook call
+      try {
+        await fetch('https://system.voryx.com.br/webhook/transferencia', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+             remetente_id: senderId,
+             quantidade: amountInt,
+             tipo_token: tokenLenInt
+          })
+        });
+      } catch (webhookErr) {
+        console.error("Webhook transfer error", webhookErr);
+      }
 
       res.json({ success: true });
     } catch (err: any) {
