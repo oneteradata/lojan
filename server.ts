@@ -1059,7 +1059,8 @@ async function startServer() {
           body: JSON.stringify({
              remetente_id: senderId,
              quantidade: amountInt,
-             tipo_token: tokenLenInt
+             tipo_moeda: "E" + tokenLenInt,
+             moeda: token_length
           })
         });
 
