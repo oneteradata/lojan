@@ -1032,12 +1032,15 @@ async function startServer() {
         return res.status(400).json({ success: false, error: 'A senha é obrigatória para realizar transferências.' });
       }
 
-      const senderValidationRes = await pool.query('SELECT password FROM users WHERE id = $1', [senderId]);
+      const senderValidationRes = await pool.query('SELECT password FROM users WHERE id::text = $1', [senderId]);
       if (senderValidationRes.rows.length === 0) return res.status(404).json({ success: false, error: 'Remetente não encontrado.' });
       
-      const bcrypt = require('bcryptjs');
-      const isMatch = await bcrypt.compare(password, senderValidationRes.rows[0].password);
-      if (!isMatch) {
+      const senderPasswordHash = senderValidationRes.rows[0].password;
+      if (!senderPasswordHash) {
+         return res.status(401).json({ success: false, error: 'Conta sem senha configurada.' });
+      }
+
+      if (password !== senderPasswordHash) {
          return res.status(401).json({ success: false, error: 'Senha incorreta.' });
       }
 
@@ -1060,16 +1063,26 @@ async function startServer() {
           })
         });
 
-        if (webhookResp.status === 100 || webhookResp.status !== 200) {
+        let webhookData: any = {};
+        try {
+          webhookData = await webhookResp.json();
+        } catch (e) {}
+        
+        if (webhookResp.status === 100 || webhookData.status === 100) {
            return res.status(400).json({ success: false, error: 'existe uma moeda inválida' });
+        } else if (webhookResp.status !== 200 && webhookData.status !== 200) {
+           return res.status(400).json({ success: false, error: 'Falha na validação do webhook externo.' });
         }
       } catch (webhookErr) {
         console.error("Webhook transfer error", webhookErr);
-        return res.status(400).json({ success: false, error: 'existe uma moeda inválida' });
+        return res.status(400).json({ success: false, error: 'Falha ao conectar no webhook externo.' });
       }
 
+      // Ensure user_client table has wallet column
+      try { await pool.query(`ALTER TABLE user_client ADD COLUMN wallet JSONB DEFAULT '{"tokens": []}';`); } catch (e) {}
+
       // Check sender limits
-      const senderRes = await pool.query('SELECT wallet, name, email FROM users WHERE id = $1', [senderId]);
+      const senderRes = await pool.query('SELECT wallet, name, email FROM users WHERE id::text = $1', [senderId]);
       if (senderRes.rows.length === 0) return res.status(404).json({ success: false, error: 'Remetente não encontrado.' });
       const sender = senderRes.rows[0];
       
@@ -1130,7 +1143,7 @@ async function startServer() {
       recWallet.tokens = recWallet.tokens.concat(tokensToTransfer);
 
       // Save
-      await pool.query('UPDATE users SET wallet = $1 WHERE id = $2', [JSON.stringify(rawWallet), senderId]);
+      await pool.query('UPDATE users SET wallet = $1 WHERE id::text = $2', [JSON.stringify(rawWallet), senderId]);
       
       if (receiverType === 'user_client') {
          await pool.query('UPDATE user_client SET wallet = $1 WHERE id::text = $2', [JSON.stringify(recWallet), receiver_id]);
@@ -1144,7 +1157,7 @@ async function startServer() {
       res.json({ success: true });
     } catch (err: any) {
       console.error(err);
-      res.status(500).json({ success: false, error: 'Erro interno ao transferir.' });
+      res.status(500).json({ success: false, error: 'Erro interno ao transferir. ' + (err.message || String(err)) });
     }
   });
 
