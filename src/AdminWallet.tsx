@@ -15,10 +15,22 @@ export function AdminWallet({ user, onRefreshUser }: { user: any, onRefreshUser?
   const [showBalance, setShowBalance] = useState(true);
   const [activeTab, setActiveTab] = useState<'extrato' | 'transferir' | 'receber' | 'solicitar'>('extrato');
 
+  const groupedTokensIni = user.wallet?.tokens?.reduce((acc: any, val: string) => {
+    acc[val.length] = (acc[val.length] || 0) + 1;
+    return acc;
+  }, {}) || {};
+  const firstAvailableToken = Object.keys(groupedTokensIni).length > 0 ? Object.keys(groupedTokensIni)[0] : '128';
+
   // Transfer state
   const [transferUserId, setTransferUserId] = useState('');
   const [transferAmount, setTransferAmount] = useState('1');
-  const [transferType, setTransferType] = useState('14'); // token type like 14, 15
+  const [transferType, setTransferType] = useState(firstAvailableToken); // default to first available token length
+  
+  useEffect(() => {
+     if (Object.keys(groupedTokensIni).length > 0 && !Object.keys(groupedTokensIni).includes(transferType)) {
+        setTransferType(Object.keys(groupedTokensIni)[0]);
+     }
+  }, [user.wallet?.tokens]);
   const [transferLoading, setTransferLoading] = useState(false);
   const [transferSuccess, setTransferSuccess] = useState(false);
 
@@ -184,12 +196,14 @@ export function AdminWallet({ user, onRefreshUser }: { user: any, onRefreshUser?
                 </div>
                 <span className="text-[10px] font-bold text-gray-600 uppercase tracking-wider">Extrato</span>
              </button>
-             <button onClick={() => setActiveTab('solicitar')} className="flex flex-col items-center gap-2 min-w-[72px] shrink-0 hover:opacity-80 transition-opacity">
-                <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center shadow-sm", activeTab === 'solicitar' ? "bg-[#007AFF] text-white" : "bg-gray-50 text-[#007AFF]")}>
-                   <CreditCard className="w-6 h-6" />
-                </div>
-                <span className="text-[10px] font-bold text-gray-600 uppercase tracking-wider">Solicitar</span>
-             </button>
+             {user.role === 'admin' && (
+               <button onClick={() => setActiveTab('solicitar')} className="flex flex-col items-center gap-2 min-w-[72px] shrink-0 hover:opacity-80 transition-opacity">
+                  <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center shadow-sm", activeTab === 'solicitar' ? "bg-[#007AFF] text-white" : "bg-gray-50 text-[#007AFF]")}>
+                     <CreditCard className="w-6 h-6" />
+                  </div>
+                  <span className="text-[10px] font-bold text-gray-600 uppercase tracking-wider">Solicitar</span>
+               </button>
+             )}
           </div>
        </div>
 
@@ -271,7 +285,7 @@ export function AdminWallet({ user, onRefreshUser }: { user: any, onRefreshUser?
                                  <option key={t} value={t}>E{t}</option>
                                ))
                              ) : (
-                               <option value="14">E14 (Padrão)</option>
+                               <option value="128">E128 (Padrão)</option>
                              )}
                            </select>
                          </div>

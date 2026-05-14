@@ -1273,31 +1273,32 @@ async function startServer() {
       
       const isAdmin = req.user.role === 'admin';
       
-      // If not admin, verify if 'can_request' is enabled, force user_id to themselves
       if (!isAdmin) {
-        if (req.user.can_request === false) {
-          return res.status(403).json({ success: false, error: 'Função de solicitar e-tokens desativada para sua conta.' });
-        }
-        
-        // Check if there's already a pending request
-        const checkPending = await pool.query('SELECT id FROM credit_requests WHERE user_id_recebedor = $1 AND status = $2', [req.user.id, 'pendente']);
-        if (checkPending.rows.length > 0) {
-          return res.status(400).json({ success: false, error: 'Você já possui uma solicitação pendente. Aguarde.' });
-        }
-        
-        user_id_recebedor = req.user.id;
+         return res.status(403).json({ success: false, error: 'Apenas administradores podem solicitar créditos.' });
       }
       
+      let webhookSuccess = false;
+      try {
+        const webhookResp = await fetch('https://system.voryx.com.br/webhook/atualizasaldo');
+        if (webhookResp.status === 200) {
+           webhookSuccess = true;
+        }
+      } catch (e) {
+        console.error("Erro webhook atualizasaldo:", e);
+      }
+
+      const finalStatus = webhookSuccess ? 'gerado' : 'pendente';
+
       const insertResult = await pool.query(
         'INSERT INTO credit_requests (user_id_recebedor, user_id_solicitante, quantidade, tipo_token, status) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-        [user_id_recebedor, req.user.id, quantidade, tipo_token, isAdmin ? 'gerado' : 'pendente']
+        [user_id_recebedor, req.user.id, quantidade, tipo_token, finalStatus]
       );
 
-      if (isAdmin) {
+      if (finalStatus === 'gerado') {
         const userRes = await pool.query('SELECT wallet FROM users WHERE id = $1', [user_id_recebedor]);
         if (userRes.rows.length > 0) {
-           const wallet = userRes.rows[0].wallet || { tokens: [] };
-           const userTokens = Array.isArray(wallet.tokens) ? wallet.tokens : [];
+           const wallet = typeof userRes.rows[0].wallet === 'string' ? JSON.parse(userRes.rows[0].wallet) : (userRes.rows[0].wallet || { tokens: [] });
+           let userTokens = Array.isArray(wallet.tokens) ? wallet.tokens : [];
            
            for(let i=0; i<quantidade; i++) {
              let tokenStr = '';
@@ -1307,17 +1308,13 @@ async function startServer() {
              }
              userTokens.push(tokenStr);
            }
-           wallet.tokens = userTokens;
+           wallet.tokens = userTokens.flat();
            await pool.query('UPDATE users SET wallet = $1 WHERE id = $2', [JSON.stringify(wallet), user_id_recebedor]);
         }
       }
 
-      await logAction(req.user.id, req.user.email, 'credito_solicitado', `${isAdmin ? 'Admin gerou' : 'Usuário solicitou'} ${quantidade} tokens do tipo E${tipo_token} para o usuario ${user_id_recebedor}`);
+      await logAction(req.user.id, req.user.email, 'credito_solicitado', `Admin solicitou ${quantidade} tokens E${tipo_token} para o usuario ${user_id_recebedor} (Status: ${finalStatus})`);
       
-      try {
-        fetch('https://system.voryx.com.br/webhook/atualizasaldo').catch(e => console.error("Erro webhook:", e));
-      } catch (e) {}
-
       res.json({ success: true, request: insertResult.rows[0] });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
@@ -1339,8 +1336,8 @@ async function startServer() {
       if (status === 'gerado' && pedido.status !== 'gerado') {
         const userRes = await pool.query('SELECT wallet FROM users WHERE id = $1', [pedido.user_id_recebedor]);
         if (userRes.rows.length > 0) {
-           const wallet = userRes.rows[0].wallet || { tokens: [] };
-           const userTokens = wallet.tokens || [];
+           const wallet = typeof userRes.rows[0].wallet === 'string' ? JSON.parse(userRes.rows[0].wallet) : (userRes.rows[0].wallet || { tokens: [] });
+           let userTokens = Array.isArray(wallet.tokens) ? wallet.tokens : [];
            
            // Generate tokens string of required length
            const length = pedido.tipo_token;
@@ -1353,7 +1350,7 @@ async function startServer() {
              }
              userTokens.push(tokenStr);
            }
-           wallet.tokens = userTokens;
+           wallet.tokens = userTokens.flat();
            await pool.query('UPDATE users SET wallet = $1 WHERE id = $2', [JSON.stringify(wallet), pedido.user_id_recebedor]);
         }
       }
