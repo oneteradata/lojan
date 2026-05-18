@@ -1277,22 +1277,22 @@ async function startServer() {
          return res.status(403).json({ success: false, error: 'Apenas administradores podem solicitar créditos.' });
       }
       
-      let webhookSuccess = false;
+      const insertResult = await pool.query(
+        'INSERT INTO credit_requests (user_id_recebedor, user_id_solicitante, quantidade, tipo_token, status) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+        [user_id_recebedor, req.user.id, quantidade, tipo_token, 'pendente']
+      );
+      
+      const reqId = insertResult.rows[0].id;
+      let finalStatus = 'pendente';
+
       try {
         const webhookResp = await fetch('https://system.voryx.com.br/webhook/atualizasaldo');
         if (webhookResp.status === 200) {
-           webhookSuccess = true;
+           finalStatus = 'gerado';
         }
       } catch (e) {
         console.error("Erro webhook atualizasaldo:", e);
       }
-
-      const finalStatus = webhookSuccess ? 'gerado' : 'pendente';
-
-      const insertResult = await pool.query(
-        'INSERT INTO credit_requests (user_id_recebedor, user_id_solicitante, quantidade, tipo_token, status) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-        [user_id_recebedor, req.user.id, quantidade, tipo_token, finalStatus]
-      );
 
       if (finalStatus === 'gerado') {
         const userRes = await pool.query('SELECT wallet FROM users WHERE id = $1', [user_id_recebedor]);
@@ -1311,11 +1311,13 @@ async function startServer() {
            wallet.tokens = userTokens.flat();
            await pool.query('UPDATE users SET wallet = $1 WHERE id = $2', [JSON.stringify(wallet), user_id_recebedor]);
         }
+        await pool.query('UPDATE credit_requests SET status = $1 WHERE id = $2', [finalStatus, reqId]);
       }
 
       await logAction(req.user.id, req.user.email, 'credito_solicitado', `Admin solicitou ${quantidade} tokens E${tipo_token} para o usuario ${user_id_recebedor} (Status: ${finalStatus})`);
       
-      res.json({ success: true, request: insertResult.rows[0] });
+      const updatedReq = await pool.query('SELECT * FROM credit_requests WHERE id = $1', [reqId]);
+      res.json({ success: true, request: updatedReq.rows[0] });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }
