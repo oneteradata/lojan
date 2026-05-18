@@ -647,15 +647,27 @@ async function startServer() {
   });
 
   // Obter link de upload direto pro MinIO
-  app.post('/api/presigned-url', async (req, res) => {
+  app.post('/api/presigned-url', requireAuth, async (req: any, res) => {
     const { fileName, mimeType } = req.body;
-    if (!fileName) return res.status(400).json({ error: 'Falta o nome do arquivo' });
     try {
-      const bucketExists = await minioClient.bucketExists('marketplace');
-      if (!bucketExists) await minioClient.makeBucket('marketplace', 'us-east-1');
-      // expira em 1 dia (86400 segundos)
-      const url = await minioClient.presignedPutObject('marketplace', fileName, 86400); 
-      res.json({ success: true, url });
+      const bucket = 'marketplace';
+      const bucketExists = await minioClient.bucketExists(bucket).catch(() => false);
+      if (!bucketExists) await minioClient.makeBucket(bucket, 'us-east-1').catch(() => null);
+
+      // Gerar nome unico se não vier ou sanitizar
+      const safeName = fileName ? fileName.replace(/[^a-zA-Z0-9.-]/g, '_') : 'file';
+      const uniqueName = `${Date.now()}-${safeName}`;
+      
+      // expira em 1 hora (3600 segundos) para segurança
+      const url = await minioClient.presignedPutObject(bucket, uniqueName, 3600); 
+      
+      const endpoint = process.env.MINIO_ENDPOINT || 'file.voryx.com.br';
+      const useSSL = process.env.MINIO_USE_SSL !== 'false';
+      const port = process.env.MINIO_PORT || '443';
+      const protocol = useSSL ? 'https' : 'http';
+      const publicUrl = `${protocol}://${endpoint}${port === '443' || port === '80' ? '' : `:${port}`}/${bucket}/${uniqueName}`;
+
+      res.json({ success: true, url, publicUrl, fileName: uniqueName });
     } catch (err) {
       console.error('Erro Gerar Presigned URL MinIO:', err);
       res.status(500).json({ error: 'Erro ao gerar link de upload direto.' });

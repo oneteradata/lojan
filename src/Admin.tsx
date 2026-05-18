@@ -612,38 +612,44 @@ function ProductModal({ item, user, onClose }: { item?: any, user?: any, onClose
     
     setUploading(true);
     try {
-      const formDataUpload = new FormData();
+      const newItems = [];
       for (let i = 0; i < files.length; i++) {
-        if (files[i].size > 500 * 1024 * 1024) {
-          alert(`O arquivo ${files[i].name} é muito grande (máximo 500MB)`);
+        const file = files[i];
+        if (file.size > 500 * 1024 * 1024) {
+          alert(`O arquivo ${file.name} é muito grande (máximo 500MB)`);
           continue;
         }
-        formDataUpload.append('files', files[i]);
-      }
-      
-      const res = await apiFetch('/api/upload', {
-         method: 'POST',
-         body: formDataUpload
-      });
-      
-      const contentType = res.headers.get("content-type");
-      if (!res.ok || !contentType || !contentType.includes("application/json")) {
-        const errText = await res.text();
-        throw new Error(errText || `Erro no servidor: ${res.status}`);
-      }
 
-      const data = await res.json();
+        // 1. Pedir URL assinada
+        const presignedRes = await apiFetch('/api/presigned-url', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fileName: file.name, mimeType: file.type })
+        });
+        const presignedData = await presignedRes.json();
+        if (!presignedData.success) throw new Error('Falha ao obter link de upload');
 
-      if (!data.success) {
-         throw new Error(data.error || 'Falha ao fazer upload do arquivo');
-      }
+        // 2. Upload direto para o MinIO (via PUT)
+        // Usamos fetch nativo para NÃO enviar o token do nosso app para o MinIO
+        const uploadRes = await fetch(presignedData.url, {
+          method: 'PUT',
+          body: file,
+          headers: { 'Content-Type': file.type }
+        });
 
-      const newItems = data.files.map((file: any) => {
+        if (!uploadRes.ok) throw new Error(`Falha no upload direto do arquivo ${file.name}`);
+
+        // 3. Adicionar aos itens de mídia
         let type = 'image';
         if (file.type.startsWith('video')) type = 'video';
         else if (file.type === 'application/pdf') type = 'pdf';
-        return { type, url: file.url, fileName: file.fileName };
-      });
+        
+        newItems.push({ 
+          type, 
+          url: presignedData.publicUrl, 
+          fileName: presignedData.fileName 
+        });
+      }
 
       setMedia([...media, ...newItems]);
       

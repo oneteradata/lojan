@@ -107,8 +107,8 @@ function Storefront() {
     apiFetch('/api/products')
       .then(res => res.json())
       .then(data => {
-        if (data && data.success && data.products) {
-           const parsedData = data.products.map((d: any) => ({
+        if (Array.isArray(data)) {
+           const parsedData = data.map((d: any) => ({
              ...d,
              media: typeof d.media === 'string' ? JSON.parse(d.media) : (d.media || []),
              variations: typeof d.variations === 'string' ? JSON.parse(d.variations) : (d.variations || [])
@@ -752,7 +752,9 @@ function Storefront() {
             <div className="md:w-1/2 flex flex-col bg-gray-50 border-r border-gray-100 min-h-[400px]">
               <div className="flex-1 relative overflow-hidden flex items-center justify-center">
                  {(() => {
-                   const currentMedia = activeMediaIdx !== undefined && selectedProduct.media ? selectedProduct.media[activeMediaIdx] : { type: selectedProduct.isVideo ? 'video' : 'image', url: selectedProduct.image };
+                   const media = selectedProduct.media || [];
+                   const currentMedia = media[activeMediaIdx] || { type: selectedProduct.isVideo ? 'video' : 'image', url: selectedProduct.image };
+                   
                    if (currentMedia.type === 'video') {
                      return (
                        <video 
@@ -780,7 +782,7 @@ function Storefront() {
                    } else {
                      return (
                        <img 
-                         src={currentMedia.url} 
+                         src={currentMedia.url || currentMedia.image} 
                          alt={selectedProduct.name} 
                          className="w-full h-full object-cover" 
                          referrerPolicy="no-referrer"
