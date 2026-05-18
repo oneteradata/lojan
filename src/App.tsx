@@ -132,14 +132,7 @@ function Storefront() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(bodyPayload)
       });
-      let data;
-      const textResponse = await res.text();
-      try {
-         data = JSON.parse(textResponse);
-      } catch (err) {
-         console.error('Resposta da API inválida:', textResponse);
-         throw new Error('Erro na API (' + res.status + '): ' + textResponse.substring(0, 50));
-      }
+      const data = await res.json();
       if (data.success) {
         if (data.token) {
            localStorage.setItem('token', data.token);
@@ -191,13 +184,7 @@ function Storefront() {
          headers: { 'Content-Type': 'application/json' },
          body: JSON.stringify({ fileName, mimeType: file.type })
       });
-      const textSign = await resSign.text();
-      let dataSign;
-      try {
-         dataSign = JSON.parse(textSign);
-      } catch (e) {
-         throw new Error('Erro na API: ' + textSign.substring(0, 100));
-      }
+      const dataSign = await resSign.json();
       if (!dataSign.success) throw new Error(dataSign.error || 'Falha ao gerar link de upload');
 
       const uploadRes = await fetch(dataSign.url, {
@@ -294,14 +281,7 @@ function Storefront() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-      let data;
-      const textResponse = await res.text();
-      try {
-         data = JSON.parse(textResponse);
-      } catch (err) {
-         console.error('Resposta da API inválida:', textResponse);
-         throw new Error('Erro na API (' + res.status + '): ' + textResponse.substring(0, 50));
-      }
+      const data = await res.json();
       
       if (data.success) {
          setOrderStatus(`✅ Pedido 00${data.orderId} gerado no Banco de Dados com Sucesso!`);

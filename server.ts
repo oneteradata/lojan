@@ -70,22 +70,14 @@ function normalizeUserWallet(user: any) {
 
   if (Array.isArray(rawWallet)) {
      for (const item of rawWallet) {
-       if (typeof item === 'string') {
-         userTokens.push(item);
-       } else if (item && item.wallet && typeof item.wallet === 'object') {
-         if (item.wallet.tokens && typeof item.wallet.tokens === 'object') {
-           userTokens = userTokens.concat(Object.values(item.wallet.tokens).filter((t: any) => typeof t === 'string') as string[]);
-         } else if (item.wallet.token && typeof item.wallet.token === 'object') {
-           userTokens = userTokens.concat(Object.values(item.wallet.token).filter((t: any) => typeof t === 'string') as string[]);
-         } else {
-           userTokens = userTokens.concat(Object.values(item.wallet).filter((t: any) => typeof t === 'string') as string[]);
-         }
+       if (item && item.wallet && typeof item.wallet === 'object') {
+         userTokens = userTokens.concat(Object.values(item.wallet).filter((t: any) => typeof t === 'string') as string[]);
        }
      }
   } else if (typeof rawWallet === 'object') {
-     if (Array.isArray(rawWallet.tokens)) { 
+     if (Array.isArray(rawWallet.tokens)) {
        userTokens = rawWallet.tokens.filter((t: any) => typeof t === 'string');
-      } else if (Array.isArray(rawWallet.token)) { userTokens = rawWallet.token.filter((t: any) => typeof t === 'string') as string[]; } else if (typeof rawWallet.token === 'object' && rawWallet.token !== null) { userTokens = Object.values(rawWallet.token).filter((t: any) => typeof t === 'string') as string[]; } else if (typeof rawWallet.token === 'string') { userTokens = [rawWallet.token]; } else {
+     } else {
        // Search for object values
        for (const k in rawWallet) {
          if (typeof rawWallet[k] === 'object' && !Array.isArray(rawWallet[k])) {
@@ -461,10 +453,10 @@ async function startServer() {
            }
          }
       } else if (typeof rawWallet === 'object') {
-         if (Array.isArray(rawWallet.tokens)) { 
+         if (Array.isArray(rawWallet.tokens)) {
            walletFormat = 'tokens_array';
            userTokens = rawWallet.tokens.filter((t: any) => typeof t === 'string');
-          } else if (Array.isArray(rawWallet.token)) { userTokens = rawWallet.token.filter((t: any) => typeof t === 'string') as string[]; } else if (typeof rawWallet.token === 'object' && rawWallet.token !== null) { userTokens = Object.values(rawWallet.token).filter((t: any) => typeof t === 'string') as string[]; } else if (typeof rawWallet.token === 'string') { userTokens = [rawWallet.token]; } else {
+         } else {
            for (const k in rawWallet) {
              if (typeof rawWallet[k] === 'object' && !Array.isArray(rawWallet[k])) {
                walletFormat = 'object_with_key';
@@ -1095,8 +1087,17 @@ async function startServer() {
       if (senderRes.rows.length === 0) return res.status(404).json({ success: false, error: 'Remetente não encontrado.' });
       const sender = senderRes.rows[0];
       
-      normalizeUserWallet(sender);
-      let userTokens = sender.wallet.tokens || [];
+      let rawWallet = sender.wallet || {};
+      if (typeof rawWallet === 'string') {
+        try { rawWallet = JSON.parse(rawWallet); } catch (e) {}
+      }
+      
+      let userTokens: string[] = [];
+      if (Array.isArray(rawWallet?.tokens)) {
+        userTokens = rawWallet.tokens;
+      } else if (rawWallet?.tokens) {
+        userTokens = Object.values(rawWallet.tokens).filter(t => typeof t === 'string') as string[];
+      } // Minimal check, assuming standardized wallet format
 
       const matchingIndices = [];
       for (let i = 0; i < userTokens.length; i++) {
@@ -1119,8 +1120,8 @@ async function startServer() {
          }
       }
       
-      const newSenderTokens = userTokens.filter((t: any) => t !== null);
-      sender.wallet.tokens = newSenderTokens;
+      const newSenderTokens = userTokens.filter(t => t !== null);
+      rawWallet.tokens = newSenderTokens;
 
       // Receiver
       let receiverType = 'users';
@@ -1135,16 +1136,20 @@ async function startServer() {
       if (receiverRes.rows.length === 0) return res.status(404).json({ success: false, error: 'Destinatário não encontrado.' });
       const receiver = receiverRes.rows[0];
       
-      normalizeUserWallet(receiver);
-      receiver.wallet.tokens = receiver.wallet.tokens.concat(tokensToTransfer);
+      let recWallet = receiver.wallet || {};
+      if (typeof recWallet === 'string') {
+        try { recWallet = JSON.parse(recWallet); } catch (e) {}
+      }
+      if (!Array.isArray(recWallet.tokens)) recWallet.tokens = [];
+      recWallet.tokens = recWallet.tokens.concat(tokensToTransfer);
 
       // Save
-      await pool.query('UPDATE users SET wallet = $1 WHERE id::text = $2', [JSON.stringify(sender.wallet), senderId]);
+      await pool.query('UPDATE users SET wallet = $1 WHERE id::text = $2', [JSON.stringify(rawWallet), senderId]);
       
       if (receiverType === 'user_client') {
-         await pool.query('UPDATE user_client SET wallet = $1 WHERE id::text = $2', [JSON.stringify(receiver.wallet), receiver_id]);
+         await pool.query('UPDATE user_client SET wallet = $1 WHERE id::text = $2', [JSON.stringify(recWallet), receiver_id]);
       } else {
-         await pool.query('UPDATE users SET wallet = $1 WHERE id::text = $2', [JSON.stringify(receiver.wallet), receiver_id]);
+         await pool.query('UPDATE users SET wallet = $1 WHERE id::text = $2', [JSON.stringify(recWallet), receiver_id]);
       }
 
       await logAction(senderId, sender.email, 'transferencia', `Enviou ${amountInt} eToken(s) E${tokenLenInt} para ID ${receiver_id}`);
@@ -1292,9 +1297,8 @@ async function startServer() {
       if (finalStatus === 'gerado') {
         const userRes = await pool.query('SELECT wallet FROM users WHERE id = $1', [user_id_recebedor]);
         if (userRes.rows.length > 0) {
-           const user = { wallet: userRes.rows[0].wallet };
-           normalizeUserWallet(user);
-           let userTokens = user.wallet.tokens;
+           const wallet = typeof userRes.rows[0].wallet === 'string' ? JSON.parse(userRes.rows[0].wallet) : (userRes.rows[0].wallet || { tokens: [] });
+           let userTokens = Array.isArray(wallet.tokens) ? wallet.tokens : [];
            
            for(let i=0; i<quantidade; i++) {
              let tokenStr = '';
@@ -1304,7 +1308,8 @@ async function startServer() {
              }
              userTokens.push(tokenStr);
            }
-           await pool.query('UPDATE users SET wallet = $1 WHERE id = $2', [JSON.stringify(user.wallet), user_id_recebedor]);
+           wallet.tokens = userTokens.flat(Infinity);
+           await pool.query('UPDATE users SET wallet = $1 WHERE id = $2', [JSON.stringify(wallet), user_id_recebedor]);
         }
         await pool.query('UPDATE credit_requests SET status = $1 WHERE id = $2', [finalStatus, reqId]);
       }
@@ -1333,9 +1338,8 @@ async function startServer() {
       if (status === 'gerado' && pedido.status !== 'gerado') {
         const userRes = await pool.query('SELECT wallet FROM users WHERE id = $1', [pedido.user_id_recebedor]);
         if (userRes.rows.length > 0) {
-           const user = { wallet: userRes.rows[0].wallet };
-           normalizeUserWallet(user);
-           let userTokens = user.wallet.tokens;
+           const wallet = typeof userRes.rows[0].wallet === 'string' ? JSON.parse(userRes.rows[0].wallet) : (userRes.rows[0].wallet || { tokens: [] });
+           let userTokens = Array.isArray(wallet.tokens) ? wallet.tokens : [];
            
            // Generate tokens string of required length
            const length = pedido.tipo_token;
@@ -1348,7 +1352,8 @@ async function startServer() {
              }
              userTokens.push(tokenStr);
            }
-           await pool.query('UPDATE users SET wallet = $1 WHERE id = $2', [JSON.stringify(user.wallet), pedido.user_id_recebedor]);
+           wallet.tokens = userTokens.flat(Infinity);
+           await pool.query('UPDATE users SET wallet = $1 WHERE id = $2', [JSON.stringify(wallet), pedido.user_id_recebedor]);
         }
       }
 
