@@ -354,6 +354,14 @@ async function startServer() {
   const app = express();
   app.use(express.json({ limit: '250mb' }));
   app.use(express.urlencoded({ extended: true, limit: '250mb' }));
+  
+  app.use((err: any, req: any, res: any, next: any) => {
+    if (err && err.status === 400 && 'body' in err) {
+       return res.status(400).json({ success: false, error: 'Erro de formatação na requisição HTTP' });
+    }
+    next(err);
+  });
+
   const PORT = 3000;
 
   // Inicia banco de dados
@@ -1441,6 +1449,11 @@ async function startServer() {
   // Login de usuários
   app.post('/api/login', async (req, res) => {
     const { email, password } = req.body;
+    
+    if (!email || !password) {
+      return res.status(400).json({ success: false, error: 'Email e senha são obrigatórios.' });
+    }
+    
     try {
       if (!dbConnected) {
         // Fallback de demonstração caso o banco não conecte (Modo dev)
