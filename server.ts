@@ -82,7 +82,7 @@ function normalizeUserWallet(user: any) {
        for (const k in rawWallet) {
          if (typeof rawWallet[k] === 'object' && !Array.isArray(rawWallet[k])) {
            userTokens = userTokens.concat(Object.values(rawWallet[k]).filter((t: any) => typeof t === 'string') as string[]);
-         } else if (typeof rawWallet[k] === 'string' && k.startsWith('token_')) {
+         } else if (typeof rawWallet[k] === 'string') {
            userTokens.push(rawWallet[k]);
          }
        }
@@ -463,7 +463,7 @@ async function startServer() {
                targetObjKey = k;
                userTokens = Object.values(rawWallet[k]).filter((t: any) => typeof t === 'string') as string[];
                break;
-             } else if (typeof rawWallet[k] === 'string' && k.startsWith('token_')) {
+             } else if (typeof rawWallet[k] === 'string') {
                walletFormat = 'root_strings';
                userTokens.push(rawWallet[k]);
              }
@@ -1087,17 +1087,10 @@ async function startServer() {
       if (senderRes.rows.length === 0) return res.status(404).json({ success: false, error: 'Remetente não encontrado.' });
       const sender = senderRes.rows[0];
       
-      let rawWallet = sender.wallet || {};
-      if (typeof rawWallet === 'string') {
-        try { rawWallet = JSON.parse(rawWallet); } catch (e) {}
-      }
-      
-      let userTokens: string[] = [];
-      if (Array.isArray(rawWallet?.tokens)) {
-        userTokens = rawWallet.tokens;
-      } else if (rawWallet?.tokens) {
-        userTokens = Object.values(rawWallet.tokens).filter(t => typeof t === 'string') as string[];
-      } // Minimal check, assuming standardized wallet format
+      const senderData = { wallet: sender.wallet };
+      normalizeUserWallet(senderData);
+      const rawWallet = senderData.wallet;
+      let userTokens = rawWallet.tokens;
 
       const matchingIndices = [];
       for (let i = 0; i < userTokens.length; i++) {
@@ -1136,11 +1129,9 @@ async function startServer() {
       if (receiverRes.rows.length === 0) return res.status(404).json({ success: false, error: 'Destinatário não encontrado.' });
       const receiver = receiverRes.rows[0];
       
-      let recWallet = receiver.wallet || {};
-      if (typeof recWallet === 'string') {
-        try { recWallet = JSON.parse(recWallet); } catch (e) {}
-      }
-      if (!Array.isArray(recWallet.tokens)) recWallet.tokens = [];
+      const receiverData = { wallet: receiver.wallet };
+      normalizeUserWallet(receiverData);
+      let recWallet = receiverData.wallet;
       recWallet.tokens = recWallet.tokens.concat(tokensToTransfer);
 
       // Save
@@ -1297,8 +1288,10 @@ async function startServer() {
       if (finalStatus === 'gerado') {
         const userRes = await pool.query('SELECT wallet FROM users WHERE id = $1', [user_id_recebedor]);
         if (userRes.rows.length > 0) {
-           const wallet = typeof userRes.rows[0].wallet === 'string' ? JSON.parse(userRes.rows[0].wallet) : (userRes.rows[0].wallet || { tokens: [] });
-           let userTokens = Array.isArray(wallet.tokens) ? wallet.tokens : [];
+           const userData = { wallet: userRes.rows[0].wallet };
+           normalizeUserWallet(userData);
+           const wallet = userData.wallet;
+           let userTokens = wallet.tokens;
            
            for(let i=0; i<quantidade; i++) {
              let tokenStr = '';
@@ -1338,8 +1331,10 @@ async function startServer() {
       if (status === 'gerado' && pedido.status !== 'gerado') {
         const userRes = await pool.query('SELECT wallet FROM users WHERE id = $1', [pedido.user_id_recebedor]);
         if (userRes.rows.length > 0) {
-           const wallet = typeof userRes.rows[0].wallet === 'string' ? JSON.parse(userRes.rows[0].wallet) : (userRes.rows[0].wallet || { tokens: [] });
-           let userTokens = Array.isArray(wallet.tokens) ? wallet.tokens : [];
+           const userData = { wallet: userRes.rows[0].wallet };
+           normalizeUserWallet(userData);
+           const wallet = userData.wallet;
+           let userTokens = wallet.tokens;
            
            // Generate tokens string of required length
            const length = pedido.tipo_token;
