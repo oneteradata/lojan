@@ -2,6 +2,7 @@ import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import pkg from 'pg';
 import path from 'path';
+import fs from 'fs';
 import * as Minio from 'minio';
 import multer from 'multer';
 import jwt from 'jsonwebtoken';
@@ -39,7 +40,16 @@ const minioClient = new Minio.Client({
   accessKey: process.env.MINIO_ACCESS_KEY || '',
   secretKey: process.env.MINIO_SECRET_KEY || ''
 });
-const upload = multer({ storage: multer.memoryStorage() });
+const storage = multer.diskStorage({
+  destination: '/tmp',
+  filename: (req, file, cb) => {
+    cb(null, `${Date.now()}-${file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_')}`);
+  }
+});
+const upload = multer({ 
+  storage,
+  limits: { fileSize: 500 * 1024 * 1024 } // 500MB
+});
 
 async function initMinio() {
   try {
@@ -655,14 +665,18 @@ async function startServer() {
   // (Fallback caso o CORS não permita upload direto, mantido por compatibilidade)
   app.post('/api/upload', requireAuth, upload.single('file'), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'Nenhum arquivo enviado.' });
-    const fileName = `${Date.now()}-${req.file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+    const fileName = req.file.filename;
+    const filePath = req.file.path;
     try {
       const bucket = 'marketplace';
       const bucketExists = await minioClient.bucketExists(bucket).catch(() => false);
       if (!bucketExists) await minioClient.makeBucket(bucket, 'us-east-1').catch(() => null);
       
       const metaData = { 'Content-Type': req.file.mimetype };
-      await minioClient.putObject(bucket, fileName, req.file.buffer, req.file.size, metaData);
+      await minioClient.fPutObject(bucket, fileName, filePath, metaData);
+      
+      // Cleanup temp file
+      fs.unlink(filePath, () => {});
       
       const endpoint = process.env.MINIO_ENDPOINT || 'file.voryx.com.br';
       const useSSL = process.env.MINIO_USE_SSL !== 'false';
@@ -674,6 +688,7 @@ async function startServer() {
       res.json({ success: true, url, fileName });
     } catch (err: any) {
       console.error('Erro MinIO Upload:', err);
+      if (filePath) fs.unlink(filePath, () => {});
       res.status(500).json({ error: 'Erro ao fazer upload no MinIO: ' + err.message });
     }
   });
@@ -1714,9 +1729,10 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`Servidor rodando em http://localhost:${PORT}`);
   });
+  server.timeout = 600000;
 }
 
 startServer();
