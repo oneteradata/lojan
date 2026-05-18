@@ -9,7 +9,8 @@ import { AdminLogs } from "./AdminLogs";
 import { AdminInteractions } from "./AdminInteractions";
 import { AdminDeliveries } from "./AdminDeliveries";
 import { AdminWallet } from "./AdminWallet";
-import { Wallet, MessageSquare, Menu } from "lucide-react";
+import { Wallet, MessageSquare, Menu, Settings } from "lucide-react";
+import { AdminSettings } from "./AdminSettings";
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -72,26 +73,17 @@ function AdminLogin({ onLogin }: { onLogin: (user: any) => void }) {
     try {
       if (file.size > 2 * 1024 * 1024) throw new Error("A imagem deve ter no máximo 2MB");
       
-      const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-      const fileName = `${Date.now()}-${safeName}`;
+      const formDataUpload = new FormData();
+      formDataUpload.append('file', file);
       
-      const resSign = await apiFetch('/api/presigned-url', {
+      const res = await apiFetch('/api/upload', {
          method: 'POST',
-         headers: { 'Content-Type': 'application/json' },
-         body: JSON.stringify({ fileName, mimeType: file.type })
+         body: formDataUpload
       });
-      const dataSign = await resSign.json();
-      if (!dataSign.success) throw new Error(dataSign.error || 'Falha ao gerar link de upload');
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Falha ao fazer upload da logo');
 
-      const uploadRes = await fetch(dataSign.url, {
-         method: 'PUT',
-         headers: { 'Content-Type': file.type },
-         body: file
-      });
-      if (!uploadRes.ok) throw new Error(`Falha no upload pro MinIO: ${uploadRes.statusText}`);
-
-      const finalUrl = `https://file.voryx.com.br/marketplace/${fileName}`;
-      setCompanyLogo(finalUrl);
+      setCompanyLogo(data.url);
     } catch (err: any) {
       setError('Erro no upload: ' + err.message);
     }
@@ -627,37 +619,21 @@ function ProductModal({ item, user, onClose }: { item?: any, user?: any, onClose
         return;
       }
 
-      const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-      const fileName = `${Date.now()}-${safeName}`;
+      const formDataUpload = new FormData();
+      formDataUpload.append('file', file);
       
-      // 1. Gerar link de upload direto (Presigned URL)
-      const resSign = await apiFetch('/api/presigned-url', {
+      const res = await apiFetch('/api/upload', {
          method: 'POST',
-         headers: { 'Content-Type': 'application/json' },
-         body: JSON.stringify({ fileName, mimeType: file.type })
+         body: formDataUpload
       });
-      const dataSign = await resSign.json();
+      const data = await res.json();
 
-      if (!dataSign.success) {
-         throw new Error(dataSign.error || 'Falha ao gerar link de upload');
+      if (!data.success) {
+         throw new Error(data.error || 'Falha ao fazer upload do arquivo');
       }
 
-      // 2. Fazer upload direto para o MinIO usando o link
-      const uploadRes = await fetch(dataSign.url, {
-         method: 'PUT',
-         headers: {
-           'Content-Type': file.type
-         },
-         body: file
-      });
-
-      if (!uploadRes.ok) {
-         throw new Error(`Falha no upload pro MinIO: ${uploadRes.statusText}`);
-      }
-
-      const finalUrl = `https://file.voryx.com.br/marketplace/${fileName}`;
       const type = file.type.startsWith('video') ? 'video' : 'image';
-      setMedia([...media, { type, url: finalUrl, fileName }]);
+      setMedia([...media, { type, url: data.url, fileName: data.fileName }]);
       
     } catch (err: any) {
       console.error(err);
@@ -1534,26 +1510,17 @@ export function AdminUsers() {
     setUploadingLogo(true);
     try {
       if (file.size > 2 * 1024 * 1024) throw new Error("A imagem deve ter no máximo 2MB");
-      const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-      const fileName = `${Date.now()}-${safeName}`;
+      const formDataUpload = new FormData();
+      formDataUpload.append('file', file);
       
-      const resSign = await apiFetch('/api/presigned-url', {
+      const res = await apiFetch('/api/upload', {
          method: 'POST',
-         headers: { 'Content-Type': 'application/json' },
-         body: JSON.stringify({ fileName, mimeType: file.type })
+         body: formDataUpload
       });
-      const dataSign = await resSign.json();
-      if (!dataSign.success) throw new Error(dataSign.error || 'Falha ao gerar link de upload');
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Falha ao fazer upload da logo');
 
-      const uploadRes = await fetch(dataSign.url, {
-         method: 'PUT',
-         headers: { 'Content-Type': file.type },
-         body: file
-      });
-      if (!uploadRes.ok) throw new Error(`Falha no upload pro MinIO: ${uploadRes.statusText}`);
-
-      const finalUrl = `https://file.voryx.com.br/marketplace/${fileName}`;
-      setFormData((prev: any) => ({...prev, company_logo: finalUrl}));
+      setFormData((prev: any) => ({...prev, company_logo: data.url}));
     } catch (err: any) {
       alert('Erro no upload: ' + err.message);
     }
@@ -1603,13 +1570,13 @@ export function AdminUsers() {
           await apiFetch(url, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: u.name, email: u.email, role: newRole, is_approved: u.is_approved })
+            body: JSON.stringify({ ...u, role: newRole })
           });
       } else {
           await apiFetch(url, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: u.email, senha_mestre: u.senha_mestre, nome_completo: u.nome_completo, role: newRole })
+            body: JSON.stringify({ ...u, role: newRole })
           });
       }
       fetchData();
@@ -1618,7 +1585,7 @@ export function AdminUsers() {
 
   const handleToggleApproval = async (u: any) => {
     try {
-       await apiFetch(`/api/users/${u.id}`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ name: u.name, email: u.email, role: u.role, is_approved: !u.is_approved }) });
+       await apiFetch(`/api/users/${u.id}`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ ...u, is_approved: !u.is_approved }) });
        fetchData();
     } catch(e) {}
   };
@@ -2071,15 +2038,17 @@ export default function AdminApp() {
     return <AdminLogin onLogin={setUser} />;
   }
 
+  const isDark = user?.dashboard_theme === 'dark';
+
   return (
-    <div className="admin-theme min-h-screen bg-[#faf9fe] text-[#1a1b1f] antialiased flex selection:bg-[#0058bc]/10 font-sans">
+    <div className={cn("admin-theme min-h-screen antialiased flex font-sans transition-colors duration-500", isDark ? "bg-[#0a0a0a] text-[#f5f5f5] dark-mode" : "bg-[#faf9fe] text-[#1a1b1f] selection:bg-[#0058bc]/10")}>
       {/* SideNavBar Component */}
        {/* Mobile backdrop */}
       {isMobileMenuOpen && (<div className="md:hidden fixed inset-0 bg-black/40 z-[55]" onClick={() => setIsMobileMenuOpen(false)} />)}
-      <aside className={`transform ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-[120%]"} transition-transform duration-300 md:translate-x-0 fixed left-4 top-4 z-[60] bg-white/95 md:bg-white/60 backdrop-blur-xl flex flex-col py-8 w-72 h-[calc(100vh-32px)] overflow-y-auto hide-scrollbar rounded-[2rem] shadow-[0_10px_40px_-10px_rgba(0,0,0,0.04),_0_2px_10px_-2px_rgba(0,0,0,0.02)] border border-white/50`}>
+      <aside className={cn(`transform ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-[120%]"} transition-transform duration-300 md:translate-x-0 fixed left-4 top-4 z-[60] backdrop-blur-xl flex flex-col py-8 w-72 h-[calc(100vh-32px)] overflow-y-auto hide-scrollbar rounded-[2rem] shadow-[0_10px_40px_-10px_rgba(0,0,0,0.04),_0_2px_10px_-2px_rgba(0,0,0,0.02)]`, isDark ? "bg-[#141414]/90 border border-white/10" : "bg-white/95 md:bg-white/60 border border-white/50")}>
         <div className="px-8 mb-12">
           <h1 className="text-2xl font-extrabold text-[#0058bc] tracking-tighter">Vitrine Brasil</h1>
-          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#414755] opacity-60">sua vitrine para o mundo</p>
+          <p className={cn("text-[10px] font-bold uppercase tracking-[0.2em] opacity-60", isDark ? "text-gray-400" : "text-[#414755]")}>sua vitrine para o mundo</p>
         </div>
         <nav className="flex-grow space-y-1.5 px-3">
           <button onClick={() => { setIsMobileMenuOpen(false); navigate('/'); }} className={cn("flex w-full items-center gap-4 px-5 py-3.5 rounded-2xl transition-all", location.pathname === '/' ? "bg-[#0058bc] text-white shadow-lg shadow-[#0058bc]/20" : "text-[#414755] hover:bg-white hover:shadow-sm")}>
@@ -2120,34 +2089,39 @@ export default function AdminApp() {
 
           {user.role === 'admin' && (
             <>
-              <button onClick={() => { setIsMobileMenuOpen(false); navigate('/users'); }} className={cn("flex w-full items-center gap-4 px-5 py-3.5 rounded-2xl transition-all", location.pathname === '/users' ? "bg-[#0058bc] text-white shadow-lg shadow-[#0058bc]/20" : "text-[#414755] hover:bg-white hover:shadow-sm")}>
+              <button onClick={() => { setIsMobileMenuOpen(false); navigate('/users'); }} className={cn("flex w-full items-center gap-4 px-5 py-3.5 rounded-2xl transition-all", location.pathname === '/users' ? "bg-[#0058bc] text-white shadow-lg shadow-[#0058bc]/20" : isDark ? "text-gray-300 hover:bg-white/5" : "text-[#414755] hover:bg-white hover:shadow-sm")}>
                  <Users className="w-5 h-5" />
                  <span className={cn("text-sm", location.pathname === '/users' ? "font-bold" : "font-semibold")}>Equipe</span>
               </button>
-              <button onClick={() => { setIsMobileMenuOpen(false); navigate('/logs'); }} className={cn("flex w-full items-center gap-4 px-5 py-3.5 rounded-2xl transition-all", location.pathname === '/logs' ? "bg-[#0058bc] text-white shadow-lg shadow-[#0058bc]/20" : "text-[#414755] hover:bg-white hover:shadow-sm")}>
+              <button onClick={() => { setIsMobileMenuOpen(false); navigate('/logs'); }} className={cn("flex w-full items-center gap-4 px-5 py-3.5 rounded-2xl transition-all", location.pathname === '/logs' ? "bg-[#0058bc] text-white shadow-lg shadow-[#0058bc]/20" : isDark ? "text-gray-300 hover:bg-white/5" : "text-[#414755] hover:bg-white hover:shadow-sm")}>
                  <List className="w-5 h-5" />
-                 <span className={cn("text-sm", location.pathname === '/logs' ? "font-bold" : "font-semibold")}>Logs</span>
+                 <span className={cn("text-sm", location.pathname === '/logs' ? "font-bold" : "font-semibold")}>Logs Sistema</span>
               </button>
             </>
           )}
+
+          <button onClick={() => { setIsMobileMenuOpen(false); navigate('/settings'); }} className={cn("flex w-full items-center gap-4 px-5 py-3.5 rounded-2xl transition-all mt-4", location.pathname === '/settings' ? "bg-[#0058bc] text-white shadow-lg shadow-[#0058bc]/20" : isDark ? "text-gray-300 hover:bg-white/5" : "text-[#414755] hover:bg-white hover:shadow-sm")}>
+            <Settings className="w-5 h-5" />
+            <span className={cn("text-sm", location.pathname === '/settings' ? "font-bold" : "font-semibold")}>Configurações</span>
+          </button>
 
         </nav>
 
         <div className="px-4 mt-auto space-y-2">
           {/* User Info Mobile */}
-          <div className="p-4 mb-2 bg-white rounded-[1.5rem] border border-gray-100 flex items-center gap-3">
-             <img src={user.company_logo || "https://i.ibb.co/605F0btn/userlmn-2a3058c5a41d95b47dcdaaede52b18e9-removebg-preview.png"} alt="User" className="h-10 w-10 rounded-xl bg-[#eeedf3] object-cover shrink-0" />
+          <div className={cn("p-4 mb-2 rounded-[1.5rem] flex items-center gap-3", isDark ? "bg-white/5 border border-white/10" : "bg-white border border-gray-100")}>
+             <img src={user.company_logo || "https://i.ibb.co/605F0btn/userlmn-2a3058c5a41d95b47dcdaaede52b18e9-removebg-preview.png"} alt="User" className={cn("h-10 w-10 rounded-xl object-cover shrink-0", isDark ? "bg-black/50" : "bg-[#eeedf3]")} />
              <div className="min-w-0">
-                <p className="text-sm font-extrabold text-[#1a1b1f] truncate">{user.name}</p>
-                <p className="text-[10px] text-[#414755] font-bold uppercase tracking-widest truncate">ID: {user.id}</p>
+                <p className={cn("text-sm font-extrabold truncate", isDark ? "text-white" : "text-[#1a1b1f]")}>{user.name}</p>
+                <p className={cn("text-[10px] font-bold uppercase tracking-widest truncate", isDark ? "text-gray-400" : "text-[#414755]")}>ID: {user.id}</p>
              </div>
           </div>
           {/* Suporte block */}
-          <div className="p-5 mb-4 bg-[#0058bc]/5 rounded-[1.5rem] border border-[#0058bc]/5">
+          <div className={cn("p-5 mb-4 rounded-[1.5rem] border", isDark ? "bg-[#0058bc]/10 border-[#0058bc]/20" : "bg-[#0058bc]/5 border-[#0058bc]/5")}>
             <p className="text-xs font-bold text-[#0058bc] mb-3">Precisa de ajuda?</p>
             <button className="w-full text-[11px] bg-[#0058bc] text-white py-2.5 rounded-xl font-extrabold uppercase tracking-widest shadow-md shadow-[#0058bc]/10 hover:shadow-lg transition-all">Suporte 24h</button>
           </div>
-          <button className="w-full flex items-center justify-start gap-4 text-[#ba1a1a] hover:bg-[#ba1a1a]/5 px-5 py-3 rounded-2xl transition-all" onClick={() => { localStorage.removeItem('token'); setUser(null); navigate('/'); setIsMobileMenuOpen(false); }}>
+          <button className={cn("w-full flex items-center justify-start gap-4 px-5 py-3 rounded-2xl transition-all", isDark ? "text-red-400 hover:bg-red-400/10" : "text-[#ba1a1a] hover:bg-[#ba1a1a]/5")} onClick={() => { localStorage.removeItem('token'); setUser(null); navigate('/'); setIsMobileMenuOpen(false); }}>
              <LogOut className="w-5 h-5" />
              <span className="font-semibold text-sm">Sair</span>
           </button>
@@ -2155,31 +2129,40 @@ export default function AdminApp() {
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-grow md:ml-[312px] min-h-screen px-4 md:px-0 md:pr-4 flex flex-col w-full overflow-x-hidden">
-        <header className="bg-[#faf9fe]/80 backdrop-blur-md sticky top-0 z-50 w-full h-20 flex justify-between items-center px-0 md:px-8">
+      <main className="flex-grow md:ml-[312px] min-h-screen px-4 md:px-0 md:pr-4 flex flex-col w-full overflow-x-hidden relative z-10">
+        <header className={cn("sticky top-0 z-50 w-full h-20 flex justify-between items-center px-0 md:px-8 transition-colors", isDark ? "bg-[#0a0a0a]/80 backdrop-blur-md" : "bg-[#faf9fe]/80 backdrop-blur-md")}>
             <div className="flex items-center gap-4">
-                <button className="md:hidden p-2 text-[#1a1b1f] hover:bg-white rounded-xl shadow-sm transition-all" onClick={() => setIsMobileMenuOpen(true)}>
+                <button className={cn("md:hidden p-2 rounded-xl transition-all shadow-sm", isDark ? "text-white hover:bg-white/10" : "text-[#1a1b1f] hover:bg-white")} onClick={() => setIsMobileMenuOpen(true)}>
                    <Menu className="w-6 h-6" />
                 </button>
                 
-                <h2 className="text-2xl font-extrabold text-[#1a1b1f] tracking-tight">{location.pathname === '/' ? 'Dashboard' : location.pathname === '/products' ? 'Produtos' : location.pathname === '/etoken' ? 'eToken' : location.pathname === '/orders' ? 'Vendas' : location.pathname === '/credits' ? 'Logs' : location.pathname === '/users' ? 'Equipe' : 'Minha Loja'}</h2>
+                <h2 className={cn("text-2xl font-extrabold tracking-tight", isDark ? "text-white" : "text-[#1a1b1f]")}>
+                  {location.pathname === '/' ? 'Dashboard' 
+                   : location.pathname === '/products' ? 'Produtos' 
+                   : location.pathname === '/etoken' ? 'eToken' 
+                   : location.pathname === '/orders' ? 'Vendas' 
+                   : location.pathname === '/credits' ? 'Logs' 
+                   : location.pathname === '/users' ? 'Equipe' 
+                   : location.pathname === '/settings' ? 'Configurações' 
+                   : 'Minha Loja'}
+                </h2>
             </div>
             <div className="flex items-center gap-4 md:gap-8 justify-end">
                 <div className="relative hidden md:block">
-                   <input type="text" placeholder="Pesquisar transações..." className="bg-white border-none h-11 w-72 pl-12 pr-4 rounded-2xl text-sm focus:ring-2 focus:ring-[#0058bc]/20 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.04),_0_2px_10px_-2px_rgba(0,0,0,0.02)] transition-all outline-none text-[#1a1b1f]" />
-                   <Search className="w-5 h-5 absolute left-4 top-3 text-[#414755] opacity-40" />
+                   <input type="text" placeholder="Pesquisar transações..." className={cn("border-none h-11 w-72 pl-12 pr-4 rounded-2xl text-sm focus:ring-2 focus:ring-[#0058bc]/20 transition-all outline-none", isDark ? "bg-[#141414] text-white shadow-none border border-white/5" : "bg-white text-[#1a1b1f] shadow-[0_10px_40px_-10px_rgba(0,0,0,0.04),_0_2px_10px_-2px_rgba(0,0,0,0.02]")} />
+                   <Search className={cn("w-5 h-5 absolute left-4 top-3 opacity-40", isDark ? "text-gray-400" : "text-[#414755]")} />
                 </div>
                 <div className="flex items-center gap-2 md:gap-4">
-                   <button className="p-2 text-[#414755] hover:bg-white hover:shadow-sm rounded-xl transition-all">
+                   <button className={cn("p-2 rounded-xl transition-all shadow-sm", isDark ? "text-gray-300 hover:bg-white/10 hover:shadow-none" : "text-[#414755] hover:bg-white hover:shadow-sm")}>
                       <Bell className="w-5 h-5" />
                    </button>
-                   <div className="hidden md:block h-8 w-px bg-[#c1c6d7]/30 mx-0 md:mx-2"></div>
-                   <div className="hidden md:flex items-center gap-3 bg-white pl-4 pr-1 py-1 rounded-2xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.04),_0_2px_10px_-2px_rgba(0,0,0,0.02)]">
+                   <div className={cn("hidden md:block h-8 w-px mx-0 md:mx-2", isDark ? "bg-white/10" : "bg-[#c1c6d7]/30")}></div>
+                   <div className={cn("hidden md:flex items-center gap-3 pl-4 pr-1 py-1 rounded-2xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.04),_0_2px_10px_-2px_rgba(0,0,0,0.02)] border", isDark ? "bg-[#141414] border-white/5" : "bg-white border-transparent")}>
                       <div className="text-right">
-                         <p className="text-xs font-extrabold leading-tight text-[#1a1b1f]">{user.name}</p>
-                         <p className="text-[10px] text-[#414755] font-medium capitalize">{user.role}</p>
+                         <p className={cn("text-xs font-extrabold leading-tight", isDark ? "text-white" : "text-[#1a1b1f]")}>{user.name}</p>
+                         <p className={cn("text-[10px] font-medium capitalize", isDark ? "text-gray-400" : "text-[#414755]")}>{user.role}</p>
                       </div>
-                      <img src={user.company_logo || "https://i.ibb.co/605F0btn/userlmn-2a3058c5a41d95b47dcdaaede52b18e9-removebg-preview.png"} alt="User" className="h-9 w-9 rounded-xl bg-[#eeedf3] object-cover" />
+                      <img src={user.company_logo || "https://i.ibb.co/605F0btn/userlmn-2a3058c5a41d95b47dcdaaede52b18e9-removebg-preview.png"} alt="User" className={cn("h-9 w-9 rounded-xl object-cover", isDark ? "bg-black/50" : "bg-[#eeedf3]")} />
                    </div>
                 </div>
             </div>
@@ -2195,6 +2178,7 @@ export default function AdminApp() {
             <Route path="/logs" element={<AdminLogs user={user} />} />
             <Route path="/interactions" element={<AdminInteractions user={user} />} />
             <Route path="/users" element={user.role === 'admin' ? <AdminUsers /> : <div className="p-8 text-center text-gray-500">Acesso negado. Apenas administradores.</div>} />
+            <Route path="/settings" element={<AdminSettings user={user} onRefreshUser={refreshUser} />} />
           </Routes>
         </div>
       </main>

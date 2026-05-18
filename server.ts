@@ -207,6 +207,7 @@ async function initDB() {
     try { await pool.query(`ALTER TABLE users ADD COLUMN cidade VARCHAR(255);`); } catch (e) {}
     try { await pool.query(`ALTER TABLE users ADD COLUMN numero VARCHAR(50);`); } catch (e) {}
     try { await pool.query(`ALTER TABLE users ADD COLUMN cep VARCHAR(50);`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE users ADD COLUMN dashboard_theme VARCHAR(50) DEFAULT 'light';`); } catch (e) {}
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS user_client (
@@ -1029,7 +1030,7 @@ async function startServer() {
          }
          return res.status(404).json({ success: false, error: 'Usuário não encontrado' });
       }
-      const dbResult = await pool.query('SELECT id, name, email, role, company_name, company_logo, wallet, is_approved FROM users WHERE id = $1', [req.user.id]);
+      const dbResult = await pool.query('SELECT id, name, email, role, company_name, company_logo, dashboard_theme, wallet, is_approved FROM users WHERE id = $1', [req.user.id]);
       if (dbResult.rows.length > 0) {
         const user = dbResult.rows[0];
         normalizeUserWallet(user);
@@ -1045,6 +1046,31 @@ async function startServer() {
       }
     } catch (err) {
       res.status(500).json({ success: false, error: 'Erro ao buscar dados.' });
+    }
+  });
+
+  // PUT /api/me
+  app.put('/api/me', requireAuth, async (req: any, res) => {
+    try {
+      if (!dbConnected) throw new Error("DB offline");
+      const { name, company_name, company_logo, dashboard_theme, password } = req.body;
+      
+      let updateResult;
+      if (password) {
+        updateResult = await pool.query(
+          'UPDATE users SET name = COALESCE($1, name), company_name = COALESCE($2, company_name), company_logo = COALESCE($3, company_logo), dashboard_theme = COALESCE($4, dashboard_theme), password = $5 WHERE id = $6 RETURNING id, name, email, role, company_name, company_logo, dashboard_theme',
+          [name, company_name, company_logo, dashboard_theme, password, req.user.id]
+        );
+      } else {
+        updateResult = await pool.query(
+          'UPDATE users SET name = COALESCE($1, name), company_name = COALESCE($2, company_name), company_logo = COALESCE($3, company_logo), dashboard_theme = COALESCE($4, dashboard_theme) WHERE id = $5 RETURNING id, name, email, role, company_name, company_logo, dashboard_theme',
+          [name, company_name, company_logo, dashboard_theme, req.user.id]
+        );
+      }
+      
+      res.json({ success: true, user: updateResult.rows[0] });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
     }
   });
 
