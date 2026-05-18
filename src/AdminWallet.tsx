@@ -16,7 +16,7 @@ export function AdminWallet({ user, onRefreshUser }: { user: any, onRefreshUser?
   const [activeTab, setActiveTab] = useState<'extrato' | 'transferir' | 'receber' | 'solicitar'>('extrato');
 
   const groupedTokensIni = user.wallet?.tokens?.reduce((acc: any, val: string) => {
-    acc[val] = (acc[val] || 0) + 1;
+    acc[val.length] = (acc[val.length] || 0) + 1;
     return acc;
   }, {}) || {};
   const firstAvailableToken = Object.keys(groupedTokensIni).length > 0 ? Object.keys(groupedTokensIni)[0] : '128';
@@ -111,7 +111,6 @@ export function AdminWallet({ user, onRefreshUser }: { user: any, onRefreshUser?
         setRequestSuccess(true);
         setTimeout(() => setRequestSuccess(false), 3000);
         setRequestUserId('');
-        if (onRefreshUser) onRefreshUser();
       } else {
         alert(data.error || 'Erro ao solicitar e-tokens.');
       }
@@ -123,18 +122,18 @@ export function AdminWallet({ user, onRefreshUser }: { user: any, onRefreshUser?
 
   const totalTokens = user.wallet?.tokens?.length || 0;
   const groupedTokens = user.wallet?.tokens?.reduce((acc: any, val: string) => {
-    acc[val] = (acc[val] || 0) + 1;
+    acc[val.length] = (acc[val.length] || 0) + 1;
     return acc;
   }, {}) || {};
 
   return (
     <div className="bg-[#F5F5F7] min-h-full font-sans pb-20 relative">
-       {(requestLoading || transferLoading) && (
+       {requestLoading && (
          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
            <div className="bg-white rounded-3xl p-8 flex flex-col items-center gap-4 text-center max-w-sm mx-4 shadow-2xl">
              <div className="w-16 h-16 border-4 border-blue-100 border-t-[#007AFF] rounded-full animate-spin"></div>
              <h3 className="text-xl font-bold text-[#1D1D1F]">Processando...</h3>
-             <p className="text-sm text-gray-500 font-medium">Aguardando confirmação do sistema. Por favor, não feche esta tela.</p>
+             <p className="text-sm text-gray-500 font-medium">Aguardando confirmação do sistema de pagamentos. Por favor, não feche esta tela.</p>
            </div>
          </div>
        )}

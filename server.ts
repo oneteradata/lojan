@@ -71,21 +71,19 @@ function normalizeUserWallet(user: any) {
   if (Array.isArray(rawWallet)) {
      for (const item of rawWallet) {
        if (item && item.wallet && typeof item.wallet === 'object') {
-         const tks = Object.values(item.wallet).filter((t: any) => typeof t === 'string' || typeof t === 'number') as any[];
-         userTokens = userTokens.concat(tks.map((t: any) => String(String(t).length > 10 ? String(t).length : t)));
+         userTokens = userTokens.concat(Object.values(item.wallet).filter((t: any) => typeof t === 'string') as string[]);
        }
      }
   } else if (typeof rawWallet === 'object') {
      if (Array.isArray(rawWallet.tokens)) {
-       userTokens = rawWallet.tokens.filter((t: any) => typeof t === 'string' || typeof t === 'number').map((t: any) => String(String(t).length > 10 ? String(t).length : t));
+       userTokens = rawWallet.tokens.filter((t: any) => typeof t === 'string');
      } else {
        // Search for object values
        for (const k in rawWallet) {
          if (typeof rawWallet[k] === 'object' && !Array.isArray(rawWallet[k])) {
-           const tks = Object.values(rawWallet[k]).filter((t: any) => typeof t === 'string' || typeof t === 'number') as any[];
-           userTokens = userTokens.concat(tks.map((t: any) => String(String(t).length > 10 ? String(t).length : t)));
-         } else if (typeof rawWallet[k] === 'string' || typeof rawWallet[k] === 'number') {
-           userTokens.push(String(String(rawWallet[k]).length > 10 ? String(rawWallet[k]).length : rawWallet[k]));
+           userTokens = userTokens.concat(Object.values(rawWallet[k]).filter((t: any) => typeof t === 'string') as string[]);
+         } else if (typeof rawWallet[k] === 'string' && k.startsWith('token_')) {
+           userTokens.push(rawWallet[k]);
          }
        }
      }
@@ -356,14 +354,6 @@ async function startServer() {
   const app = express();
   app.use(express.json({ limit: '250mb' }));
   app.use(express.urlencoded({ extended: true, limit: '250mb' }));
-  
-  app.use((err: any, req: any, res: any, next: any) => {
-    if (err && err.status === 400 && 'body' in err) {
-       return res.status(400).json({ success: false, error: 'Erro de formatação na requisição HTTP' });
-    }
-    next(err);
-  });
-
   const PORT = 3000;
 
   // Inicia banco de dados
@@ -473,7 +463,7 @@ async function startServer() {
                targetObjKey = k;
                userTokens = Object.values(rawWallet[k]).filter((t: any) => typeof t === 'string') as string[];
                break;
-             } else if (typeof rawWallet[k] === 'string') {
+             } else if (typeof rawWallet[k] === 'string' && k.startsWith('token_')) {
                walletFormat = 'root_strings';
                userTokens.push(rawWallet[k]);
              }
@@ -483,7 +473,7 @@ async function startServer() {
       
       const matchingTokensIndices: number[] = [];
       for (let i = 0; i < userTokens.length; i++) {
-        if (userTokens[i] && parseInt(userTokens[i]) === requiredTypeLength) {
+        if (userTokens[i] && userTokens[i].length === requiredTypeLength) {
           matchingTokensIndices.push(i);
         }
       }
@@ -1097,14 +1087,21 @@ async function startServer() {
       if (senderRes.rows.length === 0) return res.status(404).json({ success: false, error: 'Remetente não encontrado.' });
       const sender = senderRes.rows[0];
       
-      const senderData = { wallet: sender.wallet };
-      normalizeUserWallet(senderData);
-      const rawWallet = senderData.wallet;
-      let userTokens = rawWallet.tokens;
+      let rawWallet = sender.wallet || {};
+      if (typeof rawWallet === 'string') {
+        try { rawWallet = JSON.parse(rawWallet); } catch (e) {}
+      }
+      
+      let userTokens: string[] = [];
+      if (Array.isArray(rawWallet?.tokens)) {
+        userTokens = rawWallet.tokens;
+      } else if (rawWallet?.tokens) {
+        userTokens = Object.values(rawWallet.tokens).filter(t => typeof t === 'string') as string[];
+      } // Minimal check, assuming standardized wallet format
 
       const matchingIndices = [];
       for (let i = 0; i < userTokens.length; i++) {
-        if (typeof userTokens[i] === 'string' && parseInt(userTokens[i]) === tokenLenInt) {
+        if (typeof userTokens[i] === 'string' && userTokens[i].length === tokenLenInt) {
           matchingIndices.push(i);
         }
       }
@@ -1139,9 +1136,11 @@ async function startServer() {
       if (receiverRes.rows.length === 0) return res.status(404).json({ success: false, error: 'Destinatário não encontrado.' });
       const receiver = receiverRes.rows[0];
       
-      const receiverData = { wallet: receiver.wallet };
-      normalizeUserWallet(receiverData);
-      let recWallet = receiverData.wallet;
+      let recWallet = receiver.wallet || {};
+      if (typeof recWallet === 'string') {
+        try { recWallet = JSON.parse(recWallet); } catch (e) {}
+      }
+      if (!Array.isArray(recWallet.tokens)) recWallet.tokens = [];
       recWallet.tokens = recWallet.tokens.concat(tokensToTransfer);
 
       // Save
@@ -1298,15 +1297,18 @@ async function startServer() {
       if (finalStatus === 'gerado') {
         const userRes = await pool.query('SELECT wallet FROM users WHERE id = $1', [user_id_recebedor]);
         if (userRes.rows.length > 0) {
-           const userData = { wallet: userRes.rows[0].wallet };
-           normalizeUserWallet(userData);
-           const wallet = userData.wallet;
-           let userTokens = wallet.tokens;
+           const wallet = typeof userRes.rows[0].wallet === 'string' ? JSON.parse(userRes.rows[0].wallet) : (userRes.rows[0].wallet || { tokens: [] });
+           let userTokens = Array.isArray(wallet.tokens) ? wallet.tokens : [];
            
            for(let i=0; i<quantidade; i++) {
-             userTokens.push(String(tipo_token));
+             let tokenStr = '';
+             const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+             for(let j=0; j<tipo_token; j++) {
+               tokenStr += chars.charAt(Math.floor(Math.random() * chars.length));
+             }
+             userTokens.push(tokenStr);
            }
-           wallet.tokens = userTokens.flat(Infinity);
+           wallet.tokens = userTokens.flat();
            await pool.query('UPDATE users SET wallet = $1 WHERE id = $2', [JSON.stringify(wallet), user_id_recebedor]);
         }
         await pool.query('UPDATE credit_requests SET status = $1 WHERE id = $2', [finalStatus, reqId]);
@@ -1336,17 +1338,21 @@ async function startServer() {
       if (status === 'gerado' && pedido.status !== 'gerado') {
         const userRes = await pool.query('SELECT wallet FROM users WHERE id = $1', [pedido.user_id_recebedor]);
         if (userRes.rows.length > 0) {
-           const userData = { wallet: userRes.rows[0].wallet };
-           normalizeUserWallet(userData);
-           const wallet = userData.wallet;
-           let userTokens = wallet.tokens;
+           const wallet = typeof userRes.rows[0].wallet === 'string' ? JSON.parse(userRes.rows[0].wallet) : (userRes.rows[0].wallet || { tokens: [] });
+           let userTokens = Array.isArray(wallet.tokens) ? wallet.tokens : [];
            
            // Generate tokens string of required length
            const length = pedido.tipo_token;
            for(let i=0; i<pedido.quantidade; i++) {
-             userTokens.push(String(length));
+             // Generate random string of length
+             let tokenStr = '';
+             const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+             for(let j=0; j<length; j++) {
+               tokenStr += chars.charAt(Math.floor(Math.random() * chars.length));
+             }
+             userTokens.push(tokenStr);
            }
-           wallet.tokens = userTokens.flat(Infinity);
+           wallet.tokens = userTokens.flat();
            await pool.query('UPDATE users SET wallet = $1 WHERE id = $2', [JSON.stringify(wallet), pedido.user_id_recebedor]);
         }
       }
@@ -1440,11 +1446,6 @@ async function startServer() {
   // Login de usuários
   app.post('/api/login', async (req, res) => {
     const { email, password } = req.body;
-    
-    if (!email || !password) {
-      return res.json({ success: false, error: 'Email e senha são obrigatórios.' });
-    }
-    
     try {
       if (!dbConnected) {
         // Fallback de demonstração caso o banco não conecte (Modo dev)
@@ -1460,13 +1461,12 @@ async function startServer() {
            return res.json({ success: true, user: fallbackUser, token });
         }
 
-        return res.json({ success: false, error: 'Credenciais inválidas. Tente admin@valentina.com e admin ou crie uma conta' });
+        return res.status(401).json({ success: false, error: 'Credenciais inválidas. Tente admin@valentina.com e admin ou crie uma conta' });
       }
 
       let dbResult;
-      const parsedEmail = Number(email);
-      if (!isNaN(parsedEmail) && email.toString().trim() !== '') {
-        dbResult = await pool.query('SELECT id, name, email, role, is_approved, company_name, company_logo, wallet, can_transfer, can_request, can_request_delivery FROM users WHERE (email = $1 OR id = $2) AND password = $3', [email, parsedEmail, password]);
+      if (!isNaN(Number(email))) {
+        dbResult = await pool.query('SELECT id, name, email, role, is_approved, company_name, company_logo, wallet, can_transfer, can_request, can_request_delivery FROM users WHERE (email = $1 OR id = $2) AND password = $3', [email, Number(email), password]);
       } else {
         dbResult = await pool.query('SELECT id, name, email, role, is_approved, company_name, company_logo, wallet, can_transfer, can_request, can_request_delivery FROM users WHERE email = $1 AND password = $2', [email, password]);
       }
@@ -1475,11 +1475,11 @@ async function startServer() {
         const user = dbResult.rows[0];
         if (user.role === 'blocked') {
           await logAction(user.id, user.email, 'login_falhou', 'Usuário bloqueado tentou acessar');
-          return res.json({ success: false, error: 'Usuário bloqueado pelo administrador.' });
+          return res.status(403).json({ success: false, error: 'Usuário bloqueado pelo administrador.' });
         }
         if (user.role !== 'admin' && user.is_approved === false) {
            await logAction(user.id, user.email, 'login_falhou', 'Usuário não aprovado tentou acessar');
-           return res.json({ success: false, error: 'Seu cadastro está aguardando aprovação do administrador.' });
+           return res.status(403).json({ success: false, error: 'Seu cadastro está aguardando aprovação do administrador.' });
         }
         normalizeUserWallet(user);
         
@@ -1496,12 +1496,12 @@ async function startServer() {
         res.json({ success: true, user, token });
       } else {
         await logAction(null, email, 'login_falhou', 'Credenciais inválidas');
-        res.json({ success: false, error: 'Credenciais inválidas. Tente novamente.' });
+        res.status(401).json({ success: false, error: 'Credenciais inválidas. Tente novamente.' });
       }
     } catch (err) {
       console.error(err);
       await logAction(null, email, 'erro', 'Erro no login');
-      res.json({ success: false, error: 'Erro de conexão com o banco de dados.' });
+      res.status(500).json({ error: 'Erro de conexão com o banco de dados.' });
     }
   });
 
@@ -1510,14 +1510,14 @@ async function startServer() {
     const { name, email, password, company_name, company_logo, requested_role, telefone, endereco, bairro, cidade, numero, cep } = req.body;
     
     if (!name || !email || !password) {
-      return res.json({ success: false, error: 'Preencha todos os campos obrigatórios.' });
+      return res.status(400).json({ success: false, error: 'Preencha todos os campos obrigatórios.' });
     }
 
     try {
       if (!dbConnected) {
         const existing = fallbackUsers.find(u => u.email === email);
         if (existing) {
-           return res.json({ success: false, error: 'Este e-mail já está em uso.' });
+           return res.status(400).json({ success: false, error: 'Este e-mail já está em uso.' });
         }
         const user = { id: Date.now(), name, email, password, role: requested_role === 'delivery' ? 'delivery' : 'user', company_name, company_logo };
         fallbackUsers.push(user);
@@ -1529,7 +1529,7 @@ async function startServer() {
       const checkResult = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
       if (checkResult.rows.length > 0) {
         await logAction(null, email, 'registro_falhou', 'E-mail já em uso');
-        return res.json({ success: false, error: 'Este e-mail já está em uso.' });
+        return res.status(400).json({ success: false, error: 'Este e-mail já está em uso.' });
       }
 
       // Insere o novo usuário
