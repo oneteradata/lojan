@@ -1442,7 +1442,7 @@ async function startServer() {
     const { email, password } = req.body;
     
     if (!email || !password) {
-      return res.status(400).json({ success: false, error: 'Email e senha são obrigatórios.' });
+      return res.json({ success: false, error: 'Email e senha são obrigatórios.' });
     }
     
     try {
@@ -1460,12 +1460,13 @@ async function startServer() {
            return res.json({ success: true, user: fallbackUser, token });
         }
 
-        return res.status(401).json({ success: false, error: 'Credenciais inválidas. Tente admin@valentina.com e admin ou crie uma conta' });
+        return res.json({ success: false, error: 'Credenciais inválidas. Tente admin@valentina.com e admin ou crie uma conta' });
       }
 
       let dbResult;
-      if (!isNaN(Number(email))) {
-        dbResult = await pool.query('SELECT id, name, email, role, is_approved, company_name, company_logo, wallet, can_transfer, can_request, can_request_delivery FROM users WHERE (email = $1 OR id = $2) AND password = $3', [email, Number(email), password]);
+      const parsedEmail = Number(email);
+      if (!isNaN(parsedEmail) && email.toString().trim() !== '') {
+        dbResult = await pool.query('SELECT id, name, email, role, is_approved, company_name, company_logo, wallet, can_transfer, can_request, can_request_delivery FROM users WHERE (email = $1 OR id = $2) AND password = $3', [email, parsedEmail, password]);
       } else {
         dbResult = await pool.query('SELECT id, name, email, role, is_approved, company_name, company_logo, wallet, can_transfer, can_request, can_request_delivery FROM users WHERE email = $1 AND password = $2', [email, password]);
       }
@@ -1474,11 +1475,11 @@ async function startServer() {
         const user = dbResult.rows[0];
         if (user.role === 'blocked') {
           await logAction(user.id, user.email, 'login_falhou', 'Usuário bloqueado tentou acessar');
-          return res.status(403).json({ success: false, error: 'Usuário bloqueado pelo administrador.' });
+          return res.json({ success: false, error: 'Usuário bloqueado pelo administrador.' });
         }
         if (user.role !== 'admin' && user.is_approved === false) {
            await logAction(user.id, user.email, 'login_falhou', 'Usuário não aprovado tentou acessar');
-           return res.status(403).json({ success: false, error: 'Seu cadastro está aguardando aprovação do administrador.' });
+           return res.json({ success: false, error: 'Seu cadastro está aguardando aprovação do administrador.' });
         }
         normalizeUserWallet(user);
         
@@ -1495,12 +1496,12 @@ async function startServer() {
         res.json({ success: true, user, token });
       } else {
         await logAction(null, email, 'login_falhou', 'Credenciais inválidas');
-        res.status(401).json({ success: false, error: 'Credenciais inválidas. Tente novamente.' });
+        res.json({ success: false, error: 'Credenciais inválidas. Tente novamente.' });
       }
     } catch (err) {
       console.error(err);
       await logAction(null, email, 'erro', 'Erro no login');
-      res.status(500).json({ error: 'Erro de conexão com o banco de dados.' });
+      res.json({ success: false, error: 'Erro de conexão com o banco de dados.' });
     }
   });
 
@@ -1509,14 +1510,14 @@ async function startServer() {
     const { name, email, password, company_name, company_logo, requested_role, telefone, endereco, bairro, cidade, numero, cep } = req.body;
     
     if (!name || !email || !password) {
-      return res.status(400).json({ success: false, error: 'Preencha todos os campos obrigatórios.' });
+      return res.json({ success: false, error: 'Preencha todos os campos obrigatórios.' });
     }
 
     try {
       if (!dbConnected) {
         const existing = fallbackUsers.find(u => u.email === email);
         if (existing) {
-           return res.status(400).json({ success: false, error: 'Este e-mail já está em uso.' });
+           return res.json({ success: false, error: 'Este e-mail já está em uso.' });
         }
         const user = { id: Date.now(), name, email, password, role: requested_role === 'delivery' ? 'delivery' : 'user', company_name, company_logo };
         fallbackUsers.push(user);
@@ -1528,7 +1529,7 @@ async function startServer() {
       const checkResult = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
       if (checkResult.rows.length > 0) {
         await logAction(null, email, 'registro_falhou', 'E-mail já em uso');
-        return res.status(400).json({ success: false, error: 'Este e-mail já está em uso.' });
+        return res.json({ success: false, error: 'Este e-mail já está em uso.' });
       }
 
       // Insere o novo usuário
