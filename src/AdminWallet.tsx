@@ -111,7 +111,6 @@ export function AdminWallet({ user, onRefreshUser }: { user: any, onRefreshUser?
         setRequestSuccess(true);
         setTimeout(() => setRequestSuccess(false), 3000);
         setRequestUserId('');
-        if (onRefreshUser) onRefreshUser();
       } else {
         alert(data.error || 'Erro ao solicitar e-tokens.');
       }

@@ -1308,7 +1308,7 @@ async function startServer() {
              }
              userTokens.push(tokenStr);
            }
-           wallet.tokens = userTokens.flat(Infinity);
+           wallet.tokens = userTokens.flat();
            await pool.query('UPDATE users SET wallet = $1 WHERE id = $2', [JSON.stringify(wallet), user_id_recebedor]);
         }
         await pool.query('UPDATE credit_requests SET status = $1 WHERE id = $2', [finalStatus, reqId]);
@@ -1352,7 +1352,7 @@ async function startServer() {
              }
              userTokens.push(tokenStr);
            }
-           wallet.tokens = userTokens.flat(Infinity);
+           wallet.tokens = userTokens.flat();
            await pool.query('UPDATE users SET wallet = $1 WHERE id = $2', [JSON.stringify(wallet), pedido.user_id_recebedor]);
         }
       }
