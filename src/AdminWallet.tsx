@@ -16,7 +16,7 @@ export function AdminWallet({ user, onRefreshUser }: { user: any, onRefreshUser?
   const [activeTab, setActiveTab] = useState<'extrato' | 'transferir' | 'receber' | 'solicitar'>('extrato');
 
   const groupedTokensIni = user.wallet?.tokens?.reduce((acc: any, val: string) => {
-    acc[val.length] = (acc[val.length] || 0) + 1;
+    acc[val] = (acc[val] || 0) + 1;
     return acc;
   }, {}) || {};
   const firstAvailableToken = Object.keys(groupedTokensIni).length > 0 ? Object.keys(groupedTokensIni)[0] : '128';
@@ -123,7 +123,7 @@ export function AdminWallet({ user, onRefreshUser }: { user: any, onRefreshUser?
 
   const totalTokens = user.wallet?.tokens?.length || 0;
   const groupedTokens = user.wallet?.tokens?.reduce((acc: any, val: string) => {
-    acc[val.length] = (acc[val.length] || 0) + 1;
+    acc[val] = (acc[val] || 0) + 1;
     return acc;
   }, {}) || {};
 

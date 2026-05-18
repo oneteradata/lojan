@@ -1733,7 +1733,7 @@ export function AdminUsers() {
                        <div className="mt-1 flex flex-wrap gap-1">
                          {Object.entries(
                            u.wallet.tokens.reduce((acc: any, val: string) => {
-                             acc[val.length] = (acc[val.length] || 0) + 1;
+                             acc[val] = (acc[val] || 0) + 1;
                              return acc;
                            }, {})
                          ).map(([len, count]) => (

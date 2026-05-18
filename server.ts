@@ -71,19 +71,21 @@ function normalizeUserWallet(user: any) {
   if (Array.isArray(rawWallet)) {
      for (const item of rawWallet) {
        if (item && item.wallet && typeof item.wallet === 'object') {
-         userTokens = userTokens.concat(Object.values(item.wallet).filter((t: any) => typeof t === 'string') as string[]);
+         const tks = Object.values(item.wallet).filter((t: any) => typeof t === 'string' || typeof t === 'number') as any[];
+         userTokens = userTokens.concat(tks.map((t: any) => String(String(t).length > 10 ? String(t).length : t)));
        }
      }
   } else if (typeof rawWallet === 'object') {
      if (Array.isArray(rawWallet.tokens)) {
-       userTokens = rawWallet.tokens.filter((t: any) => typeof t === 'string');
+       userTokens = rawWallet.tokens.filter((t: any) => typeof t === 'string' || typeof t === 'number').map((t: any) => String(String(t).length > 10 ? String(t).length : t));
      } else {
        // Search for object values
        for (const k in rawWallet) {
          if (typeof rawWallet[k] === 'object' && !Array.isArray(rawWallet[k])) {
-           userTokens = userTokens.concat(Object.values(rawWallet[k]).filter((t: any) => typeof t === 'string') as string[]);
-         } else if (typeof rawWallet[k] === 'string') {
-           userTokens.push(rawWallet[k]);
+           const tks = Object.values(rawWallet[k]).filter((t: any) => typeof t === 'string' || typeof t === 'number') as any[];
+           userTokens = userTokens.concat(tks.map((t: any) => String(String(t).length > 10 ? String(t).length : t)));
+         } else if (typeof rawWallet[k] === 'string' || typeof rawWallet[k] === 'number') {
+           userTokens.push(String(String(rawWallet[k]).length > 10 ? String(rawWallet[k]).length : rawWallet[k]));
          }
        }
      }
@@ -481,7 +483,7 @@ async function startServer() {
       
       const matchingTokensIndices: number[] = [];
       for (let i = 0; i < userTokens.length; i++) {
-        if (userTokens[i] && userTokens[i].length === requiredTypeLength) {
+        if (userTokens[i] && parseInt(userTokens[i]) === requiredTypeLength) {
           matchingTokensIndices.push(i);
         }
       }
@@ -1102,7 +1104,7 @@ async function startServer() {
 
       const matchingIndices = [];
       for (let i = 0; i < userTokens.length; i++) {
-        if (typeof userTokens[i] === 'string' && userTokens[i].length === tokenLenInt) {
+        if (typeof userTokens[i] === 'string' && parseInt(userTokens[i]) === tokenLenInt) {
           matchingIndices.push(i);
         }
       }
@@ -1302,12 +1304,7 @@ async function startServer() {
            let userTokens = wallet.tokens;
            
            for(let i=0; i<quantidade; i++) {
-             let tokenStr = '';
-             const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-             for(let j=0; j<tipo_token; j++) {
-               tokenStr += chars.charAt(Math.floor(Math.random() * chars.length));
-             }
-             userTokens.push(tokenStr);
+             userTokens.push(String(tipo_token));
            }
            wallet.tokens = userTokens.flat(Infinity);
            await pool.query('UPDATE users SET wallet = $1 WHERE id = $2', [JSON.stringify(wallet), user_id_recebedor]);
@@ -1347,13 +1344,7 @@ async function startServer() {
            // Generate tokens string of required length
            const length = pedido.tipo_token;
            for(let i=0; i<pedido.quantidade; i++) {
-             // Generate random string of length
-             let tokenStr = '';
-             const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-             for(let j=0; j<length; j++) {
-               tokenStr += chars.charAt(Math.floor(Math.random() * chars.length));
-             }
-             userTokens.push(tokenStr);
+             userTokens.push(String(length));
            }
            wallet.tokens = userTokens.flat(Infinity);
            await pool.query('UPDATE users SET wallet = $1 WHERE id = $2', [JSON.stringify(wallet), pedido.user_id_recebedor]);
