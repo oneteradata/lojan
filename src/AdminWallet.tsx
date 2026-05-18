@@ -85,7 +85,7 @@ export function AdminWallet({ user, onRefreshUser }: { user: any, onRefreshUser?
   // Request state
   const [requestUserId, setRequestUserId] = useState('');
   const [requestAmount, setRequestAmount] = useState('1');
-  const [requestType, setRequestType] = useState('64');
+  const [requestType, setRequestType] = useState('16');
   const [requestLoading, setRequestLoading] = useState(false);
   const [requestSuccess, setRequestSuccess] = useState(false);
 
@@ -289,15 +289,7 @@ export function AdminWallet({ user, onRefreshUser }: { user: any, onRefreshUser?
                          </div>
                          <div className="flex-1">
                            <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2 block">TIPO ETOKEN</label>
-                           <select value={transferType} onChange={e=>setTransferType(e.target.value)} className="w-full bg-gray-50 border border-gray-200 focus:border-[#007AFF] rounded-2xl px-4 py-3 sm:py-[13.5px] text-sm font-semibold outline-none appearance-none">
-                             {Object.keys(groupedTokens).length > 0 ? (
-                               Object.keys(groupedTokens).map(t => (
-                                 <option key={t} value={t}>E{t}</option>
-                               ))
-                             ) : (
-                               <option value="128">E128 (Padrão)</option>
-                             )}
-                           </select>
+                           <select value={transferType} onChange={e=>setTransferType(e.target.value)} className="w-full bg-gray-50 border border-gray-200 focus:border-[#007AFF] rounded-2xl px-4 py-3 sm:py-[13.5px] text-sm font-semibold outline-none appearance-none"> {user.role === 'admin' ? ( [16, 32, 64, 128, 256, 512, 1024, 2048, 4096].map(t => ( <option key={t} value={String(t)}>E{t}</option> )) ) : ( Object.keys(groupedTokens).length > 0 ? ( Object.keys(groupedTokens).map(t => ( <option key={t} value={t}>E{t}</option> )) ) : ( <option value="128">E128 (Padrão)</option> ) )} </select>
                          </div>
                        </div>
                        <div>
@@ -357,8 +349,8 @@ export function AdminWallet({ user, onRefreshUser }: { user: any, onRefreshUser?
                            <input required type="number" min="1" value={requestAmount} onChange={e=>setRequestAmount(e.target.value)} className="w-full bg-gray-50 border border-gray-200 focus:border-[#007AFF] rounded-2xl px-4 py-3 text-lg font-bold text-[#007AFF] outline-none" />
                          </div>
                          <div className="flex-1">
-                           <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2 block">TIPO (e64 - e2048)</label>
-                           <input required type="number" min="64" max="2048" value={requestType} onChange={e=>setRequestType(e.target.value)} placeholder="Ex: 64, 128" className="w-full bg-gray-50 border border-gray-200 focus:border-[#007AFF] rounded-2xl px-4 py-3 sm:py-[13.5px] text-sm font-semibold outline-none" />
+                           <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2 block">TIPO (e16 - e4096)</label>
+                           <select value={requestType} onChange={e=>setRequestType(e.target.value)} className="w-full bg-gray-50 border border-gray-200 focus:border-[#007AFF] rounded-2xl px-4 py-3 sm:py-[13.5px] text-sm font-semibold outline-none appearance-none"> {[16, 32, 64, 128, 256, 512, 1024, 2048, 4096].map(t => ( <option key={t} value={String(t)}>E{t}</option> ))} </select>
                          </div>
                        </div>
                        <div className="pt-2 border-t border-gray-50 mt-2">
