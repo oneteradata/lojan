@@ -71,26 +71,18 @@ function AdminLogin({ onLogin }: { onLogin: (user: any) => void }) {
     setError('');
     try {
       if (file.size > 2 * 1024 * 1024) throw new Error("A imagem deve ter no máximo 2MB");
-      const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-      const fileName = `${Date.now()}-${safeName}`;
       
-      const resSign = await apiFetch('/api/presigned-url', {
+      const formDataUpload = new FormData();
+      formDataUpload.append('file', file);
+      
+      const res = await apiFetch('/api/upload', {
          method: 'POST',
-         headers: { 'Content-Type': 'application/json' },
-         body: JSON.stringify({ fileName, mimeType: file.type })
+         body: formDataUpload
       });
-      const dataSign = await resSign.json();
-      if (!dataSign.success) throw new Error(dataSign.error || 'Falha ao gerar link de upload');
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Falha ao fazer upload da logo');
 
-      const uploadRes = await fetch(dataSign.url, {
-         method: 'PUT',
-         headers: { 'Content-Type': file.type },
-         body: file
-      });
-      if (!uploadRes.ok) throw new Error(`Falha no upload pro MinIO: ${uploadRes.statusText}`);
-
-      const finalUrl = `https://file.voryx.com.br/marketplace/${fileName}`;
-      setCompanyLogo(finalUrl);
+      setCompanyLogo(data.url);
     } catch (err: any) {
       setError('Erro no upload: ' + err.message);
     }
@@ -626,41 +618,25 @@ function ProductModal({ item, user, onClose }: { item?: any, user?: any, onClose
         return;
       }
 
-      const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-      const fileName = `${Date.now()}-${safeName}`;
+      const formDataUpload = new FormData();
+      formDataUpload.append('file', file);
       
-      // 1. Gerar link de upload direto (Presigned URL)
-      const resSign = await apiFetch('/api/presigned-url', {
+      const res = await apiFetch('/api/upload', {
          method: 'POST',
-         headers: { 'Content-Type': 'application/json' },
-         body: JSON.stringify({ fileName, mimeType: file.type })
+         body: formDataUpload
       });
-      const dataSign = await resSign.json();
+      const data = await res.json();
 
-      if (!dataSign.success) {
-         throw new Error(dataSign.error || 'Falha ao gerar link de upload');
+      if (!data.success) {
+         throw new Error(data.error || 'Falha ao fazer upload do arquivo');
       }
 
-      // 2. Fazer upload direto para o MinIO usando o link
-      const uploadRes = await fetch(dataSign.url, {
-         method: 'PUT',
-         headers: {
-           'Content-Type': file.type
-         },
-         body: file
-      });
-
-      if (!uploadRes.ok) {
-         throw new Error(`Falha no upload pro MinIO: ${uploadRes.statusText}`);
-      }
-
-      const finalUrl = `https://file.voryx.com.br/marketplace/${fileName}`;
       const type = file.type.startsWith('video') ? 'video' : 'image';
-      setMedia([...media, { type, url: finalUrl, fileName }]);
+      setMedia([...media, { type, url: data.url, fileName: data.fileName }]);
       
     } catch (err: any) {
       console.error(err);
-      alert('Erro no upload: ' + err.message + '. Se for um erro de CORS, certifique-se que o file.voryx.com.br permite requisições PUT do seu domínio.');
+      alert('Erro no upload: ' + err.message);
     }
     setUploading(false);
     e.target.value = ''; // clear input
@@ -1060,7 +1036,7 @@ function ProductModal({ item, user, onClose }: { item?: any, user?: any, onClose
 }
 
 // -- Orders Component --
-function AdminOrders() {
+function AdminOrders({ user }: { user: any }) {
   const [purchases, setPurchases] = useState<any[]>([]);
   const [sales, setSales] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'purchases'|'sales'>('purchases');
@@ -2188,7 +2164,7 @@ export default function AdminApp() {
           <Routes>
             <Route path="/" element={user.role === 'delivery' ? <AdminDeliveries user={user} /> : <AdminOverview user={user} onRefreshUser={refreshUser} onLogout={() => { localStorage.removeItem('token'); setUser(null); }} />} />
             <Route path="/products" element={<AdminProducts user={user} onRefreshUser={refreshUser} />} />
-            <Route path="/orders" element={<AdminOrders />} />
+            <Route path="/orders" element={<AdminOrders user={user} />} />
             <Route path="/etoken" element={<AdminWallet user={user} onRefreshUser={refreshUser} />} />
             <Route path="/credits" element={<AdminCredits user={user} onRefreshUser={refreshUser} />} />
             <Route path="/logs" element={<AdminLogs user={user} />} />

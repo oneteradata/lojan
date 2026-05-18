@@ -41,6 +41,39 @@ const minioClient = new Minio.Client({
 });
 const upload = multer({ storage: multer.memoryStorage() });
 
+async function initMinio() {
+  try {
+    const bucket = 'marketplace';
+    const exists = await minioClient.bucketExists(bucket).catch(() => false);
+    if (!exists) {
+      await minioClient.makeBucket(bucket, 'us-east-1');
+      const policy = {
+        Version: '2012-10-17',
+        Statement: [
+          {
+            Effect: 'Allow',
+            Principal: { AWS: ['*'] },
+            Action: ['s3:GetBucketLocation', 's3:ListBucket'],
+            Resource: [`arn:aws:s3:::${bucket}`],
+          },
+          {
+            Effect: 'Allow',
+            Principal: { AWS: ['*'] },
+            Action: ['s3:GetObject'],
+            Resource: [`arn:aws:s3:::${bucket}/*`],
+          },
+        ],
+      };
+      await minioClient.setBucketPolicy(bucket, JSON.stringify(policy));
+      console.log(`✅ Bucket '${bucket}' criado e configurado com política pública.`);
+    } else {
+      console.log(`✅ Bucket '${bucket}' já existe.`);
+    }
+  } catch (err: any) {
+    console.error('⚠️ Erro ao inicializar MinIO:', err.message);
+  }
+}
+
 // Configuração de conexão do PostgreSQL
 // Credenciais definidas pelas variaveis de ambiente
 const pool = new Pool({
@@ -358,6 +391,8 @@ async function startServer() {
 
   // Inicia banco de dados
   initDB();
+  // Inicia MinIO
+  initMinio();
 
   // ----- ROTAS DA API -----
 
@@ -619,17 +654,26 @@ async function startServer() {
   // (Fallback caso o CORS não permita upload direto, mantido por compatibilidade)
   app.post('/api/upload', requireAuth, upload.single('file'), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'Nenhum arquivo enviado.' });
-    const fileName = `${Date.now()}-${req.file.originalname.replace(/\s+/g, '_')}`;
+    const fileName = `${Date.now()}-${req.file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
     try {
-      const bucketExists = await minioClient.bucketExists('marketplace');
-      if (!bucketExists) await minioClient.makeBucket('marketplace', 'us-east-1');
+      const bucket = 'marketplace';
+      const bucketExists = await minioClient.bucketExists(bucket).catch(() => false);
+      if (!bucketExists) await minioClient.makeBucket(bucket, 'us-east-1').catch(() => null);
+      
       const metaData = { 'Content-Type': req.file.mimetype };
-      await minioClient.putObject('marketplace', fileName, req.file.buffer, req.file.size, metaData);
-      const url = `https://file.voryx.com.br/marketplace/${fileName}`;
+      await minioClient.putObject(bucket, fileName, req.file.buffer, req.file.size, metaData);
+      
+      const endpoint = process.env.MINIO_ENDPOINT || 'file.voryx.com.br';
+      const useSSL = process.env.MINIO_USE_SSL !== 'false';
+      const port = process.env.MINIO_PORT || '443';
+      
+      const protocol = useSSL ? 'https' : 'http';
+      const url = `${protocol}://${endpoint}${port === '443' || port === '80' ? '' : `:${port}`}/${bucket}/${fileName}`;
+      
       res.json({ success: true, url, fileName });
-    } catch (err) {
+    } catch (err: any) {
       console.error('Erro MinIO Upload:', err);
-      res.status(500).json({ error: 'Erro ao fazer upload no MinIO.' });
+      res.status(500).json({ error: 'Erro ao fazer upload no MinIO: ' + err.message });
     }
   });
 
