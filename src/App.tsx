@@ -177,17 +177,26 @@ function Storefront() {
     try {
       if (file.size > 2 * 1024 * 1024) throw new Error("A imagem deve ter no máximo 2MB");
       
-      const formDataUpload = new FormData();
-      formDataUpload.append('file', file);
+      const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+      const fileName = `${Date.now()}-${safeName}`;
       
-      const res = await apiFetch('/api/upload', {
+      const resSign = await apiFetch('/api/presigned-url', {
          method: 'POST',
-         body: formDataUpload
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify({ fileName, mimeType: file.type })
       });
-      const data = await res.json();
-      if (!data.success) throw new Error(data.error || 'Falha ao fazer upload da logo');
+      const dataSign = await resSign.json();
+      if (!dataSign.success) throw new Error(dataSign.error || 'Falha ao gerar link de upload');
 
-      setCompanyLogo(data.url);
+      const uploadRes = await fetch(dataSign.url, {
+         method: 'PUT',
+         headers: { 'Content-Type': file.type },
+         body: file
+      });
+      if (!uploadRes.ok) throw new Error(`Falha no upload pro MinIO: ${uploadRes.statusText}`);
+
+      const finalUrl = `https://file.voryx.com.br/marketplace/${fileName}`;
+      setCompanyLogo(finalUrl);
     } catch (err: any) {
       setAuthError('Erro no upload: ' + err.message);
     }
