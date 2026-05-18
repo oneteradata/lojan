@@ -128,15 +128,6 @@ export function AdminWallet({ user, onRefreshUser }: { user: any, onRefreshUser?
 
   return (
     <div className="bg-[#F5F5F7] min-h-full font-sans pb-20 relative">
-       {requestLoading && (
-         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-           <div className="bg-white rounded-3xl p-8 flex flex-col items-center gap-4 text-center max-w-sm mx-4 shadow-2xl">
-             <div className="w-16 h-16 border-4 border-blue-100 border-t-[#007AFF] rounded-full animate-spin"></div>
-             <h3 className="text-xl font-bold text-[#1D1D1F]">Processando...</h3>
-             <p className="text-sm text-gray-500 font-medium">Aguardando confirmação do sistema de pagamentos. Por favor, não feche esta tela.</p>
-           </div>
-         </div>
-       )}
        {/* Header Digital Bank Style */}
        <div className="bg-[#007AFF] text-white pt-8 pb-32 px-6 rounded-b-[40px] shadow-lg relative z-0">
           <div className="flex justify-between items-center mb-8">
