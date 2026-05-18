@@ -79,7 +79,13 @@ function AdminLogin({ onLogin }: { onLogin: (user: any) => void }) {
          headers: { 'Content-Type': 'application/json' },
          body: JSON.stringify({ fileName, mimeType: file.type })
       });
-      const dataSign = await resSign.json();
+      const textSign = await resSign.text();
+      let dataSign;
+      try {
+         dataSign = JSON.parse(textSign);
+      } catch (e) {
+         throw new Error('Erro na API: ' + textSign.substring(0, 100));
+      }
       if (!dataSign.success) throw new Error(dataSign.error || 'Falha ao gerar link de upload');
 
       const uploadRes = await fetch(dataSign.url, {
@@ -113,7 +119,14 @@ function AdminLogin({ onLogin }: { onLogin: (user: any) => void }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
       });
-      const data = await res.json();
+      let data;
+      const textResponse = await res.text();
+      try {
+         data = JSON.parse(textResponse);
+      } catch (err) {
+         console.error('Resposta da API inválida:', textResponse);
+         throw new Error('Erro na API (' + res.status + '): ' + textResponse.substring(0, 50));
+      }
       if (data.success) {
         if (data.message) {
             alert(data.message);
@@ -311,7 +324,14 @@ function AdminOverview({ user, onRefreshUser }: { user: any, onLogout?: () => vo
     try {
       if (onRefreshUser) onRefreshUser();
       const [res, ordersRes] = await Promise.all([apiFetch('/api/stats'), apiFetch('/api/orders')]);
-      const data = await res.json();
+      let data;
+      const textResponse = await res.text();
+      try {
+         data = JSON.parse(textResponse);
+      } catch (err) {
+         console.error('Resposta da API inválida:', textResponse);
+         throw new Error('Erro na API (' + res.status + '): ' + textResponse.substring(0, 50));
+      }
       if (data.success) setStats(data.stats);
       const ordersData = await ordersRes.json();
       if (ordersData.success) setRecentOrders(ordersData.sales.slice(0, 5));
@@ -456,7 +476,14 @@ function AdminProducts({ user, onRefreshUser }: { user: any, onRefreshUser?: () 
     try {
        if (onRefreshUser) onRefreshUser();
        const res = await apiFetch('/api/admin/products');
-       const data = await res.json();
+       let data;
+      const textResponse = await res.text();
+      try {
+         data = JSON.parse(textResponse);
+      } catch (err) {
+         console.error('Resposta da API inválida:', textResponse);
+         throw new Error('Erro na API (' + res.status + '): ' + textResponse.substring(0, 50));
+      }
        // Parse arrays back from Postgres payload if they were stringified instead of JSONB
        const parsedData = data.map((d: any) => ({
          ...d,
@@ -596,7 +623,14 @@ function ProductModal({ item, user, onClose }: { item?: any, user?: any, onClose
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...formData, media, variations })
       });
-      const data = await res.json();
+      let data;
+      const textResponse = await res.text();
+      try {
+         data = JSON.parse(textResponse);
+      } catch (err) {
+         console.error('Resposta da API inválida:', textResponse);
+         throw new Error('Erro na API (' + res.status + '): ' + textResponse.substring(0, 50));
+      }
       if (!data.success) {
         if (data.error === '100') {
            alert('Erro no processamento do token (Erro 100) ou tempo esgotado.');
@@ -635,7 +669,13 @@ function ProductModal({ item, user, onClose }: { item?: any, user?: any, onClose
          headers: { 'Content-Type': 'application/json' },
          body: JSON.stringify({ fileName, mimeType: file.type })
       });
-      const dataSign = await resSign.json();
+      const textSign = await resSign.text();
+      let dataSign;
+      try {
+         dataSign = JSON.parse(textSign);
+      } catch (e) {
+         throw new Error('Erro na API: ' + textSign.substring(0, 100));
+      }
 
       if (!dataSign.success) {
          throw new Error(dataSign.error || 'Falha ao gerar link de upload');
@@ -1156,7 +1196,14 @@ function AdminOrders() {
   const handleRequestDelivery = async (orderId: string) => {
     try {
       const res = await apiFetch(`/api/orders/${orderId}/request-delivery`, { method: 'PUT' });
-      const data = await res.json();
+      let data;
+      const textResponse = await res.text();
+      try {
+         data = JSON.parse(textResponse);
+      } catch (err) {
+         console.error('Resposta da API inválida:', textResponse);
+         throw new Error('Erro na API (' + res.status + '): ' + textResponse.substring(0, 50));
+      }
       if(data.success) {
          setSelectedOrder((prev: any) => ({ ...prev, requires_delivery: true, status: 'Em andamento' }));
          alert('Entrega solicitada com sucesso!');
@@ -1541,7 +1588,13 @@ export function AdminUsers() {
          headers: { 'Content-Type': 'application/json' },
          body: JSON.stringify({ fileName, mimeType: file.type })
       });
-      const dataSign = await resSign.json();
+      const textSign = await resSign.text();
+      let dataSign;
+      try {
+         dataSign = JSON.parse(textSign);
+      } catch (e) {
+         throw new Error('Erro na API: ' + textSign.substring(0, 100));
+      }
       if (!dataSign.success) throw new Error(dataSign.error || 'Falha ao gerar link de upload');
 
       const uploadRes = await fetch(dataSign.url, {
@@ -1580,7 +1633,14 @@ export function AdminUsers() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)
       });
-      const data = await res.json();
+      let data;
+      const textResponse = await res.text();
+      try {
+         data = JSON.parse(textResponse);
+      } catch (err) {
+         console.error('Resposta da API inválida:', textResponse);
+         throw new Error('Erro na API (' + res.status + '): ' + textResponse.substring(0, 50));
+      }
       if (data.success) {
         setShowAddForm(false);
         setEditingUser(null);
