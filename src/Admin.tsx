@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { LayoutDashboard, Bell, ShoppingBag, EyeOff, ChevronRight, RefreshCw, LogOut, TrendingUp, Package, ShoppingCart, Heart, Activity, Plus, X, Trash2, Home, Users, User, Lock, Unlock, Search, Copy, Check, Pickaxe, Landmark, List } from 'lucide-react';
+import { LayoutDashboard, Bell, ShoppingBag, EyeOff, ChevronRight, RefreshCw, LogOut, TrendingUp, Package, ShoppingCart, Heart, Activity, Plus, X, Trash2, Home, Users, User, Lock, Unlock, Search, Copy, Check, Pickaxe, Landmark, List, FileText } from 'lucide-react';
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { AdminCredits } from "./AdminCredits";
@@ -76,7 +76,7 @@ function AdminLogin({ onLogin }: { onLogin: (user: any) => void }) {
       const formDataUpload = new FormData();
       formDataUpload.append('file', file);
       
-      const res = await apiFetch('/api/upload', {
+      const res = await apiFetch('/api/upload-single', {
          method: 'POST',
          body: formDataUpload
       });
@@ -607,33 +607,45 @@ function ProductModal({ item, user, onClose }: { item?: any, user?: any, onClose
   };
 
   const handleMediaUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
     
     setUploading(true);
     try {
-      if (file.size > 250 * 1024 * 1024) {
-        alert("O arquivo não pode exceder 250MB.");
-        setUploading(false);
-        e.target.value = '';
-        return;
-      }
-
       const formDataUpload = new FormData();
-      formDataUpload.append('file', file);
+      for (let i = 0; i < files.length; i++) {
+        if (files[i].size > 500 * 1024 * 1024) {
+          alert(`O arquivo ${files[i].name} é muito grande (máximo 500MB)`);
+          continue;
+        }
+        formDataUpload.append('files', files[i]);
+      }
       
       const res = await apiFetch('/api/upload', {
          method: 'POST',
          body: formDataUpload
       });
+      
+      const contentType = res.headers.get("content-type");
+      if (!res.ok || !contentType || !contentType.includes("application/json")) {
+        const errText = await res.text();
+        throw new Error(errText || `Erro no servidor: ${res.status}`);
+      }
+
       const data = await res.json();
 
       if (!data.success) {
          throw new Error(data.error || 'Falha ao fazer upload do arquivo');
       }
 
-      const type = file.type.startsWith('video') ? 'video' : 'image';
-      setMedia([...media, { type, url: data.url, fileName: data.fileName }]);
+      const newItems = data.files.map((file: any) => {
+        let type = 'image';
+        if (file.type.startsWith('video')) type = 'video';
+        else if (file.type === 'application/pdf') type = 'pdf';
+        return { type, url: file.url, fileName: file.fileName };
+      });
+
+      setMedia([...media, ...newItems]);
       
     } catch (err: any) {
       console.error(err);
@@ -712,7 +724,12 @@ function ProductModal({ item, user, onClose }: { item?: any, user?: any, onClose
                   {media.map((m, i) => (
                     <div key={i} className="relative w-24 h-24 shrink-0 rounded-2xl overflow-hidden bg-white shadow-sm border border-gray-100 group">
                       {m.type === 'video' ? (
-                        <video src={m.url} className="w-full h-full object-cover" muted playsInline preload="metadata" controls />
+                        <video src={m.url} className="w-full h-full object-cover" muted playsInline preload="metadata" />
+                      ) : m.type === 'pdf' ? (
+                        <div className="w-full h-full flex flex-col items-center justify-center bg-red-50 text-red-600">
+                          <FileText className="w-8 h-8" />
+                          <span className="text-[8px] font-bold mt-1">PDF</span>
+                        </div>
                       ) : (
                         <img src={m.url} className="w-full h-full object-cover" />
                       )}
@@ -731,7 +748,7 @@ function ProductModal({ item, user, onClose }: { item?: any, user?: any, onClose
                   ) : media.length < 10 && (
                     <label className="w-24 h-24 shrink-0 rounded-2xl border-2 border-dashed border-[#007AFF]/30 flex flex-col items-center justify-center gap-1 cursor-pointer hover:bg-[#007AFF]/5 transition-colors">
                       <Plus className="w-6 h-6 text-[#007AFF]" />
-                      <input type="file" className="hidden" accept="image/*,video/*" onChange={handleMediaUpload} />
+                      <input type="file" className="hidden" accept="image/*,video/*,application/pdf" multiple onChange={handleMediaUpload} />
                     </label>
                   )}
                </div>
@@ -1513,7 +1530,7 @@ export function AdminUsers() {
       const formDataUpload = new FormData();
       formDataUpload.append('file', file);
       
-      const res = await apiFetch('/api/upload', {
+      const res = await apiFetch('/api/upload-single', {
          method: 'POST',
          body: formDataUpload
       });

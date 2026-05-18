@@ -663,7 +663,49 @@ async function startServer() {
   });
 
   // (Fallback caso o CORS não permita upload direto, mantido por compatibilidade)
-  app.post('/api/upload', requireAuth, upload.single('file'), async (req, res) => {
+  app.post('/api/upload', requireAuth, upload.array('files', 10), async (req, res) => {
+    try {
+      const files = req.files as Express.Multer.File[];
+      if (!files || files.length === 0) return res.status(400).json({ error: 'Nenhum arquivo enviado.' });
+
+      const results = [];
+      const bucket = 'marketplace';
+      const bucketExists = await minioClient.bucketExists(bucket).catch(() => false);
+      if (!bucketExists) await minioClient.makeBucket(bucket, 'us-east-1').catch(() => null);
+
+      for (const file of files) {
+        const fileName = file.filename;
+        const filePath = file.path;
+        const metaData = { 'Content-Type': file.mimetype };
+        
+        await minioClient.fPutObject(bucket, fileName, filePath, metaData);
+        
+        // Cleanup temp file
+        fs.unlink(filePath, () => {});
+        
+        const endpoint = process.env.MINIO_ENDPOINT || 'file.voryx.com.br';
+        const useSSL = process.env.MINIO_USE_SSL !== 'false';
+        const port = process.env.MINIO_PORT || '443';
+        const protocol = useSSL ? 'https' : 'http';
+        const url = `${protocol}://${endpoint}${port === '443' || port === '80' ? '' : `:${port}`}/${bucket}/${fileName}`;
+        
+        results.push({ url, fileName, type: file.mimetype });
+      }
+      
+      res.json({ success: true, files: results });
+    } catch (err: any) {
+      console.error('Erro MinIO Upload:', err);
+      if (req.files && Array.isArray(req.files)) {
+        for (const file of req.files) {
+          if (file.path) fs.unlink(file.path, () => {});
+        }
+      }
+      res.status(500).json({ error: 'Erro ao fazer upload no MinIO: ' + err.message });
+    }
+  });
+
+  // Single file fallback
+  app.post('/api/upload-single', requireAuth, upload.single('file'), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'Nenhum arquivo enviado.' });
     const fileName = req.file.filename;
     const filePath = req.file.path;
@@ -681,7 +723,6 @@ async function startServer() {
       const endpoint = process.env.MINIO_ENDPOINT || 'file.voryx.com.br';
       const useSSL = process.env.MINIO_USE_SSL !== 'false';
       const port = process.env.MINIO_PORT || '443';
-      
       const protocol = useSSL ? 'https' : 'http';
       const url = `${protocol}://${endpoint}${port === '443' || port === '80' ? '' : `:${port}`}/${bucket}/${fileName}`;
       

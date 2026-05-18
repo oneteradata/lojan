@@ -49,7 +49,7 @@ export function AdminSettings({ user, onRefreshUser }: { user: any, onRefreshUse
       const formDataUpload = new FormData();
       formDataUpload.append('file', file);
       
-      const res = await apiFetch('/api/upload', {
+      const res = await apiFetch('/api/upload-single', {
          method: 'POST',
          body: formDataUpload
       });

@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'motion/react';
-import { Search, ShoppingBag, Heart, Share2, User, Menu, ArrowRight, Eye, EyeOff, LogOut, RefreshCw } from 'lucide-react';
+import { Search, ShoppingBag, Heart, Share2, User, Menu, ArrowRight, Eye, EyeOff, LogOut, RefreshCw, FileText } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import AdminApp from './Admin';
@@ -100,14 +100,15 @@ function Storefront() {
   const [cartItems, setCartItems] = useState<any[]>([]);
   const [orderStatus, setOrderStatus] = useState<string | null>(null);
   const [selectedVariations, setSelectedVariations] = useState<{[varIdx: number]: {[optIdx: number]: number}}>({});
+  const [activeMediaIdx, setActiveMediaIdx] = useState(0);
 
   // Busca produtos do DB
   useEffect(() => {
     apiFetch('/api/products')
       .then(res => res.json())
       .then(data => {
-        if (data && data.length > 0) {
-           const parsedData = data.map((d: any) => ({
+        if (data && data.success && data.products) {
+           const parsedData = data.products.map((d: any) => ({
              ...d,
              media: typeof d.media === 'string' ? JSON.parse(d.media) : (d.media || []),
              variations: typeof d.variations === 'string' ? JSON.parse(d.variations) : (d.variations || [])
@@ -115,7 +116,7 @@ function Storefront() {
            setProducts(parsedData);
         }
       })
-      .catch(err => console.error("Erro ao buscar produtos, usando falback visual.", err));
+      .catch(err => console.error("Erro ao buscar produtos", err));
   }, []);
 
   const handleAuth = async (e: any) => {
@@ -180,7 +181,7 @@ function Storefront() {
       const formDataUpload = new FormData();
       formDataUpload.append('file', file);
       
-      const res = await apiFetch('/api/upload', {
+      const res = await apiFetch('/api/upload-single', {
          method: 'POST',
          body: formDataUpload
       });
@@ -695,6 +696,7 @@ function Storefront() {
                    fetch(`/api/products/${product.id}/view`, { method: 'POST', headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }).catch(() => null);
                    setSelectedProduct({ ...product, image: imgSrc, isVideo, price: priceLabel });
                    setSelectedVariations({});
+                   setActiveMediaIdx(0);
                 }}
               >
                 <div className="overflow-hidden mb-4 relative aspect-[3/4] bg-gray-100">
@@ -747,20 +749,67 @@ function Storefront() {
             >
               ✕
             </button>
-            <div className="md:w-1/2 aspect-[3/4] md:aspect-auto bg-gray-100">
-              {selectedProduct.isVideo ? (
-                <video 
-                  src={selectedProduct.image} 
-                  className="w-full h-full object-cover mixes-multiply" 
-                  autoPlay muted loop playsInline
-                />
-              ) : (
-                <img 
-                  src={selectedProduct.image} 
-                  alt={selectedProduct.name} 
-                  className="w-full h-full object-cover mixes-multiply" 
-                  referrerPolicy="no-referrer"
-                />
+            <div className="md:w-1/2 flex flex-col bg-gray-50 border-r border-gray-100 min-h-[400px]">
+              <div className="flex-1 relative overflow-hidden flex items-center justify-center">
+                 {(() => {
+                   const currentMedia = activeMediaIdx !== undefined && selectedProduct.media ? selectedProduct.media[activeMediaIdx] : { type: selectedProduct.isVideo ? 'video' : 'image', url: selectedProduct.image };
+                   if (currentMedia.type === 'video') {
+                     return (
+                       <video 
+                         key={currentMedia.url}
+                         src={currentMedia.url} 
+                         className="w-full h-full object-cover" 
+                         autoPlay muted loop playsInline
+                       />
+                     );
+                   } else if (currentMedia.type === 'pdf') {
+                     return (
+                       <div className="w-full h-full flex flex-col items-center justify-center p-12 text-center">
+                         <FileText className="w-20 h-20 text-red-500 mb-4" />
+                         <p className="text-sm font-bold text-gray-900 mb-4 uppercase tracking-widest">Documento PDF</p>
+                         <a 
+                           href={currentMedia.url} 
+                           target="_blank" 
+                           rel="noopener noreferrer"
+                           className="bg-red-500 text-white px-6 py-2.5 rounded-full text-[10px] font-bold uppercase tracking-widest hover:bg-red-600 transition-colors shadow-lg shadow-red-500/20"
+                         >
+                           Visualizar PDF
+                         </a>
+                       </div>
+                     );
+                   } else {
+                     return (
+                       <img 
+                         src={currentMedia.url} 
+                         alt={selectedProduct.name} 
+                         className="w-full h-full object-cover" 
+                         referrerPolicy="no-referrer"
+                       />
+                     );
+                   }
+                 })()}
+              </div>
+              
+              {selectedProduct.media && selectedProduct.media.length > 1 && (
+                <div className="flex gap-2 p-4 overflow-x-auto bg-white/50 backdrop-blur-sm border-t border-black/5 scrollbar-none">
+                  {selectedProduct.media.map((m: any, idx: number) => (
+                    <button 
+                      key={idx}
+                      onClick={() => setActiveMediaIdx(idx)}
+                      className={`w-16 h-16 shrink-0 rounded-xl overflow-hidden border-2 transition-all ${activeMediaIdx === idx ? 'border-[#007AFF] scale-105 shadow-md' : 'border-transparent opacity-60 hover:opacity-100'}`}
+                    >
+                      {m.type === 'video' ? (
+                        <video src={m.url} className="w-full h-full object-cover" muted />
+                      ) : m.type === 'pdf' ? (
+                        <div className="w-full h-full flex items-center justify-center bg-red-50 text-red-500">
+                          <FileText className="w-6 h-6" />
+                        </div>
+                      ) : (
+                        <img src={m.url} className="w-full h-full object-cover" />
+                      )}
+                    </button>
+                  ))}
+                </div>
               )}
             </div>
             <div className="md:w-1/2 p-8 md:p-16 flex flex-col justify-center">
