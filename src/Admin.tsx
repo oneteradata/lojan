@@ -9,6 +9,7 @@ import { AdminLogs } from "./AdminLogs";
 import { AdminInteractions } from "./AdminInteractions";
 import { AdminDeliveries } from "./AdminDeliveries";
 import { AdminWallet } from "./AdminWallet";
+import { GlobalSettings } from "./GlobalSettings";
 import { Wallet, MessageSquare, Menu, Settings } from "lucide-react";
 import { AdminSettings } from "./AdminSettings";
 
@@ -2112,6 +2113,10 @@ export default function AdminApp() {
 
           {user.role === 'admin' && (
             <>
+              <button onClick={() => { setIsMobileMenuOpen(false); navigate('/settings/global'); }} className={cn("flex w-full items-center gap-4 px-5 py-3.5 rounded-2xl transition-all", location.pathname === '/settings/global' ? "bg-[#0058bc] text-white shadow-lg shadow-[#0058bc]/20" : isDark ? "text-gray-300 hover:bg-white/5" : "text-[#414755] hover:bg-white hover:shadow-sm")}>
+                 <Activity className="w-5 h-5" />
+                 <span className={cn("text-sm", location.pathname === '/settings/global' ? "font-bold" : "font-semibold")}>Configs Gerais</span>
+              </button>
               <button onClick={() => { setIsMobileMenuOpen(false); navigate('/users'); }} className={cn("flex w-full items-center gap-4 px-5 py-3.5 rounded-2xl transition-all", location.pathname === '/users' ? "bg-[#0058bc] text-white shadow-lg shadow-[#0058bc]/20" : isDark ? "text-gray-300 hover:bg-white/5" : "text-[#414755] hover:bg-white hover:shadow-sm")}>
                  <Users className="w-5 h-5" />
                  <span className={cn("text-sm", location.pathname === '/users' ? "font-bold" : "font-semibold")}>Equipe</span>
@@ -2167,6 +2172,7 @@ export default function AdminApp() {
                    : location.pathname === '/credits' ? 'Logs' 
                    : location.pathname === '/users' ? 'Equipe' 
                    : location.pathname === '/settings' ? 'Configurações' 
+                   : location.pathname === '/settings/global' ? 'Configs Gerais'
                    : 'Minha Loja'}
                 </h2>
             </div>
@@ -2202,6 +2208,7 @@ export default function AdminApp() {
             <Route path="/interactions" element={<AdminInteractions user={user} />} />
             <Route path="/users" element={user.role === 'admin' ? <AdminUsers /> : <div className="p-8 text-center text-gray-500">Acesso negado. Apenas administradores.</div>} />
             <Route path="/settings" element={<AdminSettings user={user} onRefreshUser={refreshUser} />} />
+            <Route path="/settings/global" element={user.role === 'admin' ? <GlobalSettings /> : <div className="p-8 text-center text-gray-500">Acesso negado.</div>} />
           </Routes>
         </div>
       </main>

@@ -145,6 +145,27 @@ async function logAction(userId: string | number | null, userEmail: string | nul
   }
 }
 
+async function waitForWebhook(url: string, data: any): Promise<number> {
+  const startTime = Date.now();
+  let lastStatus = 0;
+  
+  while (Date.now() - startTime < 30000) {
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...data, timestamp: Date.now() })
+      });
+      lastStatus = response.status;
+      if (lastStatus === 200) return 200;
+    } catch (e) {
+      console.error(`Erro ao chamar webhook (${url}):`, e);
+    }
+    await new Promise(resolve => setTimeout(resolve, 3000));
+  }
+  return lastStatus;
+}
+
 async function initDB() {
   try {
     // Testa a conexão antes de tentar rodar os comandos
@@ -297,9 +318,18 @@ async function initDB() {
       CREATE TABLE IF NOT EXISTS system_settings (
         id SERIAL PRIMARY KEY,
         product_token_cost_amount INTEGER DEFAULT 1,
-        product_token_cost_type INTEGER DEFAULT 128
+        product_token_cost_type INTEGER DEFAULT 128,
+        token_costs JSONB DEFAULT '{"16": 0, "32": 0, "64": 0, "128": 0, "256": 0, "512": 0, "1024": 0, "2048": 0, "4096": 0}',
+        withdrawal_cost_4096 INTEGER DEFAULT 0,
+        withdrawal_cost_2048 INTEGER DEFAULT 0,
+        conversion_cost INTEGER DEFAULT 0
       );
     `);
+
+    try { await pool.query(`ALTER TABLE system_settings ADD COLUMN token_costs JSONB DEFAULT '{"16": 0, "32": 0, "64": 0, "128": 0, "256": 0, "512": 0, "1024": 0, "2048": 0, "4096": 0}';`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE system_settings ADD COLUMN withdrawal_cost_4096 INTEGER DEFAULT 0;`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE system_settings ADD COLUMN withdrawal_cost_2048 INTEGER DEFAULT 0;`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE system_settings ADD COLUMN conversion_cost INTEGER DEFAULT 0;`); } catch (e) {}
 
     // Insert default system settings if missing
     try {
@@ -1189,32 +1219,18 @@ async function startServer() {
         return res.status(400).json({ success: false, error: 'Não é possível transferir para si mesmo.' });
       }
 
-      // Webhook validation
-      try {
-        const webhookResp = await fetch('https://system.voryx.com.br/webhook/transferencia', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-             remetente_id: senderId,
-             quantidade: amountInt,
-             tipo_moeda: "E" + tokenLenInt,
-             moeda: token_length
-          })
-        });
+      // Webhook validation with 30s wait
+      const webhookStatus = await waitForWebhook('https://system.voryx.com.br/webhook/transferencia', {
+         remetente_id: senderId,
+         quantidade: amountInt,
+         tipo_moeda: "E" + tokenLenInt,
+         moeda: token_length,
+         destinatario_id: receiver_id,
+         tipo_operacao: 'transferencia'
+      });
 
-        let webhookData: any = {};
-        try {
-          webhookData = await webhookResp.json();
-        } catch (e) {}
-        
-        if (webhookResp.status === 100 || webhookData.status === 100) {
-           return res.status(400).json({ success: false, error: 'existe uma moeda inválida' });
-        } else if (webhookResp.status !== 200 && webhookData.status !== 200) {
-           return res.status(400).json({ success: false, error: 'Falha na validação do webhook externo.' });
-        }
-      } catch (webhookErr) {
-        console.error("Webhook transfer error", webhookErr);
-        return res.status(400).json({ success: false, error: 'Falha ao conectar no webhook externo.' });
+      if (webhookStatus !== 200) {
+        return res.status(400).json({ success: false, error: `Erro no processamento da transferência (Webhook Status: ${webhookStatus}). Tente novamente.` });
       }
 
       // Ensure user_client table has wallet column
@@ -1297,6 +1313,82 @@ async function startServer() {
     } catch (err: any) {
       console.error(err);
       res.status(500).json({ success: false, error: 'Erro interno ao transferir. ' + (err.message || String(err)) });
+    }
+  });
+
+  app.post('/api/withdraw', requireAuth, async (req: any, res) => {
+    const { amount, pix_key, password } = req.body;
+    const userId = req.user.id;
+
+    try {
+      if (!dbConnected) throw new Error("DB offline");
+      if (!amount || amount <= 0 || !pix_key || !password) {
+        return res.status(400).json({ success: false, error: 'Parâmetros inválidos.' });
+      }
+
+      // Validate password
+      const userRes = await pool.query('SELECT password, wallet FROM users WHERE id::text = $1', [userId]);
+      if (userRes.rows.length === 0) return res.status(404).json({ success: false, error: 'Usuário não encontrado.' });
+      
+      const user = userRes.rows[0];
+      if (password !== user.password) {
+        return res.status(401).json({ success: false, error: 'Senha mestre incorreta.' });
+      }
+
+      // Get settings for costs
+      const setRes = await pool.query('SELECT * FROM system_settings LIMIT 1');
+      const settings = setRes.rows[0];
+      const cost4096 = settings?.withdrawal_cost_4096 || 0;
+      const cost2048 = settings?.withdrawal_cost_2048 || 0;
+
+      // Check wallet
+      let wallet = user.wallet;
+      if (typeof wallet === 'string') wallet = JSON.parse(wallet);
+      const tokens = wallet.tokens || [];
+      
+      const count4096 = tokens.filter((t: string) => t.length === 4096).length;
+      const count2048 = tokens.filter((t: string) => t.length === 2048).length;
+
+      if (count4096 < cost4096 || count2048 < cost2048) {
+        return res.status(400).json({ success: false, error: `Saldo insuficiente para as taxas de saque. Requer: ${cost4096}x E4096 e ${cost2048}x E2048.` });
+      }
+
+      // Webhook wait (30s)
+      const webhookStatus = await waitForWebhook('https://system.voryx.com.br/webhook/saque', {
+        user_id: userId,
+        pix_key,
+        valor_real: amount,
+        taxas: { E4096: cost4096, E2048: cost2048 },
+        tipo_operacao: 'saque'
+      });
+
+      if (webhookStatus !== 200) {
+        return res.status(400).json({ success: false, error: `Erro na validação do saque (Status: ${webhookStatus}).` });
+      }
+
+      // Consume tokens
+      let removed4096 = 0;
+      let removed2048 = 0;
+      const newTokens = tokens.filter((t: string) => {
+        if (t.length === 4096 && removed4096 < cost4096) {
+          removed4096++;
+          return false;
+        }
+        if (t.length === 2048 && removed2048 < cost2048) {
+          removed2048++;
+          return false;
+        }
+        return true;
+      });
+
+      wallet.tokens = newTokens;
+      await pool.query('UPDATE users SET wallet = $1 WHERE id::text = $2', [JSON.stringify(wallet), userId]);
+      await logAction(userId, req.user.email, 'saque_solicitado', `Solicitou saque de R$ ${amount} (PIX: ${pix_key}). Taxas consumidas: ${cost4096}x E4096, ${cost2048}x E2048.`);
+
+      res.json({ success: true, message: 'Solicitação de saque enviada com sucesso e taxas consumidas.' });
+    } catch (err: any) {
+      console.error(err);
+      res.status(500).json({ success: false, error: 'Erro ao processar saque: ' + err.message });
     }
   });
 
@@ -1472,8 +1564,20 @@ async function startServer() {
       
       const pedido = qRes.rows[0];
       
-      // If changing to 'gerado', logic to add tokens to user wallet
+      // Webhook wait logic
       if (status === 'gerado' && pedido.status !== 'gerado') {
+        const webhookStatus = await waitForWebhook('https://system.voryx.com.br/webhook/geracao_credito', {
+           id_solicitacao: reqId,
+           user_id: pedido.user_id_recebedor,
+           quantidade: pedido.quantidade,
+           tipo_token: pedido.tipo_token,
+           tipo_operacao: 'geracao_credito'
+        });
+
+        if (webhookStatus !== 200) {
+          return res.status(400).json({ success: false, error: `Erro na aprovação do crédito (Webhook Status: ${webhookStatus}). Tente novamente.` });
+        }
+
         const userRes = await pool.query('SELECT wallet FROM users WHERE id = $1', [pedido.user_id_recebedor]);
         if (userRes.rows.length > 0) {
            const wallet = typeof userRes.rows[0].wallet === 'string' ? JSON.parse(userRes.rows[0].wallet) : (userRes.rows[0].wallet || { tokens: [] });
@@ -1515,15 +1619,26 @@ async function startServer() {
   });
 
   app.put('/api/settings', requireAuth, requireAdmin, async (req: any, res) => {
-    const { cost_7d_amount, cost_7d_type, cost_30d_amount, cost_30d_type } = req.body;
+    const { 
+      cost_7d_amount, cost_7d_type, cost_30d_amount, cost_30d_type,
+      product_token_cost_amount, product_token_cost_type,
+      token_costs, withdrawal_cost_4096, withdrawal_cost_2048, conversion_cost
+    } = req.body;
     try {
       if (!dbConnected) throw new Error("DB offline");
       const dbResult = await pool.query(`
         UPDATE system_settings 
-        SET cost_7d_amount=$1, cost_7d_type=$2, cost_30d_amount=$3, cost_30d_type=$4
+        SET 
+          cost_7d_amount=$1, cost_7d_type=$2, cost_30d_amount=$3, cost_30d_type=$4,
+          product_token_cost_amount=$5, product_token_cost_type=$6,
+          token_costs=$7, withdrawal_cost_4096=$8, withdrawal_cost_2048=$9, conversion_cost=$10
         RETURNING *
-      `, [cost_7d_amount, cost_7d_type, cost_30d_amount, cost_30d_type]);
-      await logAction(req.user.id, req.user.email, 'config_atualizada', 'Admin atualizou as configurações de tipo de tokens e valores');
+      `, [
+        cost_7d_amount, cost_7d_type, cost_30d_amount, cost_30d_type,
+        product_token_cost_amount, product_token_cost_type,
+        JSON.stringify(token_costs), withdrawal_cost_4096, withdrawal_cost_2048, conversion_cost
+      ]);
+      await logAction(req.user.id, req.user.email, 'config_atualizada', 'Admin atualizou as configurações globais de tokens');
       res.json({ success: true, settings: dbResult.rows[0] });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
@@ -1698,7 +1813,19 @@ async function startServer() {
         return res.json({ success: true, orderId: Date.now() }); // Fallback
       }
 
-      // 1. Cria o pedido no Postgres
+      // 1. Webhook validation with 30s wait
+      const webhookStatus = await waitForWebhook('https://system.voryx.com.br/webhook/compra', {
+         user_id: userId,
+         total: total,
+         items: items,
+         tipo_operacao: 'compra'
+      });
+
+      if (webhookStatus !== 200) {
+        return res.status(400).json({ success: false, error: `Erro no processamento do pedido (Webhook Status: ${webhookStatus}). Tente novamente.` });
+      }
+
+      // 2. Cria o pedido no Postgres
       const orderResult = await pool.query(
         'INSERT INTO orders (user_id, total_price, seller_id) VALUES ($1, $2, $3) RETURNING id',
         [userId, total, seller_id || null]
