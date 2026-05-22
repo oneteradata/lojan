@@ -284,7 +284,7 @@ function Storefront() {
             setOrderStatus(null);
          }, 3500);
       } else {
-         setOrderStatus(`❌ Erro no SQL: ${data.error}`);
+         setOrderStatus(`❌ Erro: ${data.error}`);
          setTimeout(() => setOrderStatus(null), 4000);
       }
     } catch(err) {

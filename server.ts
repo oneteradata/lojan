@@ -157,7 +157,36 @@ async function waitForWebhook(url: string, data: any): Promise<number> {
         body: JSON.stringify({ ...data, timestamp: Date.now() })
       });
       lastStatus = response.status;
-      if (lastStatus === 200) return 200;
+      
+      const text = await response.text();
+      console.log(`[waitForWebhook] URL: ${url}, HTTP: ${response.status}, Resposta: ${text}`);
+      
+      let statusVal: any = null;
+      try {
+        const json = JSON.parse(text);
+        if (json && typeof json === 'object') {
+          statusVal = json.status !== undefined ? json.status : (json.code !== undefined ? json.code : (json.statusCode !== undefined ? json.statusCode : null));
+        } else if (typeof json === 'number' || typeof json === 'string') {
+          statusVal = json;
+        }
+      } catch (jsonErr) {
+        if (text.includes('100')) {
+          statusVal = 100;
+        } else if (text.includes('200')) {
+          statusVal = 200;
+        }
+      }
+
+      // Se retornou status 100 (erro), sai imediatamente acusando erro
+      if (statusVal === 100 || statusVal === '100') {
+        console.log(`[waitForWebhook] Webhook retornou status 100 (Erro). Interrompendo espera.`);
+        return 100;
+      }
+
+      // Se retornou 200 (sucesso) e o status HTTP é 200, tudo ocorreu bem!
+      if (response.status === 200 && (statusVal === 200 || statusVal === '200' || statusVal === null)) {
+        return 200;
+      }
     } catch (e) {
       console.error(`Erro ao chamar webhook (${url}):`, e);
     }
