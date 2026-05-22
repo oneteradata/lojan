@@ -621,12 +621,27 @@ async function startServer() {
         }
 
         if (paymentSuccess) {
-           await pool.query('UPDATE products SET is_available = true WHERE id = $1', [result.rows[0].id]);
-           
-           result.rows[0].is_available = true;
-           await pool.query(`UPDATE logs SET status = true WHERE event_name = 'produto_adicionado' AND details LIKE $1`, [`%${result.rows[0].name}%`]).catch(()=>null);
-           await logAction(userId, userEmail, 'pagamento_aprovado', `Pagamento do produto ${result.rows[0].name} aprovado.`);
-           res.json({ success: true, product: result.rows[0] });
+           // Aguardar resposta do subsistema webhook enquanto a visibilidade do produto estiver em false
+           const startTime = Date.now();
+           let isAvailable = false;
+           while (Date.now() - startTime < 30000) {
+             const checkProd = await pool.query('SELECT is_available FROM products WHERE id = $1', [result.rows[0].id]);
+             if (checkProd.rows.length > 0 && checkProd.rows[0].is_available) {
+               isAvailable = true;
+               break;
+             }
+             await new Promise(resolve => setTimeout(resolve, 3000));
+           }
+
+           if (isAvailable) {
+              const updatedProdRes = await pool.query('SELECT * FROM products WHERE id = $1', [result.rows[0].id]);
+              await pool.query(`UPDATE logs SET status = true WHERE event_name = 'produto_adicionado' AND details LIKE $1`, [`%${result.rows[0].name}%`]).catch(()=>null);
+              await logAction(userId, userEmail, 'pagamento_aprovado', `Pagamento do produto ${result.rows[0].name} aprovado e disponibilizado pelo webhook.`);
+              res.json({ success: true, product: updatedProdRes.rows[0] });
+           } else {
+              await logAction(userId, userEmail, 'pagamento_recusado', `Pagamento do produto ${result.rows[0].name} aprovado na requisição inicial, mas a visibilidade não foi ativada pelo webhook em 30 segundos.`);
+              res.json({ success: false, error: 'Tempo limite expirado aguardando liberação do produto pelo subsistema webhook.', product: result.rows[0] });
+           }
         } else {
            await logAction(userId, userEmail, 'pagamento_recusado', `Pagamento do produto ${result.rows[0].name} recusado ou falhou no webhook. STATUS: ${status}, BODY: ${text}`);
            res.json({ success: false, error: '100', product: result.rows[0] });
