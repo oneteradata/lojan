@@ -103,36 +103,54 @@ let dbConnected = false;
 const fallbackUsers: any[] = [];
 
 
+const VALID_TOKEN_LENGTHS = new Set([16, 32, 64, 128, 256, 512, 1024, 2048, 4096]);
+
+function extractAllTokens(obj: any): string[] {
+  let tokens: string[] = [];
+  if (!obj) return tokens;
+
+  if (typeof obj === 'string') {
+    const trimmed = obj.trim();
+    if (VALID_TOKEN_LENGTHS.has(trimmed.length)) {
+      tokens.push(trimmed);
+    }
+  } else if (Array.isArray(obj)) {
+    for (const item of obj) {
+      tokens = tokens.concat(extractAllTokens(item));
+    }
+  } else if (typeof obj === 'object') {
+    for (const key in obj) {
+      if (Object.prototype.hasOwnProperty.call(obj, key)) {
+        tokens = tokens.concat(extractAllTokens(obj[key]));
+      }
+    }
+  }
+  return tokens;
+}
+
+function buildWalletObject(tokens: string[]): any {
+  const cleanTokens = tokens.filter(t => typeof t === 'string' && VALID_TOKEN_LENGTHS.has(t.trim().length));
+  const wallet: any = {
+    tokens: cleanTokens,
+    token_1: cleanTokens
+  };
+
+  for (const len of VALID_TOKEN_LENGTHS) {
+    const listForLen = cleanTokens.filter(t => t.length === len);
+    wallet[`token_${len}`] = listForLen;
+  }
+
+  return wallet;
+}
+
 function normalizeUserWallet(user: any) {
   if (!user) return;
   let rawWallet = user.wallet || {};
   if (typeof rawWallet === 'string') {
     try { rawWallet = JSON.parse(rawWallet); } catch (e) {}
   }
-  let userTokens: string[] = [];
-
-  if (Array.isArray(rawWallet)) {
-     for (const item of rawWallet) {
-       if (item && item.wallet && typeof item.wallet === 'object') {
-         userTokens = userTokens.concat(Object.values(item.wallet).filter((t: any) => typeof t === 'string') as string[]);
-       }
-     }
-  } else if (typeof rawWallet === 'object') {
-     if (Array.isArray(rawWallet.tokens)) {
-       userTokens = rawWallet.tokens.filter((t: any) => typeof t === 'string');
-     } else {
-       // Search for object values
-       for (const k in rawWallet) {
-         if (typeof rawWallet[k] === 'object' && !Array.isArray(rawWallet[k])) {
-           userTokens = userTokens.concat(Object.values(rawWallet[k]).filter((t: any) => typeof t === 'string') as string[]);
-         } else if (typeof rawWallet[k] === 'string' && k.startsWith('token_')) {
-           userTokens.push(rawWallet[k]);
-         }
-       }
-     }
-  }
-  
-  user.wallet = { tokens: userTokens };
+  const userTokens = extractAllTokens(rawWallet);
+  user.wallet = buildWalletObject(userTokens);
 }
 
 async function logAction(userId: string | number | null, userEmail: string | null, eventName: string, details: string) {
@@ -542,39 +560,7 @@ async function startServer() {
         try { rawWallet = JSON.parse(rawWallet); } catch (e) {}
       }
       
-      let userTokens: string[] = [];
-      let walletFormat = 'unknown'; // 'array_of_objects', 'object_with_key', 'tokens_array'
-      let targetObjKey = '';
-      let targetArrayIndex = -1;
-
-      if (Array.isArray(rawWallet)) {
-         for (let i = 0; i < rawWallet.length; i++) {
-           const item = rawWallet[i];
-           if (item && item.wallet && typeof item.wallet === 'object') {
-             walletFormat = 'array_of_objects';
-             targetArrayIndex = i;
-             userTokens = Object.values(item.wallet).filter((t: any) => typeof t === 'string') as string[];
-             break;
-           }
-         }
-      } else if (typeof rawWallet === 'object') {
-         if (Array.isArray(rawWallet.tokens)) {
-           walletFormat = 'tokens_array';
-           userTokens = rawWallet.tokens.filter((t: any) => typeof t === 'string');
-         } else {
-           for (const k in rawWallet) {
-             if (typeof rawWallet[k] === 'object' && !Array.isArray(rawWallet[k])) {
-               walletFormat = 'object_with_key';
-               targetObjKey = k;
-               userTokens = Object.values(rawWallet[k]).filter((t: any) => typeof t === 'string') as string[];
-               break;
-             } else if (typeof rawWallet[k] === 'string' && k.startsWith('token_')) {
-               walletFormat = 'root_strings';
-               userTokens.push(rawWallet[k]);
-             }
-           }
-         }
-      }
+      let userTokens = extractAllTokens(rawWallet);
       
       const matchingTokensIndices: number[] = [];
       for (let i = 0; i < userTokens.length; i++) {
@@ -1290,12 +1276,7 @@ async function startServer() {
         try { rawWallet = JSON.parse(rawWallet); } catch (e) {}
       }
       
-      let userTokens: string[] = [];
-      if (Array.isArray(rawWallet?.tokens)) {
-        userTokens = rawWallet.tokens;
-      } else if (rawWallet?.tokens) {
-        userTokens = Object.values(rawWallet.tokens).filter(t => typeof t === 'string') as string[];
-      } // Minimal check, assuming standardized wallet format
+      let userTokens = extractAllTokens(rawWallet);
 
       const matchingIndices = [];
       for (let i = 0; i < userTokens.length; i++) {
@@ -1319,7 +1300,7 @@ async function startServer() {
       }
       
       const newSenderTokens = userTokens.filter(t => t !== null);
-      rawWallet.tokens = newSenderTokens;
+      const updatedSenderWallet = buildWalletObject(newSenderTokens);
 
       // Receiver
       let receiverType = 'users';
@@ -1338,16 +1319,17 @@ async function startServer() {
       if (typeof recWallet === 'string') {
         try { recWallet = JSON.parse(recWallet); } catch (e) {}
       }
-      if (!Array.isArray(recWallet.tokens)) recWallet.tokens = [];
-      recWallet.tokens = recWallet.tokens.concat(tokensToTransfer);
+      let receiverTokens = extractAllTokens(recWallet);
+      receiverTokens = receiverTokens.concat(tokensToTransfer);
+      const updatedReceiverWallet = buildWalletObject(receiverTokens);
 
       // Save
-      await pool.query('UPDATE users SET wallet = $1 WHERE id::text = $2', [JSON.stringify(rawWallet), senderId]);
+      await pool.query('UPDATE users SET wallet = $1 WHERE id::text = $2', [JSON.stringify(updatedSenderWallet), senderId]);
       
       if (receiverType === 'user_client') {
-         await pool.query('UPDATE user_client SET wallet = $1 WHERE id::text = $2', [JSON.stringify(recWallet), receiver_id]);
+         await pool.query('UPDATE user_client SET wallet = $1 WHERE id::text = $2', [JSON.stringify(updatedReceiverWallet), receiver_id]);
       } else {
-         await pool.query('UPDATE users SET wallet = $1 WHERE id::text = $2', [JSON.stringify(recWallet), receiver_id]);
+         await pool.query('UPDATE users SET wallet = $1 WHERE id::text = $2', [JSON.stringify(updatedReceiverWallet), receiver_id]);
       }
 
       await logAction(senderId, sender.email, 'transferencia', `Enviou ${amountInt} eToken(s) E${tokenLenInt} para ID ${receiver_id}`);
@@ -1386,9 +1368,11 @@ async function startServer() {
       const cost2048 = settings?.withdrawal_cost_2048 || 0;
 
       // Check wallet
-      let wallet = user.wallet;
-      if (typeof wallet === 'string') wallet = JSON.parse(wallet);
-      const tokens = wallet.tokens || [];
+      let wallet = user.wallet || {};
+      if (typeof wallet === 'string') {
+        try { wallet = JSON.parse(wallet); } catch (e) {}
+      }
+      const tokens = extractAllTokens(wallet);
       
       const count4096 = tokens.filter((t: string) => t.length === 4096).length;
       const count2048 = tokens.filter((t: string) => t.length === 2048).length;
@@ -1425,8 +1409,8 @@ async function startServer() {
         return true;
       });
 
-      wallet.tokens = newTokens;
-      await pool.query('UPDATE users SET wallet = $1 WHERE id::text = $2', [JSON.stringify(wallet), userId]);
+      const updatedWallet = buildWalletObject(newTokens);
+      await pool.query('UPDATE users SET wallet = $1 WHERE id::text = $2', [JSON.stringify(updatedWallet), userId]);
       await logAction(userId, req.user.email, 'saque_solicitado', `Solicitou saque de R$ ${amount} (PIX: ${pix_key}). Taxas consumidas: ${cost4096}x E4096, ${cost2048}x E2048.`);
 
       res.json({ success: true, message: 'Solicitação de saque enviada com sucesso e taxas consumidas.' });
@@ -1571,8 +1555,11 @@ async function startServer() {
       if (finalStatus === 'gerado') {
         const userRes = await pool.query('SELECT wallet FROM users WHERE id = $1', [user_id_recebedor]);
         if (userRes.rows.length > 0) {
-           const wallet = typeof userRes.rows[0].wallet === 'string' ? JSON.parse(userRes.rows[0].wallet) : (userRes.rows[0].wallet || { tokens: [] });
-           let userTokens = Array.isArray(wallet.tokens) ? wallet.tokens : [];
+           let wallet = userRes.rows[0].wallet || {};
+           if (typeof wallet === 'string') {
+             try { wallet = JSON.parse(wallet); } catch (e) {}
+           }
+           let userTokens = extractAllTokens(wallet);
            
            for(let i=0; i<quantidade; i++) {
              let tokenStr = '';
@@ -1582,8 +1569,8 @@ async function startServer() {
              }
              userTokens.push(tokenStr);
            }
-           wallet.tokens = userTokens.flat();
-           await pool.query('UPDATE users SET wallet = $1 WHERE id = $2', [JSON.stringify(wallet), user_id_recebedor]);
+           const updatedWallet = buildWalletObject(userTokens);
+           await pool.query('UPDATE users SET wallet = $1 WHERE id = $2', [JSON.stringify(updatedWallet), user_id_recebedor]);
         }
         await pool.query('UPDATE credit_requests SET status = $1 WHERE id = $2', [finalStatus, reqId]);
       }
@@ -1624,8 +1611,11 @@ async function startServer() {
 
         const userRes = await pool.query('SELECT wallet FROM users WHERE id = $1', [pedido.user_id_recebedor]);
         if (userRes.rows.length > 0) {
-           const wallet = typeof userRes.rows[0].wallet === 'string' ? JSON.parse(userRes.rows[0].wallet) : (userRes.rows[0].wallet || { tokens: [] });
-           let userTokens = Array.isArray(wallet.tokens) ? wallet.tokens : [];
+           let wallet = userRes.rows[0].wallet || {};
+           if (typeof wallet === 'string') {
+             try { wallet = JSON.parse(wallet); } catch (e) {}
+           }
+           let userTokens = extractAllTokens(wallet);
            
            // Generate tokens string of required length
            const length = pedido.tipo_token;
@@ -1638,8 +1628,8 @@ async function startServer() {
              }
              userTokens.push(tokenStr);
            }
-           wallet.tokens = userTokens.flat();
-           await pool.query('UPDATE users SET wallet = $1 WHERE id = $2', [JSON.stringify(wallet), pedido.user_id_recebedor]);
+           const updatedWallet = buildWalletObject(userTokens);
+           await pool.query('UPDATE users SET wallet = $1 WHERE id = $2', [JSON.stringify(updatedWallet), pedido.user_id_recebedor]);
         }
       }
 
