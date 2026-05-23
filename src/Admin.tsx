@@ -452,11 +452,25 @@ function AdminProducts({ user, onRefreshUser }: { user: any, onRefreshUser?: () 
        const res = await apiFetch('/api/admin/products');
        const data = await res.json();
        // Parse arrays back from Postgres payload if they were stringified instead of JSONB
-       const parsedData = data.map((d: any) => ({
-         ...d,
-         media: typeof d.media === 'string' ? JSON.parse(d.media) : (d.media || []),
-         variations: typeof d.variations === 'string' ? JSON.parse(d.variations) : (d.variations || [])
-       }));
+       const parsedData = data.map((d: any) => {
+         let mediaParsed = [];
+         let variationsParsed = [];
+         try {
+           mediaParsed = typeof d.media === 'string' ? JSON.parse(d.media) : (d.media || []);
+         } catch (e) {
+           mediaParsed = [];
+         }
+         try {
+           variationsParsed = typeof d.variations === 'string' ? JSON.parse(d.variations) : (d.variations || []);
+         } catch (e) {
+           variationsParsed = [];
+         }
+         return {
+           ...d,
+           media: Array.isArray(mediaParsed) ? mediaParsed : [],
+           variations: Array.isArray(variationsParsed) ? variationsParsed : []
+         };
+       });
        setProducts(parsedData);
     } catch(e) {}
   };
