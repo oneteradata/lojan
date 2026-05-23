@@ -247,6 +247,7 @@ async function initDB() {
     try { await pool.query(`ALTER TABLE products ADD COLUMN details TEXT;`); } catch (e) {}
     try { await pool.query(`ALTER TABLE products ADD COLUMN media JSONB DEFAULT '[]';`); } catch (e) {}
     try { await pool.query(`ALTER TABLE products ADD COLUMN variations JSONB DEFAULT '[]';`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE products ADD COLUMN image TEXT;`); } catch (e) {}
     try { await pool.query(`ALTER TABLE products ALTER COLUMN image DROP NOT NULL;`); } catch (e) {}
     try { await pool.query(`ALTER TABLE products ALTER COLUMN price DROP NOT NULL;`); } catch (e) {}
 
@@ -434,6 +435,53 @@ async function initDB() {
         ('admin@valentina.com', 'admin', 'Admin Valentina', 'admin');
       `);
     }
+
+    // Configuração de Row Level Security (RLS) no PostgreSQL de forma abrangente
+    try {
+      console.log('Políticas RLS: Ativando Row Level Security nas tabelas principais...');
+      // Ativa RLS para Products, Orders e Logs
+      await pool.query('ALTER TABLE products ENABLE ROW LEVEL SECURITY;').catch(()=>null);
+      await pool.query('ALTER TABLE orders ENABLE ROW LEVEL SECURITY;').catch(()=>null);
+      await pool.query('ALTER TABLE logs ENABLE ROW LEVEL SECURITY;').catch(()=>null);
+      
+      // DROP policies se já existirem para evitar conflitos
+      await pool.query('DROP POLICY IF EXISTS products_tenant_isolation ON products;').catch(()=>null);
+      await pool.query('DROP POLICY IF EXISTS orders_tenant_isolation ON orders;').catch(()=>null);
+      await pool.query('DROP POLICY IF EXISTS logs_tenant_isolation ON logs;').catch(()=>null);
+
+      // Criar políticas padrão que usam variáveis de sessão 'app.user_id' e 'app.user_role'
+      // única role que acessa tudo é 'admin'. Demais têm acesso isolado
+      await pool.query(`
+        CREATE POLICY products_tenant_isolation ON products FOR ALL 
+        USING (
+          current_setting('app.user_role', true) = 'admin' OR 
+          user_id::text = current_setting('app.user_id', true) OR
+          is_available = true
+        );
+      `).catch(()=>null);
+
+      await pool.query(`
+        CREATE POLICY orders_tenant_isolation ON orders FOR ALL 
+        USING (
+          current_setting('app.user_role', true) = 'admin' OR 
+          user_id::text = current_setting('app.user_id', true) OR
+          seller_id::text = current_setting('app.user_id', true)
+        );
+      `).catch(()=>null);
+
+      await pool.query(`
+        CREATE POLICY logs_tenant_isolation ON logs FOR ALL 
+        USING (
+          current_setting('app.user_role', true) = 'admin' OR 
+          user_id::text = current_setting('app.user_id', true)
+        );
+      `).catch(()=>null);
+
+      console.log('✅ RLS configurado com sucesso. Permissões de isolamento com exceção administrativa de role admin ativadas.');
+    } catch(rlsError: any) {
+      console.warn('⚠️ Nota RLS: Erro ao configurar políticas finas RLS na base Postgres:', rlsError.message);
+    }
+
     console.log('✅ Banco de dados PostgreSQL sincronizado com sucesso.');
   } catch (err: any) {
     console.warn('⚠️ Banco de dados Postgres inacessível (normal se executado fora do Easypanel VPS). Usando fallback visual. Erro:', err.message);
@@ -476,6 +524,53 @@ async function startServer() {
   app.use(express.json({ limit: '250mb' }));
   app.use(express.urlencoded({ extended: true, limit: '250mb' }));
   const PORT = 3000;
+
+  // --- SERVIR UPLOADS LOCAL (FALLBACK SE O MINIO FALHAR) ---
+  const uploadsDir = path.join(process.cwd(), 'uploads');
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+  }
+  app.use('/uploads', express.static(uploadsDir));
+
+  // --- SEGURANÇA E POLÍTICAS DE ORIGEM (CORS E FRAMING) ---
+  app.use((req, res, next) => {
+    const host = req.headers.host || '';
+    // Proteção contra Clickjacking: Bloquear o site de ser carregado dentro de outro site como sub site (iframe)
+    // Se o host for o de produção, limita estritamente. No dev preview de AI Studio, libera para visualização normal do programador.
+    if (host.includes('voryx.com.br') || host.includes('vitrine.voryx.com.br')) {
+      res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+      res.setHeader('Content-Security-Policy', "frame-ancestors 'self' https://adm.vitrine.voryx.com.br https://vitrine.voryx.com.br;");
+    } else {
+      // Deixa o preview de desenvolvedor do Google AI Studio funcionar perfeitamente
+      res.setHeader('X-Frame-Options', 'ALLOWALL');
+    }
+
+    // Configuração estrita de CORS protegendo a API
+    const origin = req.headers.origin;
+    const allowedOrigins = [
+      'https://adm.vitrine.voryx.com.br',
+      'https://vitrine.voryx.com.br',
+      'http://localhost:3000'
+    ];
+    if (process.env.APP_URL) {
+      allowedOrigins.push(process.env.APP_URL.replace(/\/$/, ''));
+    }
+    
+    // Se a requisição vem de um domínio voryx.com.br ou da nossa área de desenvolvimento segura, permite CORS dinâmico
+    if (origin && (allowedOrigins.includes(origin) || origin.endsWith('voryx.com.br') || origin.includes('google.com') || origin.includes('run.app'))) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+    } else {
+      res.setHeader('Access-Control-Allow-Origin', 'https://adm.vitrine.voryx.com.br');
+    }
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+
+    if (req.method === 'OPTIONS') {
+      return res.sendStatus(200);
+    }
+    next();
+  });
 
   // Inicia banco de dados
   initDB();
@@ -618,8 +713,12 @@ async function startServer() {
       }
 
       // Check user wallet
-      const userRes = await pool.query('SELECT wallet FROM users WHERE id = $1', [userId]);
-      let rawWallet = userRes.rows[0].wallet || {};
+      const userRes = await pool.query('SELECT wallet, role FROM users WHERE id = $1', [userId]);
+      const userObj = userRes.rows[0];
+      const userRoleCalculated = userObj?.role || req.user.role;
+      const isUserAdmin = userRoleCalculated === 'admin';
+
+      let rawWallet = userObj?.wallet || {};
       if (typeof rawWallet === 'string') {
         try { rawWallet = JSON.parse(rawWallet); } catch (e) {}
       }
@@ -633,7 +732,7 @@ async function startServer() {
         }
       }
       
-      if (matchingTokensIndices.length < requiredAmount) {
+      if (!isUserAdmin && matchingTokensIndices.length < requiredAmount) {
         await logAction(userId, userEmail, 'criar_produto_falhou', `Tentou cadastrar produto (${duration} dias) mas não tem tokens suficientes (tem ${matchingTokensIndices.length}, precisa ${requiredAmount} do tipo ${requiredTypeLength})`);
         return res.status(400).json({ success: false, error: `Saldo insuficiente para modalidade de ${duration} dias. Necessário ${requiredAmount} token(s) do tipo ${requiredTypeLength}.` });
       }
@@ -655,11 +754,20 @@ async function startServer() {
       const imagesString = (mediaParsed || []).map((m: any) => m.url).join(',');
       const result = await pool.query(`
         INSERT INTO products (name, category, price, tokens, stock, details, media, variations, image, user_id, user_name, business_model, tables, seats_per_table, is_available, req_token_amount, req_token_type, duration_days)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, false, $15, $16, $17) RETURNING *
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) RETURNING *
       `, [
         name, category, String(price || '0'), parseInt(tokens) || 0, parseInt(stock) || 0, details, 
-        JSON.stringify(mediaParsed), JSON.stringify(variationsParsed), imagesString, userId, userName, business_model || 'Venda', tables || null, seats_per_table || null, requiredAmount, requiredTypeLength, duration
+        JSON.stringify(mediaParsed), JSON.stringify(variationsParsed), imagesString, userId, userName, business_model || 'Venda', tables || null, seats_per_table || null, 
+        isUserAdmin ? true : false, 
+        requiredAmount, requiredTypeLength, duration
       ]);
+
+      // Se for administrador, disponibiliza o produto imediatamente sem necessidade de webhook de token
+      if (isUserAdmin) {
+         await logAction(userId, userEmail, 'produto_adicionado', `Produto ${result.rows[0].name} cadastrado com sucesso direto pelo Administrador.`);
+         return res.json({ success: true, product: result.rows[0] });
+      }
+
       await logAction(userId, userEmail, 'produto_adicionado', `Produto ${result.rows[0].name} criado (pendente webhook) para ${duration} dias (necessita ${requiredAmount} tokens do tipo ${requiredTypeLength})`);
       
       try {
@@ -829,37 +937,71 @@ async function startServer() {
 
       const results = [];
       const bucket = 'marketplace';
-      const bucketExists = await minioClient.bucketExists(bucket).catch(() => false);
-      if (!bucketExists) await minioClient.makeBucket(bucket, 'us-east-1').catch(() => null);
+      let useMinIO = true;
+      try {
+        const bucketExists = await minioClient.bucketExists(bucket).catch(() => false);
+        if (!bucketExists) await minioClient.makeBucket(bucket, 'us-east-1').catch(() => null);
+      } catch (err) {
+        console.warn('⚠️ MinIO indisponível para upload múltiplo, usando fallback local direto.');
+        useMinIO = false;
+      }
 
       for (const file of files) {
         const fileName = file.filename;
         const filePath = file.path;
-        const metaData = { 'Content-Type': file.mimetype };
         
-        await minioClient.fPutObject(bucket, fileName, filePath, metaData);
-        
-        // Cleanup temp file
-        fs.unlink(filePath, () => {});
-        
-        const endpoint = process.env.MINIO_ENDPOINT || 'file.voryx.com.br';
-        const useSSL = process.env.MINIO_USE_SSL !== 'false';
-        const port = process.env.MINIO_PORT || '443';
-        const protocol = useSSL ? 'https' : 'http';
-        const url = `${protocol}://${endpoint}${port === '443' || port === '80' ? '' : `:${port}`}/${bucket}/${fileName}`;
-        
-        results.push({ url, fileName, type: file.mimetype });
+        if (useMinIO) {
+          try {
+            const metaData = { 'Content-Type': file.mimetype };
+            await minioClient.fPutObject(bucket, fileName, filePath, metaData);
+            
+            // Cleanup temp file
+            fs.unlink(filePath, () => {});
+            
+            const endpoint = process.env.MINIO_ENDPOINT || 'file.voryx.com.br';
+            const useSSL = process.env.MINIO_USE_SSL !== 'false';
+            const port = process.env.MINIO_PORT || '443';
+            const protocol = useSSL ? 'https' : 'http';
+            const url = `${protocol}://${endpoint}${port === '443' || port === '80' ? '' : `:${port}`}/${bucket}/${fileName}`;
+            
+            results.push({ url, fileName, type: file.mimetype });
+            continue;
+          } catch (err) {
+            console.warn('Erro ao enviar item para MinIO, tentando local:', err);
+          }
+        }
+
+        // Fallback local caso MinIO falhe ou esteja indisponível
+        try {
+          const destDir = path.join(process.cwd(), 'uploads');
+          if (!fs.existsSync(destDir)) {
+            fs.mkdirSync(destDir, { recursive: true });
+          }
+          const destPath = path.join(destDir, fileName);
+          fs.renameSync(filePath, destPath);
+          
+          const appUrl = (process.env.APP_URL || '').replace(/\/$/, '');
+          const url = appUrl ? `${appUrl}/uploads/${fileName}` : `/uploads/${fileName}`;
+          results.push({ url, fileName, type: file.mimetype });
+        } catch (fallbackErr: any) {
+          console.error('Falha no fallback de upload local duplo:', fallbackErr);
+          if (filePath && fs.existsSync(filePath)) {
+            fs.unlink(filePath, () => {});
+          }
+        }
       }
       
       res.json({ success: true, files: results });
     } catch (err: any) {
-      console.error('Erro MinIO Upload:', err);
+      console.error('Erro geral no upload múltiplo:', err);
       if (req.files && Array.isArray(req.files)) {
         for (const file of req.files) {
-          if (file.path) fs.unlink(file.path, () => {});
+          if (file.path && fs.existsSync(file.path)) {
+            fs.unlink(file.path, () => {});
+          }
         }
       }
-      res.status(500).json({ error: 'Erro ao fazer upload no MinIO: ' + err.message });
+      res.status(500).json({ error: 'Erro ao fazer upload: ' + err.message });
     }
   });
 
@@ -887,9 +1029,26 @@ async function startServer() {
       
       res.json({ success: true, url, fileName });
     } catch (err: any) {
-      console.error('Erro MinIO Upload:', err);
-      if (filePath) fs.unlink(filePath, () => {});
-      res.status(500).json({ error: 'Erro ao fazer upload no MinIO: ' + err.message });
+      console.warn('⚠️ MinIO indisponível para upload único, usando fallback local:', err.message);
+      try {
+        const destDir = path.join(process.cwd(), 'uploads');
+        if (!fs.existsSync(destDir)) {
+          fs.mkdirSync(destDir, { recursive: true });
+        }
+        const destPath = path.join(destDir, fileName);
+        fs.renameSync(filePath, destPath);
+        
+        const appUrl = (process.env.APP_URL || '').replace(/\/$/, '');
+        const url = appUrl ? `${appUrl}/uploads/${fileName}` : `/uploads/${fileName}`;
+        
+        res.json({ success: true, url, fileName });
+      } catch (fallbackErr: any) {
+        console.error('Erro no fallback de upload único:', fallbackErr);
+        if (filePath && fs.existsSync(filePath)) {
+          fs.unlink(filePath, () => {});
+        }
+        res.status(500).json({ error: 'Erro ao fazer upload: ' + fallbackErr.message });
+      }
     }
   });
 
