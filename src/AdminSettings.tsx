@@ -44,7 +44,7 @@ export function AdminSettings({ user, onRefreshUser }: { user: any, onRefreshUse
     setUploadingLogo(true);
     setError('');
     try {
-      if (file.size > 2 * 1024 * 1024) throw new Error("A imagem deve ter no máximo 2MB");
+      if (file.size > 30 * 1024 * 1024) throw new Error("A imagem deve ter no máximo 30MB");
       
       const formDataUpload = new FormData();
       formDataUpload.append('file', file);

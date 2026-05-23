@@ -275,6 +275,7 @@ async function initDB() {
     try { await pool.query(`ALTER TABLE users ADD COLUMN company_name VARCHAR(255);`); } catch (e) {}
     try { await pool.query(`ALTER TABLE users ADD COLUMN company_logo TEXT;`); } catch (e) {}
 
+    try { await pool.query(`ALTER TABLE users ADD COLUMN last_login_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;`); } catch (e) {}
     try { await pool.query(`ALTER TABLE users ADD COLUMN wallet JSONB DEFAULT '{"tokens": []}';`); } catch (e) {}
     try { await pool.query(`ALTER TABLE users ADD COLUMN is_approved BOOLEAN DEFAULT false;`); } catch (e) {}
     try { await pool.query(`ALTER TABLE users ADD COLUMN can_transfer BOOLEAN DEFAULT true;`); } catch (e) {}
@@ -418,6 +419,35 @@ async function initDB() {
         quantity INTEGER NOT NULL
       );
     `);
+
+    // --- RE-CREATE CONSTRAINTS WITH CASCADE DELETIONS FOR BULK CLEANUP ---
+    try {
+      await pool.query('ALTER TABLE order_items DROP CONSTRAINT IF EXISTS order_items_order_id_fkey;').catch(()=>null);
+      await pool.query('ALTER TABLE order_items ADD CONSTRAINT order_items_order_id_fkey FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE;').catch(()=>null);
+      
+      await pool.query('ALTER TABLE order_items DROP CONSTRAINT IF EXISTS order_items_product_id_fkey;').catch(()=>null);
+      await pool.query('ALTER TABLE order_items ADD CONSTRAINT order_items_product_id_fkey FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE;').catch(()=>null);
+      
+      await pool.query('ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_user_id_fkey;').catch(()=>null);
+      await pool.query('ALTER TABLE orders ADD CONSTRAINT orders_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;').catch(()=>null);
+
+      await pool.query('ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_delivery_user_id_fkey;').catch(()=>null);
+      await pool.query('ALTER TABLE orders ADD CONSTRAINT orders_delivery_user_id_fkey FOREIGN KEY (delivery_user_id) REFERENCES users(id) ON DELETE CASCADE;').catch(()=>null);
+    } catch (conErr) {
+      console.warn('Nota de relacionamentos CASCADE:', conErr);
+    }
+
+    // --- CREATION OF NOTIFICATIONS TABLE ---
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS notifications (
+        id SERIAL PRIMARY KEY,
+        title VARCHAR(255) NOT NULL,
+        message TEXT NOT NULL,
+        user_id INTEGER,
+        is_generic BOOLEAN DEFAULT false,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `).catch(() => null);
     
     // Atualiza tabela para suportar opções selecionadas (fallback dev)
     try { await pool.query(`ALTER TABLE order_items ADD COLUMN chosen_options JSONB DEFAULT '[]';`); } catch (e) {}
@@ -1925,6 +1955,173 @@ async function startServer() {
     }
   });
 
+  // ========== CLEANUP AND NOTIFICATION ENDPOINTS ==========
+  
+  // POST /api/admin/cleanup - Mass/Selective Cleanup
+  app.post('/api/admin/cleanup', requireAuth, requireAdmin, async (req: any, res) => {
+    const { type, ids, password } = req.body;
+    try {
+      if (!dbConnected) throw new Error("DB offline");
+      if (!password) {
+        return res.status(400).json({ success: false, error: 'A senha de confirmação é obrigatória.' });
+      }
+
+      // Verify admin password
+      const adminRes = await pool.query('SELECT password FROM users WHERE id = $1', [req.user.id]);
+      if (adminRes.rows.length === 0 || password !== adminRes.rows[0].password) {
+        return res.status(403).json({ success: false, error: 'Senha incorreta para confirmação da limpeza.' });
+      }
+
+      const idList = Array.isArray(ids) ? ids.map(id => parseInt(id)).filter(id => !isNaN(id)) : [];
+
+      await pool.query('BEGIN');
+
+      if (type === 'users') {
+        if (idList.length > 0) {
+          // Never delete the current admin
+          await pool.query('DELETE FROM users WHERE id = ANY($1) AND role <> \'admin\'', [idList]);
+        } else {
+          await pool.query('DELETE FROM users WHERE role <> \'admin\'');
+        }
+      } else if (type === 'products') {
+        if (idList.length > 0) {
+          await pool.query('DELETE FROM products WHERE id = ANY($1)', [idList]);
+        } else {
+          await pool.query('DELETE FROM products');
+        }
+      } else if (type === 'orders') {
+        if (idList.length > 0) {
+          await pool.query('DELETE FROM orders WHERE id = ANY($1)', [idList]);
+        } else {
+          await pool.query('DELETE FROM orders');
+        }
+      } else if (type === 'logs') {
+        if (idList.length > 0) {
+          await pool.query('DELETE FROM logs WHERE id = ANY($1)', [idList]);
+        } else {
+          await pool.query('DELETE FROM logs');
+        }
+      } else if (type === 'wallets') {
+        if (idList.length > 0) {
+          await pool.query('UPDATE users SET wallet = \'{"tokens": []}\' WHERE id = ANY($1)', [idList]);
+        } else {
+          await pool.query('UPDATE users SET wallet = \'{"tokens": []}\'');
+        }
+      } else if (type === 'all') {
+        await pool.query('DELETE FROM products');
+        await pool.query('DELETE FROM orders');
+        await pool.query('DELETE FROM logs');
+        await pool.query('UPDATE users SET wallet = \'{"tokens": []}\'');
+        await pool.query('DELETE FROM users WHERE role <> \'admin\'');
+      } else {
+        await pool.query('ROLLBACK');
+        return res.status(400).json({ success: false, error: 'Tipo de limpeza inválido.' });
+      }
+
+      await pool.query('COMMIT');
+      await logAction(req.user.id, req.user.email, 'limpeza_executada', `Limpeza do tipo ${type} executada.`);
+      res.json({ success: true, message: 'Operação de limpeza executada com sucesso.' });
+    } catch (err: any) {
+      await pool.query('ROLLBACK').catch(() => null);
+      res.status(500).json({ success: false, error: 'Erro de banco de dados na limpeza: ' + err.message });
+    }
+  });
+
+  // POST /api/admin/notifications - Admin envia notificação (genérica, último login ou usuário específico)
+  app.post('/api/admin/notifications', requireAuth, requireAdmin, async (req: any, res) => {
+    const { title, message, targetType, targetUserId } = req.body;
+    try {
+      if (!dbConnected) throw new Error("DB offline");
+      if (!title || !message || !targetType) {
+        return res.status(400).json({ success: false, error: 'Preencha todos os campos da notificação.' });
+      }
+
+      let userIdToTarget: number | null = null;
+      let isGeneric = false;
+
+      if (targetType === 'all') {
+        isGeneric = true;
+      } else if (targetType === 'last_login') {
+        // Find the user with the most recent last_login_at excluding admin
+        const lastLoginRes = await pool.query('SELECT id FROM users WHERE role <> \'admin\' AND last_login_at IS NOT NULL ORDER BY last_login_at DESC LIMIT 1');
+        if (lastLoginRes.rows.length > 0) {
+          userIdToTarget = lastLoginRes.rows[0].id;
+        } else {
+          // Fallback to any user if no login records
+          const fallbackUserRes = await pool.query('SELECT id FROM users WHERE role <> \'admin\' ORDER BY id DESC LIMIT 1');
+          if (fallbackUserRes.rows.length > 0) {
+            userIdToTarget = fallbackUserRes.rows[0].id;
+          } else {
+            return res.status(400).json({ success: false, error: 'Nenhum usuário comum elegível para receber esta notificação.' });
+          }
+        }
+      } else if (targetType === 'user') {
+        if (!targetUserId) return res.status(400).json({ success: false, error: 'Usuário destinatário é obrigatório.' });
+        userIdToTarget = parseInt(targetUserId);
+      }
+
+      // Insert notification
+      await pool.query(`
+        INSERT INTO notifications (title, message, user_id, is_generic)
+        VALUES ($1, $2, $3, $4)
+      `, [title, message, userIdToTarget, isGeneric]);
+
+      await logAction(req.user.id, req.user.email, 'notificacao_enviada', `Notificação "${title}" enviada.`);
+      res.json({ success: true, message: 'Notificação enviada com sucesso.' });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // GET /api/notifications - Obter notificações (esconde o corpo 'message' por segurança até login novamente)
+  app.get('/api/notifications', requireAuth, async (req: any, res) => {
+    try {
+      if (!dbConnected) {
+        return res.json({ success: true, notifications: [] });
+      }
+      const result = await pool.query(`
+        SELECT id, title, is_generic, created_at, user_id
+        FROM notifications
+        WHERE is_generic = true OR user_id = $1
+        ORDER BY created_at DESC
+      `, [req.user.id]);
+      res.json({ success: true, notifications: result.rows });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // POST /api/notifications/:id/read - Solicitar leitura mediante confirmação de senha ("logar novamente")
+  app.post('/api/notifications/:id/read', requireAuth, async (req: any, res) => {
+    const { password } = req.body;
+    try {
+      if (!dbConnected) throw new Error("DB offline");
+      if (!password) {
+        return res.status(400).json({ success: false, error: 'A senha de login é necessária para ler a notificação.' });
+      }
+
+      // Verify user password
+      const userRes = await pool.query('SELECT password FROM users WHERE id = $1', [req.user.id]);
+      if (userRes.rows.length === 0 || password !== userRes.rows[0].password) {
+        return res.status(403).json({ success: false, error: 'Senha incorreta. Não pôde liberar leitura.' });
+      }
+
+      // Pull notification
+      const notificationRes = await pool.query(
+        'SELECT id, title, message, is_generic, created_at FROM notifications WHERE id = $1 AND (is_generic = true OR user_id = $2)',
+        [parseInt(req.params.id), req.user.id]
+      );
+
+      if (notificationRes.rows.length === 0) {
+        return res.status(404).json({ success: false, error: 'Notificação não localizada ou inacessível.' });
+      }
+
+      res.json({ success: true, notification: notificationRes.rows[0] });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
   // ========== USER_CLIENT ENDPOINTS ==========
 
   app.get('/api/user_client', requireAuth, requireAdmin, async (req, res) => {
@@ -2024,6 +2221,7 @@ async function startServer() {
         } catch(e) {}
         user.active_products_count = activeProducts;
 
+        try { await pool.query('UPDATE users SET last_login_at = CURRENT_TIMESTAMP WHERE id = $1', [user.id]); } catch(e) {}
         await logAction(user.id, user.email, 'login', 'Login efetuado com sucesso');
         const token = jwt.sign(user, JWT_SECRET, { expiresIn: '1d' });
         res.json({ success: true, user, token });

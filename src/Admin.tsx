@@ -12,6 +12,7 @@ import { AdminWallet } from "./AdminWallet";
 import { GlobalSettings } from "./GlobalSettings";
 import { Wallet, MessageSquare, Menu, Settings } from "lucide-react";
 import { AdminSettings } from "./AdminSettings";
+import { NotificationPanel } from "./components/NotificationPanel";
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -72,7 +73,7 @@ function AdminLogin({ onLogin }: { onLogin: (user: any) => void }) {
     setUploadingLogo(true);
     setError('');
     try {
-      if (file.size > 2 * 1024 * 1024) throw new Error("A imagem deve ter no máximo 2MB");
+      if (file.size > 30 * 1024 * 1024) throw new Error("A imagem deve ter no máximo 30MB");
       
       const formDataUpload = new FormData();
       formDataUpload.append('file', file);
@@ -507,7 +508,7 @@ function AdminProducts({ user, onRefreshUser }: { user: any, onRefreshUser?: () 
            <button 
              onClick={handleCreateExample}
              disabled={generatingExample}
-             className="px-4 py-2 bg-amber-550 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded-full flex items-center gap-1.5 transition-colors font-semibold text-xs disabled:opacity-50 shadow-sm"
+             style={{ display: user?.role === 'admin' ? 'inline-flex' : 'none' }} className="px-4 py-2 bg-amber-550 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded-full flex items-center gap-1.5 transition-colors font-semibold text-xs disabled:opacity-50 shadow-sm"
            >
              {generatingExample ? (
                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -532,11 +533,12 @@ function AdminProducts({ user, onRefreshUser }: { user: any, onRefreshUser?: () 
                 <Package className="w-8 h-8 text-[#86868B]" />
               </div>
               <h3 className="text-lg font-bold text-[#1D1D1F] mb-1">Nenhum produto cadastrado</h3>
-              <p className="text-sm text-[#86868B] mb-6">Crie um produto do zero ou clique abaixo para inserir um produto de exemplo elegante de maneira automática!</p>
+              <p className="text-sm text-[#86868B] mb-6">{user?.role === 'admin' ? 'Crie um produto do zero ou clique abaixo para inserir um produto de exemplo elegante de maneira automática!' : 'Nenhum produto cadastrado no momento.'}</p>
               
               <div className="flex flex-col w-full gap-2">
                 <button 
                   onClick={handleCreateExample}
+              style={{ display: user?.role === 'admin' ? 'flex' : 'none' }}
                   disabled={generatingExample}
                   className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-2xl flex items-center justify-center gap-2 shadow-sm transition-all disabled:opacity-50"
                 >
@@ -1621,7 +1623,7 @@ export function AdminUsers() {
     if (!file) return;
     setUploadingLogo(true);
     try {
-      if (file.size > 2 * 1024 * 1024) throw new Error("A imagem deve ter no máximo 2MB");
+      if (file.size > 30 * 1024 * 1024) throw new Error("A imagem deve ter no máximo 30MB");
       const formDataUpload = new FormData();
       formDataUpload.append('file', file);
       
@@ -2123,6 +2125,7 @@ export function AdminUsers() {
 // -- Main Router Shell --
 export default function AdminApp() {
   const [user, setUser] = useState<any>(null);
+  const [showNotifications, setShowNotifications] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const location = useLocation();
@@ -2271,7 +2274,7 @@ export default function AdminApp() {
                 </div>
                 <div className="flex items-center gap-2 md:gap-4">
                    <button className={cn("p-2 rounded-xl transition-all shadow-sm", isDark ? "text-gray-300 hover:bg-white/10 hover:shadow-none" : "text-[#414755] hover:bg-white hover:shadow-sm")}>
-                      <Bell className="w-5 h-5" />
+                      <Bell className="w-5 h-5 cursor-pointer" onClick={() => setShowNotifications(true)} />
                    </button>
                    <div className={cn("hidden md:block h-8 w-px mx-0 md:mx-2", isDark ? "bg-white/10" : "bg-[#c1c6d7]/30")}></div>
                    <div className={cn("hidden md:flex items-center gap-3 pl-4 pr-1 py-1 rounded-2xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.04),_0_2px_10px_-2px_rgba(0,0,0,0.02)] border", isDark ? "bg-[#141414] border-white/5" : "bg-white border-transparent")}>
@@ -2301,7 +2304,9 @@ export default function AdminApp() {
         </div>
       </main>
 
-      
+      {showNotifications && (
+         <NotificationPanel onClose={() => setShowNotifications(false)} />
+      )}
     </div>
   );
 }

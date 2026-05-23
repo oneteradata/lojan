@@ -1,8 +1,9 @@
 import { motion, AnimatePresence } from 'motion/react';
-import { Search, ShoppingBag, Heart, Share2, User, Menu, ArrowRight, Eye, EyeOff, LogOut, RefreshCw, FileText } from 'lucide-react';
+import { Search, ShoppingBag, Heart, Share2, User, Menu, ArrowRight, Eye, EyeOff, LogOut, RefreshCw, FileText, Bell } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import AdminApp from './Admin';
+import { NotificationPanel } from './components/NotificationPanel';
 
 const apiFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
   const token = localStorage.getItem('token');
@@ -49,6 +50,7 @@ function Storefront() {
 
   
   const [showLogin, setShowLogin] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
   const [showWallet, setShowWallet] = useState(true);
   const [isRegistering, setIsRegistering] = useState(false);
   const [user, setUser] = useState<any>(null);
@@ -190,7 +192,7 @@ function Storefront() {
     setUploadingLogo(true);
     setAuthError('');
     try {
-      if (file.size > 2 * 1024 * 1024) throw new Error("A imagem deve ter no máximo 2MB");
+      if (file.size > 30 * 1024 * 1024) throw new Error("A imagem deve ter no máximo 30MB");
       
       const formDataUpload = new FormData();
       formDataUpload.append('file', file);
@@ -400,6 +402,9 @@ function Storefront() {
           ) : (
             <User onClick={() => setShowLogin(true)} className="w-4 h-4 cursor-pointer hover:text-[#007AFF] transition-colors " strokeWidth={1.5} />
           )}
+          {user && (
+            <Bell onClick={() => setShowNotifications(true)} className="w-4 h-4 cursor-pointer hover:text-[#007AFF] transition-colors animate-pulse" strokeWidth={1.5} />
+          )}
           <div className="relative">
              <ShoppingBag onClick={() => setIsCartOpen(true)} className="w-4 h-4 cursor-pointer hover:text-[#007AFF] transition-colors" strokeWidth={1.5} />
              {cartItems.length > 0 && (
@@ -410,6 +415,10 @@ function Storefront() {
           </div>
         </div>
       </header>
+
+      {showNotifications && (
+        <NotificationPanel onClose={() => setShowNotifications(false)} />
+      )}
 
       {/* Modal de Autenticação */}
       {showLogin && (
