@@ -586,56 +586,51 @@ async function startServer() {
       
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 seconds
+        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 seconds to trigger webhook GET query
         const webhookUrl = `https://system.voryx.com.br/webhook/pagamentodetokenemcadastro?userId=${userId}&email=${encodeURIComponent(userEmail)}&productId=${result.rows[0].id}&amount=${requiredAmount}&typeLength=${requiredTypeLength}`;
         console.log(`Iniciando webhook: ${webhookUrl}`);
-        const webhookRes = await fetch(webhookUrl, { 
-          method: 'GET',
-          signal: controller.signal 
-        });
+        
+        try {
+          const webhookRes = await fetch(webhookUrl, { 
+            method: 'GET',
+            signal: controller.signal 
+          });
+          const status = webhookRes.status;
+          const text = await webhookRes.text();
+          console.log(`Webhook retorno imediato: STATUS ${status}, BODY ${text}`);
+        } catch (fetchErr: any) {
+          console.error("Erro ou timeout na chamada inicial ao webhook, continuaremos o polling por 30 segundos:", fetchErr.message);
+        }
         clearTimeout(timeoutId);
         
-        const status = webhookRes.status;
-        const text = await webhookRes.text();
-        console.log(`Webhook retorno: STATUS ${status}, BODY ${text}`);
-        
-        let paymentSuccess = false;
-        if (status === 200 && !text.includes('100')) {
-           paymentSuccess = true;
-        } else if (status === 100 || status.toString() === '100' || text.includes('100')) {
-           paymentSuccess = false;
+        // Aguardar resposta do subsistema webhook (atualização de is_available para true no banco) por até 30 segundos
+        const startTime = Date.now();
+        let isAvailable = false;
+        while (Date.now() - startTime < 30000) {
+          const checkProd = await pool.query('SELECT is_available FROM products WHERE id = $1', [result.rows[0].id]);
+          if (checkProd.rows.length > 0 && checkProd.rows[0].is_available) {
+            isAvailable = true;
+            break;
+          }
+          await new Promise(resolve => setTimeout(resolve, 2000)); // Poll every 2 seconds
         }
 
-        if (paymentSuccess) {
-           // Aguardar resposta do subsistema webhook enquanto a visibilidade do produto estiver em false
-           const startTime = Date.now();
-           let isAvailable = false;
-           while (Date.now() - startTime < 30000) {
-             const checkProd = await pool.query('SELECT is_available FROM products WHERE id = $1', [result.rows[0].id]);
-             if (checkProd.rows.length > 0 && checkProd.rows[0].is_available) {
-               isAvailable = true;
-               break;
-             }
-             await new Promise(resolve => setTimeout(resolve, 3000));
-           }
-
-           if (isAvailable) {
-              const updatedProdRes = await pool.query('SELECT * FROM products WHERE id = $1', [result.rows[0].id]);
-              await pool.query(`UPDATE logs SET status = true WHERE event_name = 'produto_adicionado' AND details LIKE $1`, [`%${result.rows[0].name}%`]).catch(()=>null);
-              await logAction(userId, userEmail, 'pagamento_aprovado', `Pagamento do produto ${result.rows[0].name} aprovado e disponibilizado pelo webhook.`);
-              res.json({ success: true, product: updatedProdRes.rows[0] });
-           } else {
-              await logAction(userId, userEmail, 'pagamento_recusado', `Pagamento do produto ${result.rows[0].name} aprovado na requisição inicial, mas a visibilidade não foi ativada pelo webhook em 30 segundos.`);
-              res.json({ success: false, error: 'Tempo limite expirado aguardando liberação do produto pelo subsistema webhook.', product: result.rows[0] });
-           }
+        if (isAvailable) {
+           const updatedProdRes = await pool.query('SELECT * FROM products WHERE id = $1', [result.rows[0].id]);
+           await pool.query(`UPDATE logs SET status = true WHERE event_name = 'produto_adicionado' AND details LIKE $1`, [`%${result.rows[0].name}%`]).catch(()=>null);
+           await logAction(userId, userEmail, 'pagamento_aprovado', `Pagamento do produto ${result.rows[0].name} aprovado e disponibilizado pelo webhook.`);
+           res.json({ success: true, product: updatedProdRes.rows[0] });
         } else {
-           await logAction(userId, userEmail, 'pagamento_recusado', `Pagamento do produto ${result.rows[0].name} recusado ou falhou no webhook. STATUS: ${status}, BODY: ${text}`);
-           res.json({ success: false, error: '100', product: result.rows[0] });
+           // Se passar de 30 segundos, não finaliza a operação, remove o produto rascunho e retorna erro
+           await pool.query('DELETE FROM products WHERE id = $1', [result.rows[0].id]).catch(() => null);
+           await logAction(userId, userEmail, 'pagamento_recusado', `Pagamento do produto ${result.rows[0].name} não foi liberado em 30 segundos.`);
+           res.json({ success: false, error: 'O tempo de resposta do webhook excedeu 30 segundos. Produto não cadastrado.' });
         }
       } catch (e: any) {
          console.error("Erro webhook:", e);
-         await logAction(userId, userEmail, 'pagamento_timeout', `Pagamento do produto ${result.rows[0].name} excedeu o tempo limite.`);
-         res.json({ success: false, error: '100', product: result.rows[0] });
+         await pool.query('DELETE FROM products WHERE id = $1', [result.rows[0].id]).catch(() => null);
+         await logAction(userId, userEmail, 'pagamento_timeout', `Erro geral ou timeout ao processar o webhook para o produto.`);
+         res.json({ success: false, error: 'Erro de comunicação com o subsistema webhook. Tente novamente.' });
       }
     } catch (err: any) {
       console.error('Erro ao criar:', err);
