@@ -614,97 +614,49 @@ function ProductModal({ item, user, onClose }: { item?: any, user?: any, onClose
     setUploading(true);
     try {
       const newItems = [];
-      const formDataUpload = new FormData();
-      let hasValidFiles = false;
-
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         if (file.size > 500 * 1024 * 1024) {
           alert(`O arquivo ${file.name} é muito grande (máximo 500MB)`);
           continue;
         }
-        formDataUpload.append('files', file);
-        hasValidFiles = true;
-      }
 
-      if (hasValidFiles) {
-        // Tentar upload via servidor backend (Robusto, contorna CORS e limites de presigned url)
-        const uploadRes = await apiFetch('/api/upload', {
+        // 1. Pedir URL assinada
+        const presignedRes = await apiFetch('/api/presigned-url', {
           method: 'POST',
-          body: formDataUpload
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fileName: file.name, mimeType: file.type })
+        });
+        const presignedData = await presignedRes.json();
+        if (!presignedData.success) throw new Error('Falha ao obter link de upload');
+
+        // 2. Upload direto para o MinIO (via PUT)
+        // Usamos fetch nativo para NÃO enviar o token do nosso app para o MinIO
+        const uploadRes = await fetch(presignedData.url, {
+          method: 'PUT',
+          body: file,
+          headers: { 'Content-Type': file.type }
         });
 
-        if (!uploadRes.ok) {
-          throw new Error(`O servidor retornou código de erro: ${uploadRes.status}`);
-        }
+        if (!uploadRes.ok) throw new Error(`Falha no upload direto do arquivo ${file.name}`);
 
-        const data = await uploadRes.json();
-        if (!data.success) {
-          throw new Error(data.error || 'Erro no processamento do upload pelo servidor');
-        }
-
-        if (Array.isArray(data.files)) {
-          for (const rawFile of data.files) {
-            let type = 'image';
-            if (rawFile.type && rawFile.type.startsWith('video')) type = 'video';
-            else if (rawFile.type === 'application/pdf') type = 'pdf';
-            else if (rawFile.fileName && (rawFile.fileName.endsWith('.mp4') || rawFile.fileName.endsWith('.mov') || rawFile.fileName.endsWith('.webm'))) type = 'video';
-            else if (rawFile.fileName && rawFile.fileName.endsWith('.pdf')) type = 'pdf';
-
-            newItems.push({
-              type,
-              url: rawFile.url,
-              fileName: rawFile.fileName
-            });
-          }
-        }
+        // 3. Adicionar aos itens de mídia
+        let type = 'image';
+        if (file.type.startsWith('video')) type = 'video';
+        else if (file.type === 'application/pdf') type = 'pdf';
+        
+        newItems.push({ 
+          type, 
+          url: presignedData.publicUrl, 
+          fileName: presignedData.fileName 
+        });
       }
 
       setMedia([...media, ...newItems]);
       
     } catch (err: any) {
-      console.warn('Falha no upload principal do servidor, tentando upload alternativo via presigned url:', err);
-      // Fallback para upload direto via presigned url se o servidor principal falhar
-      try {
-        const newItems = [];
-        for (let i = 0; i < files.length; i++) {
-          const file = files[i];
-          if (file.size > 500 * 1024 * 1024) continue;
-
-          // 1. Pedir URL assinada
-          const presignedRes = await apiFetch('/api/presigned-url', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ fileName: file.name, mimeType: file.type })
-          });
-          const presignedData = await presignedRes.json();
-          if (!presignedData.success) throw new Error('Falha ao obter link de upload');
-
-          // 2. Upload direto para o MinIO (via PUT)
-          const uploadRes = await fetch(presignedData.url, {
-            method: 'PUT',
-            body: file,
-            headers: { 'Content-Type': file.type }
-          });
-
-          if (!uploadRes.ok) throw new Error(`Falha no upload direto do arquivo ${file.name}`);
-
-          // 3. Adicionar aos itens de mídia
-          let type = 'image';
-          if (file.type.startsWith('video')) type = 'video';
-          else if (file.type === 'application/pdf') type = 'pdf';
-          
-          newItems.push({ 
-            type, 
-            url: presignedData.publicUrl, 
-            fileName: presignedData.fileName 
-          });
-        }
-        setMedia([...media, ...newItems]);
-      } catch (fallbackErr: any) {
-        console.error(fallbackErr);
-        alert('Erro no upload: ' + fallbackErr.message);
-      }
+      console.error(err);
+      alert('Erro no upload: ' + err.message);
     }
     setUploading(false);
     e.target.value = ''; // clear input
