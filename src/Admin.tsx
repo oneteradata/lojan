@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { LayoutDashboard, Bell, ShoppingBag, EyeOff, ChevronRight, RefreshCw, LogOut, TrendingUp, Package, ShoppingCart, Heart, Activity, Plus, X, Trash2, Home, Users, User, Lock, Unlock, Search, Copy, Check, Pickaxe, Landmark, List, FileText } from 'lucide-react';
+import { LayoutDashboard, Bell, ShoppingBag, EyeOff, ChevronRight, RefreshCw, LogOut, TrendingUp, Package, ShoppingCart, Heart, Activity, Plus, X, Trash2, Home, Users, User, Lock, Unlock, Search, Copy, Check, Pickaxe, Landmark, List, FileText, Sparkles } from 'lucide-react';
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { AdminCredits } from "./AdminCredits";
@@ -445,6 +445,7 @@ function AdminProducts({ user, onRefreshUser }: { user: any, onRefreshUser?: () 
   const [products, setProducts] = useState<any[]>([]);
   const [modalItem, setModalItem] = useState<any | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [generatingExample, setGeneratingExample] = useState(false);
 
   const fetchProducts = async () => {
     try {
@@ -472,7 +473,25 @@ function AdminProducts({ user, onRefreshUser }: { user: any, onRefreshUser?: () 
          };
        });
        setProducts(parsedData);
-    } catch(e) {}
+     } catch(e) {}
+  };
+
+  const handleCreateExample = async () => {
+    setGeneratingExample(true);
+    try {
+      const res = await apiFetch('/api/products/example', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+         alert(`Produto de exemplo "${data.product.name}" criado com sucesso! Ele está disponível imediatamente para testes.`);
+         await fetchProducts();
+      } else {
+         alert('Erro ao gerar produto de exemplo: ' + (data.error || 'Erro desconhecido'));
+      }
+    } catch (e: any) {
+      alert('Erro ao comunicar com o servidor para cadastrar o exemplo.');
+    } finally {
+      setGeneratingExample(false);
+    }
   };
 
   useEffect(() => { fetchProducts(); }, []);
@@ -484,22 +503,57 @@ function AdminProducts({ user, onRefreshUser }: { user: any, onRefreshUser?: () 
             <h2 className="text-3xl font-bold text-[#1D1D1F] tracking-tight">Produtos</h2>
             <p className="text-[11px] font-bold text-[#86868B] tracking-widest mt-1 uppercase">Edição Rápida</p>
          </div>
-         <button 
-           onClick={() => { setModalItem(null); setIsModalOpen(true); }}
-           className="w-10 h-10 bg-[#007AFF] rounded-full flex items-center justify-center text-white shadow-md hover:bg-[#0066CC] transition-colors"
-         >
-            <Plus className="w-5 h-5" />
-         </button>
+         <div className="flex items-center gap-2">
+           <button 
+             onClick={handleCreateExample}
+             disabled={generatingExample}
+             className="px-4 py-2 bg-amber-550 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded-full flex items-center gap-1.5 transition-colors font-semibold text-xs disabled:opacity-50 shadow-sm"
+           >
+             {generatingExample ? (
+               <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+             ) : (
+               <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+             )}
+             <span>Gerar Produto Exemplo</span>
+           </button>
+           <button 
+             onClick={() => { setModalItem(null); setIsModalOpen(true); }}
+             className="w-10 h-10 bg-[#007AFF] rounded-full flex items-center justify-center text-white shadow-md hover:bg-[#0066CC] transition-colors"
+           >
+             <Plus className="w-5 h-5" />
+           </button>
+         </div>
        </div>
 
        <div className="bg-white rounded-[32px] shadow-sm border border-gray-100 flex-1 p-6 overflow-y-auto">
           {products.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-center opacity-60">
+            <div className="h-full flex flex-col items-center justify-center text-center p-8 opacity-90 max-w-md mx-auto">
               <div className="w-16 h-16 bg-[#F5F5F7] rounded-full flex items-center justify-center mb-4">
                 <Package className="w-8 h-8 text-[#86868B]" />
               </div>
-              <h3 className="text-lg font-bold text-[#1D1D1F] mb-1">Sem produtos</h3>
-              <p className="text-sm text-[#86868B]">Adicione um novo produto ao catálogo.</p>
+              <h3 className="text-lg font-bold text-[#1D1D1F] mb-1">Nenhum produto cadastrado</h3>
+              <p className="text-sm text-[#86868B] mb-6">Crie um produto do zero ou clique abaixo para inserir um produto de exemplo elegante de maneira automática!</p>
+              
+              <div className="flex flex-col w-full gap-2">
+                <button 
+                  onClick={handleCreateExample}
+                  disabled={generatingExample}
+                  className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-2xl flex items-center justify-center gap-2 shadow-sm transition-all disabled:opacity-50"
+                >
+                  {generatingExample ? (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-4 h-4 text-white" />
+                  )}
+                  Criar Produto de Exemplo Automático
+                </button>
+                <button 
+                  onClick={() => { setModalItem(null); setIsModalOpen(true); }}
+                  className="w-full py-3 bg-gray-100 hover:bg-gray-250 text-gray-800 font-semibold rounded-2xl flex items-center justify-center gap-2 hover:bg-gray-150 transition-all"
+                >
+                  <Plus className="w-4 h-4" /> Cadastrar Manualmente
+                </button>
+              </div>
             </div>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -738,7 +792,27 @@ function ProductModal({ item, user, onClose }: { item?: any, user?: any, onClose
             {/* Galeria de Mídia */}
             <div>
                <div className="flex justify-between items-end mb-3">
-                 <label className="text-[11px] font-bold text-[#1D1D1F] tracking-wide">GALERIA DE MÍDIA</label>
+                 <div className="flex items-center gap-2">
+                   <label className="text-[11px] font-bold text-[#1D1D1F] tracking-wide">GALERIA DE MÍDIA</label>
+                   <button 
+                     type="button" 
+                     onClick={() => {
+                       const urls = [
+                         "https://images.unsplash.com/photo-1542496658-e33a6d0d50f6?auto=format&fit=crop&q=80&w=800",
+                         "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&q=80&w=800",
+                         "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&q=80&w=800",
+                         "https://images.unsplash.com/photo-1572635196237-14b3f281503f?auto=format&fit=crop&q=80&w=800",
+                         "https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&q=80&w=800",
+                         "https://images.unsplash.com/photo-1503602642458-232111445657?auto=format&fit=crop&q=80&w=800"
+                       ];
+                       const randomUrl = urls[Math.floor(Math.random() * urls.length)];
+                       setMedia([...media, { type: 'image', url: randomUrl, fileName: 'temp_sample_' + Date.now() + '.jpg' }]);
+                     }}
+                     className="px-2 py-0.5 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 text-[9px] font-bold rounded uppercase tracking-wider transition-colors"
+                   >
+                     Usar Foto de Teste
+                   </button>
+                 </div>
                  <span className="text-[10px] font-bold text-[#86868B] tracking-widest">{media.length}/10 ARQUIVOS</span>
                </div>
                <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-none items-center">

@@ -529,6 +529,70 @@ async function startServer() {
     }
   });
 
+  // Criação de produto de exemplo automática (Bypass de token e webhook para testes rápidos)
+  app.post('/api/products/example', requireAuth, async (req: any, res) => {
+    try {
+      if (!dbConnected) throw new Error("Banco de dados fora do ar");
+      const userId = req.user.id;
+      const userName = req.user.name;
+      const userEmail = req.user.email;
+
+      // Lista de templates pré-configurados elegantes
+      const templates = [
+        {
+          name: "iPhone 15 Pro Max (Exemplo)",
+          category: "Eletrônico",
+          price: "7899.90",
+          details: "Smartphone Apple iPhone de exemplo. Possui tela de 6.7 polegadas, câmera tripla de ponta e acabamento premium em Titanium. Excelente para testar o catálogo.",
+          image: "https://images.unsplash.com/photo-1695048133142-1a20484d2569?auto=format&fit=crop&q=80&w=800",
+          media: [{ type: "image", url: "https://images.unsplash.com/photo-1695048133142-1a20484d2569?auto=format&fit=crop&q=80&w=800" }],
+          variations: [{ type: "Cor", options: ["Titanium Natural", "Titanium Preto", "Titanium Azul"], multiple: false, multipleCount: false }]
+        },
+        {
+          name: "Bolsa de Couro Premium (Exemplo)",
+          category: "Beleza feminina",
+          price: "450.00",
+          details: "Bolsa de couro legitimo ultra resistente com acabamento clássico e costurada à mão. Design moderno e sofisticado para o uso diário ou eventos.",
+          image: "https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&q=80&w=800",
+          media: [{ type: "image", url: "https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&q=80&w=800" }],
+          variations: [{ type: "Cor", options: ["Caramelo", "Preto Clássico", "Nude"], multiple: false, multipleCount: false }]
+        },
+        {
+          name: "Pizza Margherita Gourmet (Exemplo)",
+          category: "Restaurante",
+          price: "59.90",
+          details: "Deliciosa pizza artesanal de fermentação natural (48 horas). Molho italiano caseiro, queijo mussarela fresca fatiada, manjericão fresco e azeite extravirgem.",
+          image: "https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&q=80&w=800",
+          media: [{ type: "image", url: "https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&q=80&w=800" }],
+          variations: [{ type: "Borda Recheada", options: ["Sem borda", "Catupiry Original", "Cheddar Cremoso"], multiple: false, multipleCount: false }]
+        }
+      ];
+
+      // Escolher um template aleatoriamente para diversificar os produtos criados nas tentativas do usuário
+      const randomIndex = Math.floor(Math.random() * templates.length);
+      const chosen = templates[randomIndex];
+
+      const result = await pool.query(`
+        INSERT INTO products (
+          name, category, price, tokens, stock, details, media, variations, image, 
+          user_id, user_name, business_model, tables, seats_per_table, is_available, 
+          req_token_amount, req_token_type, duration_days
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, true, 0, 128, 30) RETURNING *
+      `, [
+        chosen.name, chosen.category, chosen.price, 0, 50, chosen.details, 
+        JSON.stringify(chosen.media), JSON.stringify(chosen.variations), chosen.image, 
+        userId, userName, "Venda", null, null
+      ]);
+
+      await logAction(userId, userEmail, 'produto_exemplo_criado', `Produto de exemplo automático '${chosen.name}' cadastrado e disponível imediatamente para testes.`);
+      res.json({ success: true, product: result.rows[0] });
+    } catch (err: any) {
+      console.error('Erro ao cadastrar produto exemplo automático:', err);
+      res.status(500).json({ success: false, error: 'Erro interno: ' + err.message });
+    }
+  });
+
   // Criação de produto
   app.post('/api/products', requireAuth, async (req: any, res) => {
     const { name, category, price, tokens, stock, details, media, variations, business_model, tables, seats_per_table, duration_days } = req.body;
