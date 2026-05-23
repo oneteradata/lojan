@@ -247,6 +247,7 @@ async function initDB() {
     try { await pool.query(`ALTER TABLE products ADD COLUMN details TEXT;`); } catch (e) {}
     try { await pool.query(`ALTER TABLE products ADD COLUMN media JSONB DEFAULT '[]';`); } catch (e) {}
     try { await pool.query(`ALTER TABLE products ADD COLUMN variations JSONB DEFAULT '[]';`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE products ADD COLUMN image TEXT;`); } catch (e) {}
     try { await pool.query(`ALTER TABLE products ALTER COLUMN image DROP NOT NULL;`); } catch (e) {}
     try { await pool.query(`ALTER TABLE products ALTER COLUMN price DROP NOT NULL;`); } catch (e) {}
 
