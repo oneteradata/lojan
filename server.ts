@@ -780,13 +780,14 @@ async function startServer() {
          return res.json({ success: true, product: result.rows[0] });
       }
 
-      await logAction(userId, userEmail, 'produto_adicionado', `Produto ${result.rows[0].name} criado (pendente webhook) para ${duration} dias (necessita ${requiredAmount} tokens do tipo ${requiredTypeLength})`);
+      await logAction(userId, userEmail, 'produto_adicionado', `Produto ${result.rows[0].name} criado (aguardando webhook) para ${duration} dias (necessita ${requiredAmount} tokens do tipo ${requiredTypeLength})`);
       
       // Chamar webhook de cadastro e aguardar resposta por até 30 segundos
       const webhookUrl = `https://system.voryx.com.br/webhook/pagamentodetokenemcadastro?userId=${userId}&email=${encodeURIComponent(userEmail)}&productId=${result.rows[0].id}&amount=${requiredAmount}&typeLength=${requiredTypeLength}`;
       console.log(`Disparando webhook de cadastro e aguardando resposta: ${webhookUrl}`);
       
       let webhookStatus = 0;
+      let responseBodyText = '';
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 30000);
@@ -798,14 +799,32 @@ async function startServer() {
         clearTimeout(timeoutId);
         
         webhookStatus = webRes.status;
-        const txt = await webRes.text().catch(() => '');
-        console.log(`[Webhook Sincrono] Retornou status: ${webRes.status}, body: ${txt}`);
+        responseBodyText = await webRes.text().catch(() => '');
+        console.log(`[Webhook Sincrono] Retornou status: ${webRes.status}, body: ${responseBodyText}`);
       } catch (err: any) {
         console.error('[Webhook Sincrono] Falhou em disparar ou deu timeout:', err.message);
         webhookStatus = 504;
       }
 
-      if (webhookStatus === 200) {
+      let parsedStatus: any = null;
+      try {
+        const json = JSON.parse(responseBodyText);
+        if (json && typeof json === 'object') {
+          parsedStatus = json.status !== undefined ? json.status : (json.code !== undefined ? json.code : (json.statusCode !== undefined ? json.statusCode : null));
+        } else if (typeof json === 'number' || typeof json === 'string') {
+          parsedStatus = json;
+        }
+      } catch (jsonErr) {
+        if (responseBodyText.includes('100')) {
+          parsedStatus = 100;
+        } else if (responseBodyText.includes('200')) {
+          parsedStatus = 200;
+        }
+      }
+
+      const isFailed = webhookStatus !== 200 || parsedStatus === 100 || parsedStatus === '100' || parsedStatus === 500;
+
+      if (!isFailed) {
         // Ativa o produto imediatamente na DB
         await pool.query('UPDATE products SET is_available = true WHERE id = $1', [result.rows[0].id]);
         
@@ -859,11 +878,10 @@ async function startServer() {
         });
       }
 
-      return res.json({ 
-        success: true, 
-        product: result.rows[0],
-        pendingWebhook: true
-      });
+      // Se falhou (timeout ou status 100/não 200), deleta o produto cadastrado para manter a DB limpa e avisa o erro
+      await pool.query('DELETE FROM products WHERE id = $1', [result.rows[0].id]);
+      await logAction(userId, userEmail, 'produto_cadastro_rejeitado', `Cadastro do produto ${name} falhou validação (Status Webhook: ${webhookStatus})`);
+      return res.status(400).json({ success: false, error: 'deu problema com validação' });
     } catch (err: any) {
       console.error('Erro ao criar:', err);
       res.status(500).json({ success: false, error: 'Erro ao criar produto: ' + err.message });
@@ -1552,7 +1570,7 @@ async function startServer() {
       });
 
       if (webhookStatus !== 200) {
-        return res.status(400).json({ success: false, error: `Erro no processamento da transferência (Webhook Status: ${webhookStatus}). Tente novamente.` });
+        return res.status(400).json({ success: false, error: 'deu problema com validação' });
       }
 
       // Ensure user_client table has wallet column
@@ -1683,7 +1701,7 @@ async function startServer() {
       });
 
       if (webhookStatus !== 200) {
-        return res.status(400).json({ success: false, error: `Erro na validação do saque (Status: ${webhookStatus}).` });
+        return res.status(400).json({ success: false, error: 'deu problema com validação' });
       }
 
       // Consume tokens
@@ -1833,34 +1851,62 @@ async function startServer() {
       );
       
       const reqId = insertResult.rows[0].id;
-      let finalStatus = 'pendente';
+      
+      // Chamar webhook de saldo com 30s de limite
+      const webhookStatus = await waitForWebhook('https://system.voryx.com.br/webhook/atualizasaldo', {
+         id_solicitacao: reqId,
+         user_id: user_id_recebedor,
+         quantidade: quantidade,
+         tipo_token: tipo_token,
+         tipo_operacao: 'geracao_credito'
+      });
 
-      try {
-        const webhookResp = await fetch('https://system.voryx.com.br/webhook/atualizasaldo');
-        if (webhookResp.status === 200) {
-           finalStatus = 'gerado';
-        }
-      } catch (e) {
-        console.error("Erro webhook atualizasaldo:", e);
+      if (webhookStatus !== 200) {
+        // Se falhou (timeout ou retorno não-200), cancela inserção e retorna erro padrão
+        await pool.query('DELETE FROM credit_requests WHERE id = $1', [reqId]);
+        return res.status(400).json({ success: false, error: 'deu problema com validação' });
       }
 
-      if (finalStatus === 'gerado') {
-        const userRes = await pool.query('SELECT wallet FROM users WHERE id = $1', [user_id_recebedor]);
-        if (userRes.rows.length > 0) {
-           let wallet = userRes.rows[0].wallet || {};
-           if (typeof wallet === 'string') {
-             try { wallet = JSON.parse(wallet); } catch (e) {}
-           }
-           let userTokens = extractAllTokens(wallet);
-           
-           // No self-generation here! Keep existing tokens plus any returned by the webhook
-           const updatedWallet = buildWalletObject(userTokens);
-           await pool.query('UPDATE users SET wallet = $1 WHERE id = $2', [JSON.stringify(updatedWallet), user_id_recebedor]);
+      // Webhook sucesso: Gerar tokens reais com hashes aleatórios do tamanho correto e salvar na wallet
+      const qty = parseInt(quantidade);
+      const tLen = parseInt(tipo_token);
+      let newTokensList: string[] = [];
+      const chars = 'abcdef0123456789ABCDEF';
+      for (let i = 0; i < qty; i++) {
+        let t = '';
+        for (let j = 0; j < tLen; j++) {
+          t += chars.charAt(Math.floor(Math.random() * chars.length));
         }
-        await pool.query('UPDATE credit_requests SET status = $1 WHERE id = $2', [finalStatus, reqId]);
+        newTokensList.push(t);
       }
 
-      await logAction(req.user.id, req.user.email, 'credito_solicitado', `Admin solicitou ${quantidade} tokens E${tipo_token} para o usuario ${user_id_recebedor} (Status: ${finalStatus})`);
+      const userRes = await pool.query('SELECT wallet, email FROM users WHERE id = $1', [user_id_recebedor]);
+      let receiverEmail = '';
+      if (userRes.rows.length > 0) {
+        receiverEmail = userRes.rows[0].email;
+        let wallet = userRes.rows[0].wallet || {};
+        if (typeof wallet === 'string') {
+          try { wallet = JSON.parse(wallet); } catch (e) {}
+        }
+        let userTokens = extractAllTokens(wallet);
+        userTokens = userTokens.concat(newTokensList);
+        const updatedWallet = buildWalletObject(userTokens);
+        await pool.query('UPDATE users SET wallet = $1 WHERE id = $2', [JSON.stringify(updatedWallet), user_id_recebedor]);
+      }
+
+      await pool.query('UPDATE credit_requests SET status = $1 WHERE id = $2', ['gerado', reqId]);
+
+      // Adiciona na história de logs (para extrato do recebedor)
+      const creditLogDetails = {
+        token_qty: qty,
+        token_type: `E${tLen}`,
+        date_time: new Date().toISOString(),
+        is_etoken_credit: true,
+        details: `Crédito de ${qty} token(s) E${tLen} adicionado com sucesso por Webhook.`
+      };
+      await logAction(user_id_recebedor, receiverEmail, 'credito_recebido', JSON.stringify(creditLogDetails));
+
+      await logAction(req.user.id, req.user.email, 'credito_solicitado', `Admin solicitou e gerou ${quantidade} tokens E${tipo_token} para o usuario ${user_id_recebedor} (Status: gerado)`);
       
       const updatedReq = await pool.query('SELECT * FROM credit_requests WHERE id = $1', [reqId]);
       res.json({ success: true, request: updatedReq.rows[0] });
@@ -1891,21 +1937,46 @@ async function startServer() {
         });
 
         if (webhookStatus !== 200) {
-          return res.status(400).json({ success: false, error: `Erro na aprovação do crédito (Webhook Status: ${webhookStatus}). Tente novamente.` });
+          return res.status(400).json({ success: false, error: 'deu problema com validação' });
         }
 
-        const userRes = await pool.query('SELECT wallet FROM users WHERE id = $1', [pedido.user_id_recebedor]);
+        // Webhook sucesso: Gerar os tokens reais e adicionar à carteira do usuário recebedor
+        const qty = parseInt(pedido.quantidade);
+        const tLen = parseInt(pedido.tipo_token);
+        let newTokensList: string[] = [];
+        const chars = 'abcdef0123456789ABCDEF';
+        for (let i = 0; i < qty; i++) {
+          let t = '';
+          for (let j = 0; j < tLen; j++) {
+            t += chars.charAt(Math.floor(Math.random() * chars.length));
+          }
+          newTokensList.push(t);
+        }
+
+        const userRes = await pool.query('SELECT wallet, email FROM users WHERE id = $1', [pedido.user_id_recebedor]);
+        let receiverEmail = '';
         if (userRes.rows.length > 0) {
+           receiverEmail = userRes.rows[0].email;
            let wallet = userRes.rows[0].wallet || {};
            if (typeof wallet === 'string') {
              try { wallet = JSON.parse(wallet); } catch (e) {}
            }
            let userTokens = extractAllTokens(wallet);
+           userTokens = userTokens.concat(newTokensList);
            
-           // No self-generation! Rely on webhook sending coins and our database organizing them.
            const updatedWallet = buildWalletObject(userTokens);
            await pool.query('UPDATE users SET wallet = $1 WHERE id = $2', [JSON.stringify(updatedWallet), pedido.user_id_recebedor]);
         }
+
+        // Adiciona na história de logs (para extrato do recebedor)
+        const creditLogDetails = {
+          token_qty: qty,
+          token_type: `E${tLen}`,
+          date_time: new Date().toISOString(),
+          is_etoken_credit: true,
+          details: `Crédito de ${qty} token(s) E${tLen} liberado com sucesso por aprovação do Webhook.`
+        };
+        await logAction(pedido.user_id_recebedor, receiverEmail, 'credito_recebido', JSON.stringify(creditLogDetails));
       }
 
       const updateResult = await pool.query('UPDATE credit_requests SET status = $1 WHERE id = $2 RETURNING *', [status, reqId]);
@@ -2320,7 +2391,7 @@ async function startServer() {
       });
 
       if (webhookStatus !== 200) {
-        return res.status(400).json({ success: false, error: `Erro no processamento do pedido (Webhook Status: ${webhookStatus}). Tente novamente.` });
+        return res.status(400).json({ success: false, error: 'deu problema com validação' });
       }
 
       // 2. Cria o pedido no Postgres

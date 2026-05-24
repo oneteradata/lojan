@@ -402,6 +402,7 @@ export function AdminWallet({
                     "pagamento_recusado",
                     "pagamento_timeout",
                     "pagamento_token_cadastro",
+                    "credito_recebido",
                   ].includes(l.event_name),
                 ).length > 0 ? (
                   logs
@@ -413,6 +414,7 @@ export function AdminWallet({
                         "pagamento_recusado",
                         "pagamento_timeout",
                         "pagamento_token_cadastro",
+                        "credito_recebido",
                       ].includes(l.event_name),
                     )
                     .map((log) => {
@@ -424,7 +426,8 @@ export function AdminWallet({
                       const isCredit =
                         log.event_name?.includes("aprovado") ||
                         log.event_name === "produto_adicionado" ||
-                        log.event_name === "recebimento_transferencia";
+                        log.event_name === "recebimento_transferencia" ||
+                        log.event_name === "credito_recebido";
                       const isTransfer = 
                         log.event_name === "transferencia" ||
                         log.event_name === "recebimento_transferencia";
@@ -434,7 +437,11 @@ export function AdminWallet({
                       if (log.details && log.details.startsWith('{')) {
                         try {
                           parsedDetails = JSON.parse(log.details);
-                          displayDetails = parsedDetails.details || `Pagamento de ${parsedDetails.token_qty} token(s) ${parsedDetails.token_type}`;
+                          if (log.event_name === "credito_recebido") {
+                            displayDetails = parsedDetails.details || `Crédito de ${parsedDetails.token_qty} token(s) ${parsedDetails.token_type}`;
+                          } else {
+                            displayDetails = parsedDetails.details || `Pagamento de ${parsedDetails.token_qty} token(s) ${parsedDetails.token_type}`;
+                          }
                         } catch (e) {}
                       }
 
@@ -470,7 +477,9 @@ export function AdminWallet({
                             </div>
                             <div className="min-w-0 flex-1">
                               <p className="text-sm font-bold text-[#1D1D1F] truncate">
-                                {log.event_name === "pagamento_token_cadastro" ? "PAGAMENTO ETOKEN" : (log.event_name || "Registro")
+                                {log.event_name === "pagamento_token_cadastro" ? "PAGAMENTO ETOKEN" : 
+                                 log.event_name === "credito_recebido" ? "CRÉDITO DE TOKEN" :
+                                 (log.event_name || "Registro")
                                   .replace(/_/g, " ")
                                   .toUpperCase()}{" "}
                                 <span className="text-[10px] font-mono text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -850,6 +859,7 @@ export function AdminWallet({
           
           const logId = selectedTransaction.id;
           const isEtokenPay = selectedTransaction.event_name === "pagamento_token_cadastro" || (parsed && parsed.is_etoken_payment);
+          const isEtokenCredit = selectedTransaction.event_name === "credito_recebido" || (parsed && parsed.is_etoken_credit);
           const title = (selectedTransaction.event_name || "Registro").replace(/_/g, " ").toUpperCase();
           const dateStr = new Date(selectedTransaction.created_at).toLocaleString("pt-BR");
           
@@ -875,7 +885,7 @@ export function AdminWallet({
                       Comprovante de Transação
                     </span>
                     <h2 className="text-lg font-extrabold text-[#1D1D1F] tracking-tight">
-                      {isEtokenPay ? "Pagamento de eToken" : title}
+                      {isEtokenPay ? "Pagamento de eToken" : isEtokenCredit ? "Crédito de eToken" : title}
                     </h2>
                   </div>
                   <button
@@ -888,18 +898,23 @@ export function AdminWallet({
 
                 {/* Details Content */}
                 <div className="space-y-4">
-                  {isEtokenPay && parsed ? (
+                  {(isEtokenPay || isEtokenCredit) && parsed ? (
                     <>
                       {/* Visual Token badge */}
-                      <div className="bg-blue-50/75 border border-blue-100 p-6 rounded-2xl flex flex-col items-center justify-center text-center">
-                        <p className="text-[10px] font-bold text-[#007AFF] uppercase tracking-widest mb-1">
-                          Valor Pago
+                      <div className={cn(
+                        "p-6 rounded-2xl flex flex-col items-center justify-center text-center border",
+                        isEtokenPay 
+                          ? "bg-red-50/75 border-red-100 text-red-600" 
+                          : "bg-green-50/75 border-green-100 text-green-600"
+                      )}>
+                        <p className="text-[10px] font-bold uppercase tracking-widest mb-1">
+                          {isEtokenPay ? "Valor Pago" : "Valor Recebido"}
                         </p>
-                        <p className="text-3xl font-black text-[#007AFF] tracking-tight">
+                        <p className="text-3xl font-black tracking-tight">
                           {parsed.token_qty} <span className="text-lg font-bold">{parsed.token_type}</span>
                         </p>
                         <p className="text-[10px] font-semibold text-gray-400 mt-2">
-                          Liquidado com sucesso do saldo
+                          {isEtokenPay ? "Liquidado com sucesso do saldo" : "Creditado com sucesso na carteira"}
                         </p>
                       </div>
 
@@ -923,22 +938,36 @@ export function AdminWallet({
                       </div>
 
                       <div className="bg-gray-50/60 p-4 rounded-2xl border border-gray-100 space-y-3">
-                        <div>
-                          <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">
-                            Produto Vinculado
-                          </p>
-                          <p className="text-sm font-bold text-gray-800">
-                            {parsed.product_name || "N/A"}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">
-                            ID do Produto
-                          </p>
-                          <p className="text-xs font-mono font-bold text-gray-500">
-                            #{parsed.product_id || "N/A"}
-                          </p>
-                        </div>
+                        {isEtokenPay && (
+                          <>
+                            <div>
+                              <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">
+                                Produto Vinculado
+                              </p>
+                              <p className="text-sm font-bold text-gray-800">
+                                {parsed.product_name || "N/A"}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">
+                                ID do Produto
+                              </p>
+                              <p className="text-xs font-mono font-bold text-gray-500">
+                                #{parsed.product_id || "N/A"}
+                              </p>
+                            </div>
+                          </>
+                        )}
+                        {isEtokenCredit && (
+                          <div>
+                            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">
+                              Operação
+                            </p>
+                            <p className="text-sm font-bold text-gray-800">
+                              Crédito direto de eToken
+                            </p>
+                          </div>
+                        )}
                         <div>
                           <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">
                             Data e Hora
