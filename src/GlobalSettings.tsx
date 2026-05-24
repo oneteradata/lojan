@@ -22,6 +22,31 @@ export function GlobalSettings() {
   const [isCleanupModalOpen, setIsCleanupModalOpen] = useState(false);
   const [executingCleanup, setExecutingCleanup] = useState(false);
 
+  // --- RATE LIMIT STATE ---
+  const [resettingLimit, setResettingLimit] = useState(false);
+
+  const handleResetRateLimit = async () => {
+    if (!confirm('Deseja realmente reiniciar todas as tentativas e bloqueios de rate limit de API, Webhooks e Login do sistema?')) {
+      return;
+    }
+    setResettingLimit(true);
+    try {
+      const res = await apiFetch('/api/admin/reset-ratelimit', {
+        method: 'POST'
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(data.message || 'Todas as tentativas e bloqueios de limite foram limpos com sucesso!');
+      } else {
+        alert('Erro ao reiniciar tentativas: ' + data.error);
+      }
+    } catch (err: any) {
+      alert('Erro de comunicação com o servidor: ' + err.message);
+    } finally {
+      setResettingLimit(false);
+    }
+  };
+
   const handleSendNotification = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!notifTitle || !notifMessage) {
@@ -304,7 +329,7 @@ export function GlobalSettings() {
       </div>
 
       {/* Central de Notificações Gerais ou Segmentadas */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-10 text-left">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mt-10 text-left">
         <section className="bg-white/40 border border-white/60 p-6 rounded-[2rem] shadow-sm backdrop-blur-xl flex flex-col justify-between space-y-4">
           <div>
             <div className="flex items-center gap-2 mb-2">
@@ -433,6 +458,38 @@ export function GlobalSettings() {
                 CONFIGURAR LIMPEZA
               </button>
             </div>
+          </div>
+        </section>
+
+        {/* Proteção contra Abuso e Rate Limit */}
+        <section className="bg-white/40 border border-white/60 p-6 rounded-[2rem] shadow-sm backdrop-blur-xl flex flex-col justify-between space-y-4 text-left">
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <ShieldAlert className="w-5 h-5 text-indigo-500" />
+              <h3 className="font-black text-sm uppercase tracking-widest text-[#1D1D1F]">Segurança e Rate Limit</h3>
+            </div>
+            <p className="text-[10px] text-gray-500 font-medium mb-4">
+              Gerencie a camada de contenção contra ataques scraping, abusos e vinculação não autorizada. O limite atual é de 20 requisições por IP a cada 1 minuto.
+            </p>
+
+            <div className="p-4 bg-indigo-500/5 border border-indigo-500/10 rounded-2xl flex items-start gap-3 text-left mb-4">
+              <Info className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-[10px] font-black uppercase text-indigo-500 tracking-wider mb-0.5">Reset de Limites</p>
+                <p className="text-[9px] text-[#86868B] font-semibold leading-relaxed">
+                  Limpando esses limites, todas as restrições temporárias de IP de chamadas de API, de Webhooks e tentativas de log no sistema serão removidas de imediato.
+                </p>
+              </div>
+            </div>
+
+            <button 
+              onClick={handleResetRateLimit}
+              disabled={resettingLimit}
+              className="w-full bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 text-white font-black py-3 rounded-xl shadow-md transition-all text-xs uppercase tracking-widest flex items-center justify-center gap-2"
+            >
+              {resettingLimit ? <RefreshCw className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+              REINICIAR TENTATIVAS (RESET LIMITS)
+            </button>
           </div>
         </section>
       </div>

@@ -660,7 +660,7 @@ async function startServer() {
     next();
   });
 
-  // --- ANTISCRAPING & EMBEDDING PROTECTION RATELIMIT (10 requests per minute) ---
+  // --- ANTISCRAPING & EMBEDDING PROTECTION RATELIMIT (20 requests per minute) ---
   app.use((req, res, next) => {
     if (req.method === 'OPTIONS') return next();
 
@@ -669,7 +669,7 @@ async function startServer() {
       const ip = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || 'unknown';
       const now = Date.now();
       const windowMs = 60000; // 1 minuto
-      const limit = 10;
+      const limit = 20;
 
       let record = ipRateLimits.get(ip);
       if (!record) {
@@ -678,9 +678,10 @@ async function startServer() {
       } else {
         if (now - record.windowStart < windowMs) {
           if (record.requestCount >= limit) {
+            const remainingSec = Math.ceil((windowMs - (now - record.windowStart)) / 1000);
             return res.status(429).json({ 
               success: false, 
-              error: 'Bloqueio Antiscraping: Limite de 10 chamadas de API ou Webhook por minuto excedido para este IP.' 
+              error: `Bloqueio Antiscraping: Limite de 20 chamadas de API ou Webhook por minuto excedido para este IP. Tempo restante de bloqueio: ${remainingSec} segundos.` 
             });
           }
           record.requestCount += 1;
@@ -2110,6 +2111,20 @@ async function startServer() {
   });
 
   // ========== CLEANUP AND NOTIFICATION ENDPOINTS ==========
+  
+  // POST /api/admin/reset-ratelimit - Reset all rate limit trackers (IP API/Webhook & Logins)
+  app.post('/api/admin/reset-ratelimit', requireAuth, requireAdmin, async (req: any, res) => {
+    try {
+      ipRateLimits.clear();
+      loginFailures.clear();
+      if (dbConnected) {
+        await logAction(req.user.id, req.user.email, 'reset_rate_limit', 'Admin limpou todas as tentativas e bloqueios de rate limit de API, Webhook e Login');
+      }
+      res.json({ success: true, message: 'Todas as tentativas e bloqueios de rate limit de API, Webhook e Login foram reiniciados com sucesso!' });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
   
   // POST /api/admin/cleanup - Mass/Selective Cleanup
   app.post('/api/admin/cleanup', requireAuth, requireAdmin, async (req: any, res) => {
