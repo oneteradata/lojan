@@ -119,13 +119,9 @@ function extractAllTokens(obj: any): string[] {
       tokens = tokens.concat(extractAllTokens(item));
     }
   } else if (typeof obj === 'object') {
-    if (Array.isArray(obj.tokens)) {
-      tokens = tokens.concat(extractAllTokens(obj.tokens));
-    } else {
-      for (const key in obj) {
-        if (Object.prototype.hasOwnProperty.call(obj, key)) {
-          tokens = tokens.concat(extractAllTokens(obj[key]));
-        }
+    for (const key in obj) {
+      if (Object.prototype.hasOwnProperty.call(obj, key)) {
+        tokens = tokens.concat(extractAllTokens(obj[key]));
       }
     }
   }
@@ -1841,14 +1837,7 @@ async function startServer() {
            }
            let userTokens = extractAllTokens(wallet);
            
-           for(let i=0; i<quantidade; i++) {
-             let tokenStr = '';
-             const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-             for(let j=0; j<tipo_token; j++) {
-               tokenStr += chars.charAt(Math.floor(Math.random() * chars.length));
-             }
-             userTokens.push(tokenStr);
-           }
+           // No self-generation here! Keep existing tokens plus any returned by the webhook
            const updatedWallet = buildWalletObject(userTokens);
            await pool.query('UPDATE users SET wallet = $1 WHERE id = $2', [JSON.stringify(updatedWallet), user_id_recebedor]);
         }
@@ -1897,17 +1886,7 @@ async function startServer() {
            }
            let userTokens = extractAllTokens(wallet);
            
-           // Generate tokens string of required length
-           const length = pedido.tipo_token;
-           for(let i=0; i<pedido.quantidade; i++) {
-             // Generate random string of length
-             let tokenStr = '';
-             const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-             for(let j=0; j<length; j++) {
-               tokenStr += chars.charAt(Math.floor(Math.random() * chars.length));
-             }
-             userTokens.push(tokenStr);
-           }
+           // No self-generation! Rely on webhook sending coins and our database organizing them.
            const updatedWallet = buildWalletObject(userTokens);
            await pool.query('UPDATE users SET wallet = $1 WHERE id = $2', [JSON.stringify(updatedWallet), pedido.user_id_recebedor]);
         }
