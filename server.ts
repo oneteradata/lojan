@@ -1832,31 +1832,15 @@ async function startServer() {
         return res.status(400).json({ success: false, error: 'deu problema com validação' });
       }
 
-      // Webhook sucesso: Gerar tokens reais com hashes aleatórios do tamanho correto e salvar na wallet
+      // Webhook sucesso: o webhook gera o token automaticamente na carteira do usuário.
+      // Apenas atualizamos o status do pedido e gravamos logs de transação e auditoria.
       const qty = parseInt(quantidade);
       const tLen = parseInt(tipo_token);
-      let newTokensList: string[] = [];
-      const chars = 'abcdef0123456789ABCDEF';
-      for (let i = 0; i < qty; i++) {
-        let t = '';
-        for (let j = 0; j < tLen; j++) {
-          t += chars.charAt(Math.floor(Math.random() * chars.length));
-        }
-        newTokensList.push(t);
-      }
 
-      const userRes = await pool.query('SELECT wallet, email FROM users WHERE id = $1', [user_id_recebedor]);
+      const userRes = await pool.query('SELECT email FROM users WHERE id = $1', [user_id_recebedor]);
       let receiverEmail = '';
       if (userRes.rows.length > 0) {
         receiverEmail = userRes.rows[0].email;
-        let wallet = userRes.rows[0].wallet || {};
-        if (typeof wallet === 'string') {
-          try { wallet = JSON.parse(wallet); } catch (e) {}
-        }
-        let userTokens = extractAllTokens(wallet);
-        userTokens = userTokens.concat(newTokensList);
-        const updatedWallet = buildWalletObject(userTokens);
-        await pool.query('UPDATE users SET wallet = $1 WHERE id = $2', [JSON.stringify(updatedWallet), user_id_recebedor]);
       }
 
       await pool.query('UPDATE credit_requests SET status = $1 WHERE id = $2', ['gerado', reqId]);
@@ -1905,32 +1889,15 @@ async function startServer() {
           return res.status(400).json({ success: false, error: 'deu problema com validação' });
         }
 
-        // Webhook sucesso: Gerar os tokens reais e adicionar à carteira do usuário recebedor
+        // Webhook sucesso: o webhook gera o token automaticamente na carteira do usuário.
+        // Apenas atualizamos o status e gravamos logs de transação.
         const qty = parseInt(pedido.quantidade);
         const tLen = parseInt(pedido.tipo_token);
-        let newTokensList: string[] = [];
-        const chars = 'abcdef0123456789ABCDEF';
-        for (let i = 0; i < qty; i++) {
-          let t = '';
-          for (let j = 0; j < tLen; j++) {
-            t += chars.charAt(Math.floor(Math.random() * chars.length));
-          }
-          newTokensList.push(t);
-        }
 
-        const userRes = await pool.query('SELECT wallet, email FROM users WHERE id = $1', [pedido.user_id_recebedor]);
+        const userRes = await pool.query('SELECT email FROM users WHERE id = $1', [pedido.user_id_recebedor]);
         let receiverEmail = '';
         if (userRes.rows.length > 0) {
            receiverEmail = userRes.rows[0].email;
-           let wallet = userRes.rows[0].wallet || {};
-           if (typeof wallet === 'string') {
-             try { wallet = JSON.parse(wallet); } catch (e) {}
-           }
-           let userTokens = extractAllTokens(wallet);
-           userTokens = userTokens.concat(newTokensList);
-           
-           const updatedWallet = buildWalletObject(userTokens);
-           await pool.query('UPDATE users SET wallet = $1 WHERE id = $2', [JSON.stringify(updatedWallet), pedido.user_id_recebedor]);
         }
 
         // Adiciona na história de logs (para extrato do recebedor)
