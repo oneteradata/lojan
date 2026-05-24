@@ -649,6 +649,18 @@ function ProductModal({ item, user, onClose }: { item?: any, user?: any, onClose
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
+  const [settings, setSettings] = useState<any>(null);
+
+  useEffect(() => {
+    apiFetch('/api/settings')
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          setSettings(data.settings);
+        }
+      })
+      .catch(err => console.error("Erro ao carregar configurações de custo:", err));
+  }, []);
 
   const handleSubmit = async () => {
     setLoading(true);
@@ -669,6 +681,9 @@ function ProductModal({ item, user, onClose }: { item?: any, user?: any, onClose
         }
         if (data.product) onClose(); // se o produto foi criado, feche o modal
       } else {
+        if (data.pendingWebhook) {
+          alert('Produto cadastrado com sucesso! O anúncio ficará com o status Pendente até que o webhook liquide a transação do token e ative o produto automaticamente.');
+        }
         onClose();
       }
     } catch(e) {
@@ -1150,29 +1165,84 @@ function ProductModal({ item, user, onClose }: { item?: any, user?: any, onClose
             </div>
          </div>
 
-         <div className="px-6 py-5 border-t border-gray-100 bg-white sm:rounded-b-[32px]">
-            {showConfirmation ? (
-              <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 flex flex-col gap-3">
-                 <div>
-                   <h4 className="font-bold text-[#1D1D1F] text-sm">Confirmar Cadastro</h4>
-                   <p className="text-xs text-blue-800 mt-1">Ao {item ? 'editar' : 'cadastrar'} este produto, os tokens correspondentes ao plano de {formData.duration_days} dias serão verificados no seu saldo (você tem {user?.wallet?.tokens?.length || 0} disponíveis). Deseja autorizar a transação?</p>
-                 </div>
-                 <div className="flex gap-2">
-                   <button onClick={() => setShowConfirmation(false)} className="flex-1 bg-white text-blue-600 font-bold text-xs py-3 rounded-xl border border-blue-200 hover:bg-blue-100 transition-colors">Cancelar</button>
-                   <button onClick={handleSubmit} disabled={loading || uploading} className="flex-1 bg-[#007AFF] text-white font-bold text-xs py-3 rounded-xl shadow-sm hover:bg-[#0066CC] transition-colors disabled:opacity-70">
-                     {loading ? 'Processando...' : 'Autorizar & Concluir'}
-                   </button>
-                 </div>
-              </div>
-            ) : (
-              <button 
-                onClick={() => setShowConfirmation(true)} disabled={loading || uploading}
-                className="w-full bg-[#007AFF] hover:bg-[#0066CC] active:scale-[0.99] transition-all text-white font-semibold rounded-2xl py-4 flex items-center justify-center shadow-lg shadow-blue-500/20 disabled:opacity-70 disabled:cursor-not-allowed"
-              >
-                {loading ? 'Processando...' : <><RefreshCw className="w-4 h-4 mr-2" /> Salvar Produto</>}
-              </button>
-            )}
-         </div>
+          <div className="px-6 py-5 border-t border-gray-100 bg-white sm:rounded-b-[32px]">
+             {(() => {
+               const duration = parseInt(formData.duration_days) === 30 ? 30 : 7;
+               let requiredAmount = 1;
+               let requiredTypeLength = 128;
+               
+               if (duration === 30) {
+                 requiredAmount = settings && settings.cost_30d_amount !== null ? settings.cost_30d_amount : 2;
+                 requiredTypeLength = settings && settings.cost_30d_type !== null ? settings.cost_30d_type : 256;
+               } else {
+                 requiredAmount = settings && settings.cost_7d_amount !== null ? settings.cost_7d_amount : (settings?.product_token_cost_amount || 1);
+                 requiredTypeLength = settings && settings.cost_7d_type !== null ? settings.cost_7d_type : (settings?.product_token_cost_type || 128);
+               }
+
+               const isUserAdmin = user?.role === 'admin';
+               const availableMatchingTokens = Array.isArray(user?.wallet?.tokens)
+                 ? user?.wallet?.tokens.filter((t: string) => t && typeof t === 'string' && t.length === requiredTypeLength).length
+                 : 0;
+
+               const hasEnoughTokens = isUserAdmin || availableMatchingTokens >= requiredAmount;
+
+               if (showConfirmation) {
+                 return (
+                   <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 flex flex-col gap-3">
+                      <div>
+                        <h4 className="font-bold text-[#1D1D1F] text-sm">{item ? 'Confirmar Edição' : 'Confirmar Cadastro'}</h4>
+                        {!item ? (
+                          <div className="text-xs text-blue-800 mt-1.5 space-y-1">
+                            <p>Ao cadastrar o produto, os tokens correspondentes ao anúncio serão liquidados do seu saldo após conclusão.</p>
+                            <div className="mt-2.5 p-3 bg-white/75 rounded-xl border border-blue-100 space-y-1">
+                              <p className="flex justify-between">
+                                <span className="text-gray-500 font-medium">Plano Publicação:</span>
+                                <span className="font-bold text-[#1D1D1F]">{duration} dias</span>
+                              </p>
+                              <p className="flex justify-between">
+                                <span className="text-gray-500 font-medium">Custo Exigido:</span>
+                                <span className="font-bold text-[#007AFF]">{requiredAmount} token(s) (Tipo E{requiredTypeLength})</span>
+                              </p>
+                              <p className="flex justify-between">
+                                <span className="text-gray-500 font-medium">Seu Saldo Disponível:</span>
+                                <span className={`font-bold ${hasEnoughTokens ? 'text-green-600' : 'text-red-500'}`}>{availableMatchingTokens} token(s) (Tipo E{requiredTypeLength})</span>
+                              </p>
+                            </div>
+                            {hasEnoughTokens ? (
+                              <p className="text-green-700 font-semibold mt-2.5">✓ Saldo disponível suficiente. O anúncio será cadastrado e ficará Pendente até a aprovação automática pelo webhook.</p>
+                            ) : (
+                              <p className="text-red-600 font-bold mt-2.5">✗ Você não tem saldo de eTokens do tipo E{requiredTypeLength} suficiente para este anúncio. Por favor, adquira mais moedas.</p>
+                            )}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-blue-800 mt-1">Deseja autorizar as alterações no produto?</p>
+                        )}
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => setShowConfirmation(false)} className="flex-1 bg-white text-blue-600 font-bold text-xs py-3 rounded-xl border border-blue-200 hover:bg-blue-50 transition-colors">Cancelar</button>
+                        <button 
+                          onClick={handleSubmit} 
+                          disabled={loading || uploading || (!item && !hasEnoughTokens)} 
+                          className="flex-1 bg-[#007AFF] text-white font-bold text-xs py-3 rounded-xl shadow-sm hover:bg-[#0066CC] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {loading ? 'Processando...' : 'Autorizar & Concluir'}
+                        </button>
+                      </div>
+                   </div>
+                 );
+               }
+
+               return (
+                 <button 
+                   onClick={() => setShowConfirmation(true)} 
+                   disabled={loading || uploading}
+                   className="w-full bg-[#007AFF] hover:bg-[#0066CC] active:scale-[0.99] transition-all text-white font-semibold rounded-2xl py-4 flex items-center justify-center shadow-lg shadow-blue-500/20 disabled:opacity-70 disabled:cursor-not-allowed"
+                 >
+                   {loading ? 'Processando...' : <><RefreshCw className="w-4 h-4 mr-2" /> Salvar Produto</>}
+                 </button>
+               );
+             })()}
+          </div>
        </motion.div>
     </div>
   );

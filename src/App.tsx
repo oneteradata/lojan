@@ -361,7 +361,7 @@ function Storefront() {
                </button>
                {showWallet && user.wallet?.tokens && Array.isArray(user.wallet.tokens) ? (
                  <div className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => window.location.href = '/etoken'}>
-                   {Object.entries(user.wallet.tokens.reduce((acc: any, t: string) => { acc[t] = (acc[t]||0)+1; return acc; }, {})).map(([tipo, qty]: any) => (
+                   {Object.entries(user.wallet.tokens.reduce((acc: any, t: string) => { if (t && typeof t === 'string') { acc[t.length] = (acc[t.length]||0)+1; } return acc; }, {})).map(([tipo, qty]: any) => (
                       <div key={tipo} className="flex gap-1 items-center bg-white/20 rounded px-1.5 py-0.5">
                          <span className="font-bold text-white">{qty}</span>
                          <span className="uppercase text-blue-50">E{tipo}</span>
