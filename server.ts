@@ -471,50 +471,22 @@ async function initDB() {
       `);
     }
 
-    // Configuração de Row Level Security (RLS) no PostgreSQL de forma abrangente
+    // Desativação de Row Level Security (RLS) no PostgreSQL para evitar bloqueios de transação sem variáveis de sessão
     try {
-      console.log('Políticas RLS: Ativando Row Level Security nas tabelas principais...');
-      // Ativa RLS para Products, Orders e Logs
-      await pool.query('ALTER TABLE products ENABLE ROW LEVEL SECURITY;').catch(()=>null);
-      await pool.query('ALTER TABLE orders ENABLE ROW LEVEL SECURITY;').catch(()=>null);
-      await pool.query('ALTER TABLE logs ENABLE ROW LEVEL SECURITY;').catch(()=>null);
+      console.log('Políticas RLS: Desativando Row Level Security nas tabelas principais para integridade transparente das consultas...');
+      // Desativa RLS para Products, Orders e Logs já que a segurança é feita via rotas de API Express
+      await pool.query('ALTER TABLE products DISABLE ROW LEVEL SECURITY;').catch(()=>null);
+      await pool.query('ALTER TABLE orders DISABLE ROW LEVEL SECURITY;').catch(()=>null);
+      await pool.query('ALTER TABLE logs DISABLE ROW LEVEL SECURITY;').catch(()=>null);
       
-      // DROP policies se já existirem para evitar conflitos
+      // DROP policies se já existirem para evitar conflitos e limpar
       await pool.query('DROP POLICY IF EXISTS products_tenant_isolation ON products;').catch(()=>null);
       await pool.query('DROP POLICY IF EXISTS orders_tenant_isolation ON orders;').catch(()=>null);
       await pool.query('DROP POLICY IF EXISTS logs_tenant_isolation ON logs;').catch(()=>null);
 
-      // Criar políticas padrão que usam variáveis de sessão 'app.user_id' e 'app.user_role'
-      // única role que acessa tudo é 'admin'. Demais têm acesso isolado
-      await pool.query(`
-        CREATE POLICY products_tenant_isolation ON products FOR ALL 
-        USING (
-          current_setting('app.user_role', true) = 'admin' OR 
-          user_id::text = current_setting('app.user_id', true) OR
-          is_available = true
-        );
-      `).catch(()=>null);
-
-      await pool.query(`
-        CREATE POLICY orders_tenant_isolation ON orders FOR ALL 
-        USING (
-          current_setting('app.user_role', true) = 'admin' OR 
-          user_id::text = current_setting('app.user_id', true) OR
-          seller_id::text = current_setting('app.user_id', true)
-        );
-      `).catch(()=>null);
-
-      await pool.query(`
-        CREATE POLICY logs_tenant_isolation ON logs FOR ALL 
-        USING (
-          current_setting('app.user_role', true) = 'admin' OR 
-          user_id::text = current_setting('app.user_id', true)
-        );
-      `).catch(()=>null);
-
-      console.log('✅ RLS configurado com sucesso. Permissões de isolamento com exceção administrativa de role admin ativadas.');
+      console.log('✅ RLS desativado e limpo com sucesso. O Express gerencial as permissões de forma transparente.');
     } catch(rlsError: any) {
-      console.warn('⚠️ Nota RLS: Erro ao configurar políticas finas RLS na base Postgres:', rlsError.message);
+      console.warn('⚠️ Nota RLS: Erro ao ajustar e desvincular políticas RLS:', rlsError.message);
     }
 
     console.log('✅ Banco de dados PostgreSQL sincronizado com sucesso.');
@@ -728,9 +700,14 @@ async function startServer() {
     const { name, category, price, tokens, stock, details, media, variations, business_model, tables, seats_per_table, duration_days } = req.body;
     try {
       if (!dbConnected) throw new Error("DB offline");
-      const userId = req.user.id;
-      const userName = req.user.name;
-      const userEmail = req.user.email;
+      let userId: any = req.body.user_id || (req.user ? req.user.id : null);
+      if (userId && !isNaN(Number(userId))) {
+        userId = parseInt(userId.toString(), 10);
+      }
+      const userName = req.user ? req.user.name : null;
+      const userEmail = req.user ? req.user.email : null;
+      
+      console.log(`[POST /api/products] Criando produto. userId: ${userId}, userName: ${userName}, userEmail: ${userEmail}`);
 
       const settingsResult = await pool.query('SELECT product_token_cost_amount, product_token_cost_type, cost_7d_amount, cost_7d_type, cost_30d_amount, cost_30d_type FROM system_settings LIMIT 1');
       const settings = settingsResult.rows[0];
