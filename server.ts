@@ -2146,7 +2146,15 @@ async function startServer() {
         
         const fallbackUser = fallbackUsers.find(u => (typeof u.email === 'string' ? u.email.trim().toLowerCase() : '') === cleanEmail && u.password === password);
         if (fallbackUser) {
-           const token = jwt.sign(fallbackUser, JWT_SECRET, { expiresIn: '1d' });
+           const tokenUser = {
+             id: fallbackUser.id,
+             name: fallbackUser.name,
+             email: fallbackUser.email,
+             role: fallbackUser.role,
+             company_name: fallbackUser.company_name,
+             company_logo: fallbackUser.company_logo
+           };
+           const token = jwt.sign(tokenUser, JWT_SECRET, { expiresIn: '1d' });
            return res.json({ success: true, user: fallbackUser, token });
         }
 
@@ -2182,7 +2190,16 @@ async function startServer() {
 
         try { await pool.query('UPDATE users SET last_login_at = CURRENT_TIMESTAMP WHERE id = $1', [user.id]); } catch(e) {}
         await logAction(user.id, user.email, 'login', 'Login efetuado com sucesso');
-        const token = jwt.sign(user, JWT_SECRET, { expiresIn: '1d' });
+        const tokenUser = {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          company_name: user.company_name,
+          company_logo: user.company_logo,
+          is_approved: user.is_approved
+        };
+        const token = jwt.sign(tokenUser, JWT_SECRET, { expiresIn: '1d' });
         res.json({ success: true, user, token });
       } else {
         await logAction(null, cleanEmail, 'login_falhou', 'Credenciais inválidas');
@@ -2213,7 +2230,8 @@ async function startServer() {
         }
         const user = { id: Date.now(), name, email: cleanEmail, password, role: requested_role === 'delivery' ? 'delivery' : 'user', company_name, company_logo };
         fallbackUsers.push(user);
-        const token = jwt.sign(user, JWT_SECRET, { expiresIn: '1d' });
+        const tokenUser = { id: user.id, name: user.name, email: user.email, role: user.role, company_name: user.company_name, company_logo: user.company_logo };
+        const token = jwt.sign(tokenUser, JWT_SECRET, { expiresIn: '1d' });
         return res.json({ success: true, user, token });
       }
 
