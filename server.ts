@@ -782,18 +782,82 @@ async function startServer() {
 
       await logAction(userId, userEmail, 'produto_adicionado', `Produto ${result.rows[0].name} criado (pendente webhook) para ${duration} dias (necessita ${requiredAmount} tokens do tipo ${requiredTypeLength})`);
       
-      // Chamar webhook em background de forma assíncrona, fire-and-forget
+      // Chamar webhook de cadastro e aguardar resposta por até 30 segundos
       const webhookUrl = `https://system.voryx.com.br/webhook/pagamentodetokenemcadastro?userId=${userId}&email=${encodeURIComponent(userEmail)}&productId=${result.rows[0].id}&amount=${requiredAmount}&typeLength=${requiredTypeLength}`;
-      console.log(`Disparando webhook de cadastro em background: ${webhookUrl}`);
+      console.log(`Disparando webhook de cadastro e aguardando resposta: ${webhookUrl}`);
       
-      fetch(webhookUrl, { method: 'GET' })
-        .then(async (webRes) => {
-          const txt = await webRes.text().catch(() => '');
-          console.log(`[Webhook Background] Retornou status: ${webRes.status}, body: ${txt}`);
-        })
-        .catch((err) => {
-          console.error('[Webhook Background] Falhou em disparar:', err.message);
+      let webhookStatus = 0;
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000);
+        
+        const webRes = await fetch(webhookUrl, { 
+          method: 'GET',
+          signal: controller.signal
         });
+        clearTimeout(timeoutId);
+        
+        webhookStatus = webRes.status;
+        const txt = await webRes.text().catch(() => '');
+        console.log(`[Webhook Sincrono] Retornou status: ${webRes.status}, body: ${txt}`);
+      } catch (err: any) {
+        console.error('[Webhook Sincrono] Falhou em disparar ou deu timeout:', err.message);
+        webhookStatus = 504;
+      }
+
+      if (webhookStatus === 200) {
+        // Ativa o produto imediatamente na DB
+        await pool.query('UPDATE products SET is_available = true WHERE id = $1', [result.rows[0].id]);
+        
+        // Descontar os tokens do saldo do usuário
+        const senderRes = await pool.query('SELECT wallet FROM users WHERE id = $1', [userId]);
+        if (senderRes.rows.length > 0) {
+          const sender = senderRes.rows[0];
+          let rawWallet = sender.wallet || {};
+          if (typeof rawWallet === 'string') {
+            try { rawWallet = JSON.parse(rawWallet); } catch (e) {}
+          }
+          let userTokens = extractAllTokens(rawWallet);
+
+          const matchingIndices = [];
+          for (let i = 0; i < userTokens.length; i++) {
+            if (typeof userTokens[i] === 'string' && userTokens[i].length === requiredTypeLength) {
+              matchingIndices.push(i);
+            }
+          }
+
+          if (matchingIndices.length >= requiredAmount) {
+            for (let i = 0; i < requiredAmount; i++) {
+              const idxToRemove = matchingIndices.pop();
+              if (idxToRemove !== undefined) {
+                userTokens[idxToRemove] = null as any;
+              }
+            }
+            const newSenderTokens = userTokens.filter(t => t !== null);
+            const updatedSenderWallet = buildWalletObject(newSenderTokens);
+            await pool.query('UPDATE users SET wallet = $1 WHERE id = $2', [JSON.stringify(updatedSenderWallet), userId]);
+          }
+        }
+
+        // Colocar no histórico de pagamentos de eToken como pagamento_token_cadastro
+        const logDetailsObj = {
+          token_qty: requiredAmount,
+          token_type: `E${requiredTypeLength}`,
+          product_id: result.rows[0].id,
+          product_name: name,
+          date_time: new Date().toISOString(),
+          is_etoken_payment: true,
+          details: `Pagamento de ${requiredAmount} token(s) E${requiredTypeLength} para cadastro do produto "${name}" (ID #${result.rows[0].id})`
+        };
+        await logAction(userId, userEmail, 'pagamento_token_cadastro', JSON.stringify(logDetailsObj));
+
+        const updatedProdRes = await pool.query('SELECT * FROM products WHERE id = $1', [result.rows[0].id]);
+        return res.json({ 
+          success: true, 
+          product: updatedProdRes.rows[0] || result.rows[0],
+          pendingWebhook: false
+        });
+      }
 
       return res.json({ 
         success: true, 

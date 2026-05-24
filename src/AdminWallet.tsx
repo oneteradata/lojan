@@ -35,6 +35,7 @@ export function AdminWallet({
   const [activeTab, setActiveTab] = useState<
     "extrato" | "transferir" | "receber" | "solicitar" | "saque"
   >("extrato");
+  const [selectedTransaction, setSelectedTransaction] = useState<any>(null);
 
   const groupedTokensIni =
     user.wallet?.tokens?.reduce((acc: any, val: string) => {
@@ -400,6 +401,7 @@ export function AdminWallet({
                     "pagamento_aprovado",
                     "pagamento_recusado",
                     "pagamento_timeout",
+                    "pagamento_token_cadastro",
                   ].includes(l.event_name),
                 ).length > 0 ? (
                   logs
@@ -410,25 +412,38 @@ export function AdminWallet({
                         "pagamento_aprovado",
                         "pagamento_recusado",
                         "pagamento_timeout",
+                        "pagamento_token_cadastro",
                       ].includes(l.event_name),
                     )
                     .map((log) => {
                       const isDebit =
                         log.event_name?.includes("recusado") ||
                         log.event_name?.includes("timeout") ||
-                        log.event_name?.includes("erro");
+                        log.event_name?.includes("erro") ||
+                        log.event_name === "pagamento_token_cadastro";
                       const isCredit =
                         log.event_name?.includes("aprovado") ||
-                        log.event_name === "produto_adicionado";
-                      const isTransfer = log.event_name === "transferencia";
+                        log.event_name === "produto_adicionado" ||
+                        log.event_name === "recebimento_transferencia";
+                      const isTransfer = 
+                        log.event_name === "transferencia" ||
+                        log.event_name === "recebimento_transferencia";
+
+                      let parsedDetails: any = null;
+                      let displayDetails = log.details;
+                      if (log.details && log.details.startsWith('{')) {
+                        try {
+                          parsedDetails = JSON.parse(log.details);
+                          displayDetails = parsedDetails.details || `Pagamento de ${parsedDetails.token_qty} token(s) ${parsedDetails.token_type}`;
+                        } catch (e) {}
+                      }
 
                       return (
                         <div
                           key={log.id}
                           onClick={(e) => {
                             e.stopPropagation();
-                            navigator.clipboard.writeText(String(log.id));
-                            alert("ID " + log.id + " copiado!");
+                            setSelectedTransaction(log);
                           }}
                           className="flex justify-between items-center border-b border-gray-50 pb-4 last:border-0 last:pb-0 cursor-pointer hover:bg-gray-50 transition-colors p-2 rounded-xl group relative"
                         >
@@ -446,16 +461,16 @@ export function AdminWallet({
                               )}
                             >
                               {isTransfer ? (
-                                <ArrowUpRight className="w-5 h-5" />
+                                <ArrowUpRight className={cn("w-5 h-5", log.event_name === "recebimento_transferencia" && "rotate-180")} />
                               ) : isCredit ? (
                                 <ArrowDownLeft className="w-5 h-5" />
                               ) : (
-                                <List className="w-5 h-5" />
+                                <ArrowUpRight className="w-5 h-5 text-red-500" />
                               )}
                             </div>
-                            <div>
-                              <p className="text-sm font-bold text-[#1D1D1F]">
-                                {(log.event_name || "Registro")
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-bold text-[#1D1D1F] truncate">
+                                {log.event_name === "pagamento_token_cadastro" ? "PAGAMENTO ETOKEN" : (log.event_name || "Registro")
                                   .replace(/_/g, " ")
                                   .toUpperCase()}{" "}
                                 <span className="text-[10px] font-mono text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -463,7 +478,7 @@ export function AdminWallet({
                                 </span>
                               </p>
                               <p className="text-[10px] text-gray-500 line-clamp-1">
-                                {log.details}
+                                {displayDetails}
                               </p>
                             </div>
                           </div>
@@ -822,6 +837,174 @@ export function AdminWallet({
           )}
         </AnimatePresence>
       </div>
+
+      {/* Modal de Detalhes da Transação */}
+      <AnimatePresence>
+        {selectedTransaction && (() => {
+          let parsed: any = null;
+          if (selectedTransaction.details && selectedTransaction.details.startsWith("{")) {
+            try {
+              parsed = JSON.parse(selectedTransaction.details);
+            } catch (e) {}
+          }
+          
+          const logId = selectedTransaction.id;
+          const isEtokenPay = selectedTransaction.event_name === "pagamento_token_cadastro" || (parsed && parsed.is_etoken_payment);
+          const title = (selectedTransaction.event_name || "Registro").replace(/_/g, " ").toUpperCase();
+          const dateStr = new Date(selectedTransaction.created_at).toLocaleString("pt-BR");
+          
+          return (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4"
+              onClick={() => setSelectedTransaction(null)}
+            >
+              <motion.div
+                initial={{ scale: 0.95, y: 15 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.95, y: 15 }}
+                className="bg-white rounded-3xl w-full max-w-md p-6 overflow-hidden shadow-2xl border border-gray-100"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Header */}
+                <div className="flex justify-between items-center pb-4 border-b border-gray-100 mb-6">
+                  <div>
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block mb-1">
+                      Comprovante de Transação
+                    </span>
+                    <h2 className="text-lg font-extrabold text-[#1D1D1F] tracking-tight">
+                      {isEtokenPay ? "Pagamento de eToken" : title}
+                    </h2>
+                  </div>
+                  <button
+                    onClick={() => setSelectedTransaction(null)}
+                    className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Details Content */}
+                <div className="space-y-4">
+                  {isEtokenPay && parsed ? (
+                    <>
+                      {/* Visual Token badge */}
+                      <div className="bg-blue-50/75 border border-blue-100 p-6 rounded-2xl flex flex-col items-center justify-center text-center">
+                        <p className="text-[10px] font-bold text-[#007AFF] uppercase tracking-widest mb-1">
+                          Valor Pago
+                        </p>
+                        <p className="text-3xl font-black text-[#007AFF] tracking-tight">
+                          {parsed.token_qty} <span className="text-lg font-bold">{parsed.token_type}</span>
+                        </p>
+                        <p className="text-[10px] font-semibold text-gray-400 mt-2">
+                          Liquidado com sucesso do saldo
+                        </p>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4 pt-2">
+                        <div className="bg-gray-50/60 p-3 rounded-2xl border border-gray-100">
+                          <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">
+                            Quantidade Token
+                          </p>
+                          <p className="text-sm font-bold text-gray-800">
+                            {parsed.token_qty} Unidades
+                          </p>
+                        </div>
+                        <div className="bg-gray-50/60 p-3 rounded-2xl border border-gray-100">
+                          <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">
+                            Tipo de Token
+                          </p>
+                          <p className="text-sm font-bold text-gray-800">
+                            {parsed.token_type}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="bg-gray-50/60 p-4 rounded-2xl border border-gray-100 space-y-3">
+                        <div>
+                          <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">
+                            Produto Vinculado
+                          </p>
+                          <p className="text-sm font-bold text-gray-800">
+                            {parsed.product_name || "N/A"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">
+                            ID do Produto
+                          </p>
+                          <p className="text-xs font-mono font-bold text-gray-500">
+                            #{parsed.product_id || "N/A"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">
+                            Data e Hora
+                          </p>
+                          <p className="text-xs font-semibold text-gray-700">
+                            {dateStr}
+                          </p>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      {/* General Transaction Type */}
+                      <div className="bg-gray-50 p-5 rounded-2xl border border-gray-150 flex flex-col items-center justify-center text-center">
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">
+                          Operação
+                        </p>
+                        <p className="text-xl font-extrabold text-gray-800 tracking-tight">
+                          {title}
+                        </p>
+                      </div>
+
+                      <div className="bg-gray-50/60 p-4 rounded-2xl border border-gray-100 space-y-3">
+                        <div>
+                          <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">
+                            Descrição / Detalhes
+                          </p>
+                          <p className="text-sm font-medium text-gray-700">
+                            {selectedTransaction.details || "N/A"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">
+                            Data e Hora
+                          </p>
+                          <p className="text-xs font-semibold text-gray-700">
+                            {dateStr}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">
+                            ID da Transação
+                          </p>
+                          <p className="text-xs font-mono text-gray-400 font-bold">
+                            #{logId}
+                          </p>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Action button */}
+                <div className="mt-6">
+                  <button
+                    onClick={() => setSelectedTransaction(null)}
+                    className="w-full bg-[#007AFF] text-white rounded-2xl py-3.5 font-bold uppercase tracking-widest text-[11px] hover:bg-[#0066CC] transition-colors shadow-lg shadow-blue-500/10"
+                  >
+                    Fechar Detalhes
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          );
+        })()}
+      </AnimatePresence>
     </div>
   );
 }
