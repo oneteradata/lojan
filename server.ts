@@ -6,6 +6,7 @@ import fs from 'fs';
 import * as Minio from 'minio';
 import multer from 'multer';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_do_not_use_in_prod_12345';
 
@@ -231,6 +232,59 @@ async function initDB() {
     await pool.query('SELECT 1');
     dbConnected = true;
 
+    // --- UUID and Nickname Migration ---
+    try {
+      // First, drop foreign key constraints which might block changing columns types
+      await pool.query('ALTER TABLE order_items DROP CONSTRAINT IF EXISTS order_items_order_id_fkey CASCADE;').catch(()=>null);
+      await pool.query('ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_user_id_fkey CASCADE;').catch(()=>null);
+      await pool.query('ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_delivery_user_id_fkey CASCADE;').catch(()=>null);
+      
+      // Alter columns to VARCHAR
+      await pool.query(`ALTER TABLE users ALTER COLUMN id TYPE VARCHAR(255) USING id::VARCHAR;`).catch(() => {});
+      await pool.query(`ALTER TABLE orders ALTER COLUMN user_id TYPE VARCHAR(255) USING user_id::VARCHAR;`).catch(() => {});
+      await pool.query(`ALTER TABLE orders ALTER COLUMN delivery_user_id TYPE VARCHAR(255) USING delivery_user_id::VARCHAR;`).catch(() => {});
+      await pool.query(`ALTER TABLE products ALTER COLUMN user_id TYPE VARCHAR(255) USING user_id::VARCHAR;`).catch(() => {});
+      await pool.query(`ALTER TABLE product_interactions ALTER COLUMN user_id TYPE VARCHAR(255) USING user_id::VARCHAR;`).catch(() => {});
+      await pool.query(`ALTER TABLE product_views ALTER COLUMN user_id TYPE VARCHAR(255) USING user_id::VARCHAR;`).catch(() => {});
+      await pool.query(`ALTER TABLE product_clicks ALTER COLUMN user_id TYPE VARCHAR(255) USING user_id::VARCHAR;`).catch(() => {});
+      await pool.query(`ALTER TABLE logs ALTER COLUMN user_id TYPE VARCHAR(255) USING user_id::VARCHAR;`).catch(() => {});
+      await pool.query(`ALTER TABLE credit_requests ALTER COLUMN user_id_recebedor TYPE VARCHAR(255) USING user_id_recebedor::VARCHAR;`).catch(() => {});
+      await pool.query(`ALTER TABLE credit_requests ALTER COLUMN user_id_solicitante TYPE VARCHAR(255) USING user_id_solicitante::VARCHAR;`).catch(() => {});
+      await pool.query(`ALTER TABLE notifications ALTER COLUMN user_id TYPE VARCHAR(255) USING user_id::VARCHAR;`).catch(() => {});
+    } catch (migTypeErr) {
+      console.warn("Error converting column types to VARCHAR:", migTypeErr);
+    }
+
+    try {
+      // Add nickname column
+      await pool.query(`ALTER TABLE users ADD COLUMN nickname VARCHAR(255);`).catch(() => {});
+      // Add unique constraint for nickname
+      await pool.query(`ALTER TABLE users ADD CONSTRAINT users_nickname_key UNIQUE (nickname);`).catch(() => {});
+    } catch (nickTypeErr) {
+      console.warn("Error adding nickname column or constraint:", nickTypeErr);
+    }
+
+    // Migrate any existing integer IDs to properly generated UUIDs to ensure everything is UUID
+    try {
+      const usersToMigrate = await pool.query("SELECT id FROM users WHERE id !~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-';");
+      for (const row of usersToMigrate.rows) {
+        const oldId = row.id;
+        const newUuid = crypto.randomUUID();
+        await pool.query("UPDATE users SET id = $1 WHERE id = $2", [newUuid, oldId]);
+        await pool.query("UPDATE logs SET user_id = $1 WHERE user_id = $2", [newUuid, oldId]);
+        await pool.query("UPDATE product_interactions SET user_id = $1 WHERE user_id = $2", [newUuid, oldId]);
+        await pool.query("UPDATE product_views SET user_id = $1 WHERE user_id = $2", [newUuid, oldId]);
+        await pool.query("UPDATE product_clicks SET user_id = $1 WHERE user_id = $2", [newUuid, oldId]);
+        await pool.query("UPDATE credit_requests SET user_id_recebedor = $1 WHERE user_id_recebedor = $2", [newUuid, oldId]);
+        await pool.query("UPDATE credit_requests SET user_id_solicitante = $1 WHERE user_id_solicitante = $2", [newUuid, oldId]);
+        await pool.query("UPDATE orders SET user_id = $1 WHERE user_id = $2", [newUuid, oldId]);
+        await pool.query("UPDATE orders SET delivery_user_id = $1 WHERE delivery_user_id = $2", [newUuid, oldId]);
+        await pool.query("UPDATE notifications SET user_id = $1 WHERE user_id = $2", [newUuid, oldId]);
+      }
+    } catch (migErr) {
+      console.warn("Migration to UUID warn:", migErr);
+    }
+
     // Criação da tabela de produtos (nova estrutura Voryx Admin)
     await pool.query(`
       CREATE TABLE IF NOT EXISTS products (
@@ -275,11 +329,12 @@ async function initDB() {
     // Criação da tabela de usuários (Para testes e acesso)
     await pool.query(`
       CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
+        id VARCHAR(255) PRIMARY KEY,
         email VARCHAR(255) UNIQUE NOT NULL,
         password VARCHAR(255) NOT NULL,
         name VARCHAR(255),
-        role VARCHAR(50) DEFAULT 'user'
+        role VARCHAR(50) DEFAULT 'user',
+        nickname VARCHAR(255) UNIQUE
       );
     `);
 
@@ -472,10 +527,14 @@ async function initDB() {
     // Inserção de um usuário admin teste se não existir por email
     const adminResult = await pool.query('SELECT id FROM users WHERE email = $1', ['admin@valentina.com']);
     if (adminResult.rows.length === 0) {
+      const adminId = crypto.randomUUID();
       await pool.query(`
-        INSERT INTO users (email, password, name, role, is_approved) VALUES 
-        ('admin@valentina.com', 'admin', 'Admin Valentina', 'admin', true);
-      `);
+        INSERT INTO users (id, email, password, name, role, is_approved, nickname) VALUES 
+        ($1, 'admin@valentina.com', 'admin', 'Admin Valentina', 'admin', true, 'admin');
+      `, [adminId]);
+    } else {
+      // Garante que o nickname do admin existente seja 'admin'
+      await pool.query("UPDATE users SET nickname = 'admin' WHERE email = 'admin@valentina.com' AND (nickname IS NULL OR nickname = '');").catch(() => {});
     }
 
     // Desativação de Row Level Security (RLS) no PostgreSQL para evitar bloqueios de transação sem variáveis de sessão
@@ -1374,16 +1433,34 @@ async function startServer() {
 
   // Log user addition and deletion
   app.post('/api/users', requireAuth, requireAdmin, async (req: any, res) => {
-    const { name, email, password, role, company_name, company_logo } = req.body;
+    const { name, email, password, role, company_name, company_logo, nickname } = req.body;
     if (!name || !email || !password) return res.status(400).json({ success: false, error: 'Dados incompletos.' });
     try {
       if (!dbConnected) throw new Error("DB offline");
-      const pass = password;
+      
+      const cleanEmail = typeof email === 'string' ? email.trim().toLowerCase() : String(email || '').trim();
+      const checkEmail = await pool.query('SELECT id FROM users WHERE LOWER(email) = $1', [cleanEmail]);
+      if (checkEmail.rows.length > 0) {
+        return res.status(400).json({ success: false, error: 'Este e-mail já está em uso.' });
+      }
+
+      let finalNickname = nickname ? nickname.trim() : '';
+      if (!finalNickname) {
+        const base = cleanEmail.split('@')[0].replace(/[^a-zA-Z0-9]/g, '');
+        finalNickname = `${base}_${crypto.randomUUID().slice(0, 4)}`;
+      }
+
+      const checkNick = await pool.query('SELECT id FROM users WHERE LOWER(nickname) = LOWER($1)', [finalNickname]);
+      if (checkNick.rows.length > 0) {
+        return res.status(400).json({ success: false, error: 'Este Nickname já está em uso.' });
+      }
+
+      const userId = crypto.randomUUID();
       const insertResult = await pool.query(
-        'INSERT INTO users (name, email, password, role, company_name, company_logo) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, name, email, role, company_name, company_logo',
-        [name, email, pass, role || 'user', company_name || null, company_logo || null]
+        'INSERT INTO users (id, name, email, password, role, company_name, company_logo, nickname, is_approved) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true) RETURNING id, name, email, role, company_name, company_logo, nickname, is_approved',
+        [userId, name, cleanEmail, password, role || 'user', company_name || null, company_logo || null, finalNickname]
       );
-      await logAction(req.user.id, req.user.email, 'usuario_adicionado', `O admin adicionou ${email}`);
+      await logAction(req.user.id, req.user.email, 'usuario_adicionado', `O admin adicionou ${email} (Nickname: ${finalNickname})`);
       res.json({ success: true, user: insertResult.rows[0] });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
@@ -1391,19 +1468,34 @@ async function startServer() {
   });
 
   app.put('/api/users/:id', requireAuth, requireAdmin, async (req: any, res) => {
-    const { name, email, role, password, company_name, company_logo, is_approved, can_transfer, can_request, can_request_delivery } = req.body;
+    const { name, email, role, password, company_name, company_logo, is_approved, can_transfer, can_request, can_request_delivery, nickname } = req.body;
     try {
       if (!dbConnected) throw new Error("DB offline");
+      
+      const cleanEmail = typeof email === 'string' ? email.trim().toLowerCase() : String(email || '').trim();
+      const checkEmail = await pool.query('SELECT id FROM users WHERE LOWER(email) = $1 AND id <> $2', [cleanEmail, req.params.id]);
+      if (checkEmail.rows.length > 0) {
+        return res.status(400).json({ success: false, error: 'Este e-mail está em uso por outro usuário.' });
+      }
+
+      let finalNickname = nickname ? nickname.trim() : '';
+      if (finalNickname) {
+        const checkNick = await pool.query('SELECT id FROM users WHERE LOWER(nickname) = LOWER($1) AND id <> $2', [finalNickname, req.params.id]);
+        if (checkNick.rows.length > 0) {
+          return res.status(400).json({ success: false, error: 'Este Nickname já está em uso por outro usuário.' });
+        }
+      }
+
       let u;
       if (password) {
         u = await pool.query(
-          'UPDATE users SET name = $1, email = $2, role = $3, password = $4, company_name = $5, company_logo = $6, is_approved = COALESCE($8, is_approved), can_transfer = COALESCE($9, can_transfer), can_request = COALESCE($10, can_request), can_request_delivery = COALESCE($11, can_request_delivery) WHERE id = $7 RETURNING id, name, email, role, company_name, company_logo, is_approved, can_transfer, can_request, can_request_delivery',
-          [name, email, role, password, company_name || null, company_logo || null, req.params.id, is_approved, can_transfer, can_request, can_request_delivery]
+          'UPDATE users SET name = $1, email = $2, role = $3, password = $4, company_name = $5, company_logo = $6, is_approved = COALESCE($8, is_approved), can_transfer = COALESCE($9, can_transfer), can_request = COALESCE($10, can_request), can_request_delivery = COALESCE($11, can_request_delivery), nickname = COALESCE($12, nickname) WHERE id = $7 RETURNING id, name, email, role, company_name, company_logo, is_approved, can_transfer, can_request, can_request_delivery, nickname',
+          [name, cleanEmail, role, password, company_name || null, company_logo || null, req.params.id, is_approved, can_transfer, can_request, can_request_delivery, finalNickname || null]
         );
       } else {
         u = await pool.query(
-          'UPDATE users SET name = $1, email = $2, role = $3, company_name = $4, company_logo = $5, is_approved = COALESCE($7, is_approved), can_transfer = COALESCE($8, can_transfer), can_request = COALESCE($9, can_request), can_request_delivery = COALESCE($10, can_request_delivery) WHERE id = $6 RETURNING id, name, email, role, company_name, company_logo, is_approved, can_transfer, can_request, can_request_delivery',
-          [name, email, role, company_name || null, company_logo || null, req.params.id, is_approved, can_transfer, can_request, can_request_delivery]
+          'UPDATE users SET name = $1, email = $2, role = $3, company_name = $4, company_logo = $5, is_approved = COALESCE($7, is_approved), can_transfer = COALESCE($8, can_transfer), can_request = COALESCE($9, can_request), can_request_delivery = COALESCE($10, can_request_delivery), nickname = COALESCE($11, nickname) WHERE id = $6 RETURNING id, name, email, role, company_name, company_logo, is_approved, can_transfer, can_request, can_request_delivery, nickname',
+          [name, cleanEmail, role, company_name || null, company_logo || null, req.params.id, is_approved, can_transfer, can_request, can_request_delivery, finalNickname || null]
         );
       }
       await logAction(req.user.id, req.user.email, 'usuario_editado', `O admin editou ${email}`);
@@ -1526,7 +1618,32 @@ async function startServer() {
       if (!receiver_id || !amountInt || !tokenLenInt || amountInt <= 0) {
         return res.status(400).json({ success: false, error: 'Parâmetros inválidos.' });
       }
-      if (senderId.toString() === receiver_id.toString()) {
+
+      let destinationId = receiver_id;
+      let receiverRes = await pool.query('SELECT id, wallet, email FROM users WHERE id::text = $1', [receiver_id]);
+      let receiverType = 'users';
+
+      if (receiverRes.rows.length === 0) {
+        // Try searching by nickname
+        const nickRes = await pool.query('SELECT id, wallet, email FROM users WHERE LOWER(nickname) = LOWER($1)', [receiver_id.trim()]);
+        if (nickRes.rows.length > 0) {
+          receiverRes = nickRes;
+          destinationId = nickRes.rows[0].id;
+        }
+      }
+
+      if (receiverRes.rows.length === 0) {
+         receiverRes = await pool.query('SELECT id, wallet, email FROM user_client WHERE id::text = $1', [receiver_id]);
+         if (receiverRes.rows.length > 0) {
+            receiverType = 'user_client';
+            destinationId = receiverRes.rows[0].id;
+         }
+      }
+
+      if (receiverRes.rows.length === 0) return res.status(404).json({ success: false, error: 'Destinatário não encontrado por UUID ou Nickname.' });
+      const receiver = receiverRes.rows[0];
+
+      if (senderId.toString() === destinationId.toString()) {
         return res.status(400).json({ success: false, error: 'Não é possível transferir para si mesmo.' });
       }
 
@@ -1536,7 +1653,7 @@ async function startServer() {
          quantidade: amountInt,
          tipo_moeda: "E" + tokenLenInt,
          moeda: token_length,
-         destinatario_id: receiver_id,
+         destinatario_id: destinationId,
          tipo_operacao: 'transferencia'
       });
 
@@ -1582,19 +1699,6 @@ async function startServer() {
       
       const newSenderTokens = userTokens.filter(t => t !== null);
       const updatedSenderWallet = buildWalletObject(newSenderTokens);
-
-      // Receiver
-      let receiverType = 'users';
-      let receiverRes = await pool.query('SELECT wallet, email FROM users WHERE id::text = $1', [receiver_id]);
-      if (receiverRes.rows.length === 0) {
-         receiverRes = await pool.query('SELECT wallet, email FROM user_client WHERE id::text = $1', [receiver_id]);
-         if (receiverRes.rows.length > 0) {
-            receiverType = 'user_client';
-         }
-      }
-
-      if (receiverRes.rows.length === 0) return res.status(404).json({ success: false, error: 'Destinatário não encontrado.' });
-      const receiver = receiverRes.rows[0];
       
       let recWallet = receiver.wallet || {};
       if (typeof recWallet === 'string') {
@@ -1608,13 +1712,13 @@ async function startServer() {
       await pool.query('UPDATE users SET wallet = $1 WHERE id::text = $2', [JSON.stringify(updatedSenderWallet), senderId]);
       
       if (receiverType === 'user_client') {
-         await pool.query('UPDATE user_client SET wallet = $1 WHERE id::text = $2', [JSON.stringify(updatedReceiverWallet), receiver_id]);
+         await pool.query('UPDATE user_client SET wallet = $1 WHERE id::text = $2', [JSON.stringify(updatedReceiverWallet), destinationId]);
       } else {
-         await pool.query('UPDATE users SET wallet = $1 WHERE id::text = $2', [JSON.stringify(updatedReceiverWallet), receiver_id]);
+         await pool.query('UPDATE users SET wallet = $1 WHERE id::text = $2', [JSON.stringify(updatedReceiverWallet), destinationId]);
       }
 
-      await logAction(senderId, sender.email, 'transferencia', `Enviou ${amountInt} eToken(s) E${tokenLenInt} para ID ${receiver_id}`);
-      await logAction(receiver_id, receiver.email, 'recebimento_transferencia', `Recebeu ${amountInt} eToken(s) E${tokenLenInt} do ID ${senderId}`);
+      await logAction(senderId, sender.email, 'transferencia', `Enviou ${amountInt} eToken(s) E${tokenLenInt} para ID ${destinationId}`);
+      await logAction(destinationId, receiver.email, 'recebimento_transferencia', `Recebeu ${amountInt} eToken(s) E${tokenLenInt} do ID ${senderId}`);
 
       res.json({ success: true });
     } catch (err: any) {
@@ -2205,12 +2309,7 @@ async function startServer() {
         return res.status(401).json({ success: false, error: 'Credenciais inválidas. Tente admin@valentina.com e admin ou crie uma conta' });
       }
 
-      let dbResult;
-      if (cleanEmail && !isNaN(Number(cleanEmail))) {
-        dbResult = await pool.query('SELECT id, name, email, role, is_approved, company_name, company_logo, wallet, can_transfer, can_request, can_request_delivery FROM users WHERE (LOWER(email) = $1 OR id = $2) AND password = $3', [cleanEmail, Number(cleanEmail), password]);
-      } else {
-        dbResult = await pool.query('SELECT id, name, email, role, is_approved, company_name, company_logo, wallet, can_transfer, can_request, can_request_delivery FROM users WHERE LOWER(email) = $1 AND password = $2', [cleanEmail, password]);
-      }
+      let dbResult = await pool.query('SELECT id, name, email, role, is_approved, company_name, company_logo, wallet, can_transfer, can_request, can_request_delivery, nickname FROM users WHERE (LOWER(email) = $1 OR LOWER(nickname) = $1 OR id = $1) AND password = $2', [cleanEmail, password]);
 
       if (dbResult.rows.length > 0) {
         const user = dbResult.rows[0];
@@ -2241,7 +2340,8 @@ async function startServer() {
           role: user.role,
           company_name: user.company_name,
           company_logo: user.company_logo,
-          is_approved: user.is_approved
+          is_approved: user.is_approved,
+          nickname: user.nickname
         };
         const token = jwt.sign(tokenUser, JWT_SECRET, { expiresIn: '1d' });
         res.json({ success: true, user, token });
@@ -2258,13 +2358,22 @@ async function startServer() {
 
   // Registro de usuários
   app.post('/api/register', async (req, res) => {
-    const { name, email, password, company_name, company_logo, requested_role, telefone, endereco, bairro, cidade, numero, cep } = req.body;
+    const { name, email, password, company_name, company_logo, requested_role, telefone, endereco, bairro, cidade, numero, cep, nickname } = req.body;
     
     if (!name || !email || !password) {
       return res.status(400).json({ success: false, error: 'Preencha todos os campos obrigatórios.' });
     }
 
+    if (!nickname) {
+      return res.status(400).json({ success: false, error: 'O campo Nickname/Apelido é obrigatório.' });
+    }
+
     const cleanEmail = typeof email === 'string' ? email.trim().toLowerCase() : String(email || '').trim();
+    const cleanNick = typeof nickname === 'string' ? nickname.trim() : '';
+
+    if (!cleanNick) {
+      return res.status(400).json({ success: false, error: 'Digite um Nickname válido.' });
+    }
 
     try {
       if (!dbConnected) {
@@ -2272,9 +2381,9 @@ async function startServer() {
         if (existing) {
            return res.status(400).json({ success: false, error: 'Este e-mail já está em uso.' });
         }
-        const user = { id: Date.now(), name, email: cleanEmail, password, role: requested_role === 'delivery' ? 'delivery' : 'user', company_name, company_logo };
+        const user = { id: String(Date.now()), name, email: cleanEmail, password, role: requested_role === 'delivery' ? 'delivery' : 'user', company_name, company_logo, nickname: cleanNick };
         fallbackUsers.push(user);
-        const tokenUser = { id: user.id, name: user.name, email: user.email, role: user.role, company_name: user.company_name, company_logo: user.company_logo };
+        const tokenUser = { id: user.id, name: user.name, email: user.email, role: user.role, company_name: user.company_name, company_logo: user.company_logo, nickname: user.nickname };
         const token = jwt.sign(tokenUser, JWT_SECRET, { expiresIn: '1d' });
         return res.json({ success: true, user, token });
       }
@@ -2286,15 +2395,23 @@ async function startServer() {
         return res.status(400).json({ success: false, error: 'Este e-mail já está em uso.' });
       }
 
+      // Verifica se o nickname já existe
+      const checkNickResult = await pool.query('SELECT id FROM users WHERE LOWER(nickname) = LOWER($1)', [cleanNick]);
+      if (checkNickResult.rows.length > 0) {
+        await logAction(null, cleanEmail, 'registro_falhou', 'Nickname já em uso: ' + cleanNick);
+        return res.status(400).json({ success: false, error: 'Este Nickname já está em uso.' });
+      }
+
       // Insere o novo usuário
+      const userId = crypto.randomUUID();
       const insertResult = await pool.query(
-        'INSERT INTO users (name, email, password, role, company_name, company_logo, is_approved, telefone, endereco, bairro, cidade, numero, cep) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id, name, email, role, company_name, company_logo, is_approved',
-        [name, cleanEmail, password, requested_role === 'delivery' ? 'delivery' : 'user', company_name || null, company_logo || null, false, telefone || null, endereco || null, bairro || null, cidade || null, numero || null, cep || null]
+        'INSERT INTO users (id, name, email, password, role, company_name, company_logo, is_approved, telefone, endereco, bairro, cidade, numero, cep, nickname) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) RETURNING id, name, email, role, company_name, company_logo, is_approved, nickname',
+        [userId, name, cleanEmail, password, requested_role === 'delivery' ? 'delivery' : 'user', company_name || null, company_logo || null, false, telefone || null, endereco || null, bairro || null, cidade || null, numero || null, cep || null, cleanNick]
       );
       
       const user = insertResult.rows[0];
       await logAction(user.id, user.email, 'registro', 'Conta criada aguardando aprovação');
-      res.json({ success: true, message: 'Cadastro realizado com sucesso. Aguarde a aprovação de um administrador para fazer login.' });
+      res.json({ success: true, user, message: 'Cadastro realizado com sucesso. Aguarde a aprovação de um administrador para fazer login.' });
     } catch (err) {
       console.error('Erro ao registrar usuário:', err);
       res.status(500).json({ success: false, error: 'Erro interno ao tentar registrar a conta.' });

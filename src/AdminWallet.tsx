@@ -545,14 +545,14 @@ export function AdminWallet({
                   <>
                     <div>
                       <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2 block">
-                        ID DO DESTINATÁRIO
+                        DESTINATÁRIO (UUID OU NICKNAME)
                       </label>
                       <input
                         required
-                        type="number"
+                        type="text"
                         value={transferUserId}
                         onChange={(e) => setTransferUserId(e.target.value)}
-                        placeholder="Informe o ID do usuário"
+                        placeholder="Informe o UUID ou o Nickname do destinatário"
                         className="w-full bg-gray-50 border border-gray-200 focus:border-[#007AFF] rounded-2xl px-4 py-3 text-sm font-semibold outline-none"
                       />
                     </div>

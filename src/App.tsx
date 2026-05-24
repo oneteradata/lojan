@@ -69,6 +69,7 @@ function Storefront() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [nickname, setNickname] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [requestedRole, setRequestedRole] = useState('user');
   const [companyLogo, setCompanyLogo] = useState('');
@@ -141,7 +142,7 @@ function Storefront() {
     setAuthError('');
     
     const endpoint = isRegistering ? '/api/register' : '/api/login';
-    const bodyPayload = isRegistering ? { name, email, password, company_name: companyName, company_logo: companyLogo, requested_role: requestedRole, telefone, endereco, bairro, cidade, numero, cep } : { email, password };
+    const bodyPayload = isRegistering ? { name, email, password, company_name: companyName, company_logo: companyLogo, requested_role: requestedRole, telefone, endereco, bairro, cidade, numero, cep, nickname } : { email, password };
 
     try {
       const res = await apiFetch(endpoint, {
@@ -162,17 +163,19 @@ function Storefront() {
            setEmail('');
            setPassword('');
            setName('');
+           setNickname('');
            setCompanyName('');
            setCompanyLogo('');
            return;
         }
 
         if (isRegistering && data.user) {
-            alert(`Cadastrado(a) com sucesso! Seu ID de cadastro é: ${data.user.id}`);
+            alert(`Cadastrado(a) com sucesso! Seu ID de cadastro (UUID) é: ${data.user.id} e seu Nickname é: ${data.user.nickname}`);
         }
         setEmail('');
         setPassword('');
         setName('');
+        setNickname('');
         setCompanyName('');
         setCompanyLogo('');
         setIsRegistering(false);
@@ -454,6 +457,17 @@ function Storefront() {
                         required
                       />
                       <label className="absolute text-[10px] uppercase tracking-wider text-gray-500 top-2 left-4 peer-focus:text-[#007AFF] transition-colors">Nome</label>
+                    </div>
+                    <div className="relative group">
+                      <input 
+                        type="text" 
+                        placeholder="Nickname / Apelido Único" 
+                        value={nickname}
+                        onChange={e => setNickname(e.target.value)}
+                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 pt-5 pb-2 text-sm text-gray-900 peer focus:border-[#007AFF]/50 focus:bg-white transition-all outline-none"
+                        required
+                      />
+                      <label className="absolute text-[10px] uppercase tracking-wider text-gray-500 top-2 left-4 peer-focus:text-[#007AFF] transition-colors">Nickname</label>
                     </div>
                     <div className="flex gap-4 p-2 bg-gray-50 rounded-xl mb-2">
                         <label className="flex items-center gap-2 cursor-pointer">

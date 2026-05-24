@@ -1692,9 +1692,9 @@ export function AdminUsers() {
   const [editingUser, setEditingUser] = useState<any>(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [searchText, setSearchText] = useState('');
-  const [copiedId, setCopiedId] = useState<number | null>(null);
+  const [copiedId, setCopiedId] = useState<any>(null);
   
-  const defaultTeamFormState = { name: '', email: '', password: '', role: 'user', company_name: '', company_logo: '', is_approved: false, can_transfer: true, can_request: true, can_request_delivery: true, telefone: '', cep: '', endereco: '', numero: '', bairro: '', cidade: '' };
+  const defaultTeamFormState = { name: '', email: '', password: '', role: 'user', company_name: '', company_logo: '', is_approved: false, can_transfer: true, can_request: true, can_request_delivery: true, telefone: '', cep: '', endereco: '', numero: '', bairro: '', cidade: '', nickname: '' };
   const defaultClientFormState = { 
     email: '', senha_mestre: '', nome_completo: '', primeiro_nome: '', data_nascimento: '', telegram: '', melhor_horario: '', interesses: '', convite: '', telefone: '', cep: '', endereco: '', numero: '', bairro: '', cidade: ''
   };
@@ -1907,7 +1907,7 @@ export function AdminUsers() {
                        {!u.is_approved && u.role !== 'admin' && <span className="bg-amber-100 text-amber-700 text-[9px] uppercase font-bold px-1.5 py-0.5 rounded shrink-0">Pendente</span>}
                      </p>
                      <p className="text-xs text-[#86868B] mt-0.5 truncate">
-                       {u.company_name ? `${u.company_name} • ${u.email}` : u.email}
+                       {u.nickname ? `@${u.nickname} • ` : ''}{u.company_name ? `${u.company_name} • ${u.email}` : u.email}
                      </p>
                      {u.wallet && u.wallet.tokens && Array.isArray(u.wallet.tokens) && u.wallet.tokens.length > 0 && (
                        <div className="mt-1 flex flex-wrap gap-1">
@@ -1936,7 +1936,7 @@ export function AdminUsers() {
                            password: '', 
                            role: u.role, 
                            company_name: u.company_name || '', 
-                           company_logo: u.company_logo || '',
+                           company_logo: u.company_logo || '', nickname: u.nickname || '',
                            is_approved: u.is_approved,
                            can_transfer: u.can_transfer !== false,
                            can_request: u.can_request !== false,
@@ -2056,7 +2056,13 @@ export function AdminUsers() {
                        <input required type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                      </div>
                      <div>
-                       <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Senha {editingUser ? '(deixe em branco para ignorar)' : ''}</label>
+                       </div>
+                      <div>
+                        <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Nickname (Único)</label>
+                        <input required type="text" value={formData.nickname || ''} onChange={e => setFormData({...formData, nickname: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Ex: admin, vendedor1, etc" />
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-1 block">Senha {editingUser ? '(deixe em branco para ignorar)' : ''}</label>
                        <input required={!editingUser} type="password" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                      </div>
                      <div>
