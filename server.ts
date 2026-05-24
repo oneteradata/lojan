@@ -119,13 +119,17 @@ function extractAllTokens(obj: any): string[] {
       tokens = tokens.concat(extractAllTokens(item));
     }
   } else if (typeof obj === 'object') {
-    for (const key in obj) {
-      if (Object.prototype.hasOwnProperty.call(obj, key)) {
-        tokens = tokens.concat(extractAllTokens(obj[key]));
+    if (Array.isArray(obj.tokens)) {
+      tokens = tokens.concat(extractAllTokens(obj.tokens));
+    } else {
+      for (const key in obj) {
+        if (Object.prototype.hasOwnProperty.call(obj, key)) {
+          tokens = tokens.concat(extractAllTokens(obj[key]));
+        }
       }
     }
   }
-  return tokens;
+  return Array.from(new Set(tokens));
 }
 
 function buildWalletObject(tokens: string[]): any {
