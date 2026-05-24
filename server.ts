@@ -592,6 +592,21 @@ setInterval(async () => {
   } catch(e) { console.error("Cron Error:", e); }
 }, 1000 * 60 * 30); // 30 minutes
 
+// --- LOGIN RATE LIMIT TRACKER ---
+interface LoginFailure {
+  errorCount: number;
+  lastFailureTime: number;
+  lockoutEndTime: number;
+}
+const loginFailures = new Map<string, LoginFailure>();
+
+// --- API & WEBHOOK RATE LIMIT TRACKER ---
+interface RateLimitRecord {
+  requestCount: number;
+  windowStart: number;
+}
+const ipRateLimits = new Map<string, RateLimitRecord>();
+
 async function startServer() {
   const app = express();
   app.use(express.json({ limit: '250mb' }));
@@ -641,6 +656,39 @@ async function startServer() {
 
     if (req.method === 'OPTIONS') {
       return res.sendStatus(200);
+    }
+    next();
+  });
+
+  // --- ANTISCRAPING & EMBEDDING PROTECTION RATELIMIT (10 requests per minute) ---
+  app.use((req, res, next) => {
+    if (req.method === 'OPTIONS') return next();
+
+    const isApiOrWebhook = req.path.startsWith('/api') || req.path.includes('webhook');
+    if (isApiOrWebhook) {
+      const ip = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || 'unknown';
+      const now = Date.now();
+      const windowMs = 60000; // 1 minuto
+      const limit = 10;
+
+      let record = ipRateLimits.get(ip);
+      if (!record) {
+        record = { requestCount: 1, windowStart: now };
+        ipRateLimits.set(ip, record);
+      } else {
+        if (now - record.windowStart < windowMs) {
+          if (record.requestCount >= limit) {
+            return res.status(429).json({ 
+              success: false, 
+              error: 'Bloqueio Antiscraping: Limite de 10 chamadas de API ou Webhook por minuto excedido para este IP.' 
+            });
+          }
+          record.requestCount += 1;
+        } else {
+          record.requestCount = 1;
+          record.windowStart = now;
+        }
+      }
     }
     next();
   });
@@ -2284,33 +2332,73 @@ async function startServer() {
     const { email, password } = req.body;
     const cleanEmail = typeof email === 'string' ? email.trim().toLowerCase() : String(email || '').trim();
     try {
+      // Obter ou criar o tracker de falhas de login para este e-mail
+      const tracker = loginFailures.get(cleanEmail) || { errorCount: 0, lastFailureTime: 0, lockoutEndTime: 0 };
+      
+      // Se estiver no período de bloqueio temporário (1 minuto)
+      if (Date.now() < tracker.lockoutEndTime) {
+        const remainingSec = Math.ceil((tracker.lockoutEndTime - Date.now()) / 1000);
+        return res.status(429).json({
+          success: false,
+          error: `Muitas tentativas incorretas. Login temporariamente bloqueado por ${remainingSec} segundos.`
+        });
+      }
+
       if (!dbConnected) {
         // Fallback de demonstração caso o banco não conecte (Modo dev)
-        if (cleanEmail === 'admin@valentina.com' && password === 'admin') {
-           const user = { id: 1, name: 'Admin Valentina', email: cleanEmail, role: 'admin' };
-           const token = jwt.sign(user, JWT_SECRET, { expiresIn: '1d' });
+        const isDemoAdmin = cleanEmail === 'admin@valentina.com' && password === 'admin';
+        const fallbackUser = fallbackUsers.find(u => (typeof u.email === 'string' ? u.email.trim().toLowerCase() : '') === cleanEmail && u.password === password);
+        
+        if (isDemoAdmin || fallbackUser) {
+           loginFailures.delete(cleanEmail);
+           const user = isDemoAdmin ? { id: 1, name: 'Admin Valentina', email: cleanEmail, role: 'admin' } : fallbackUser;
+           const tokenUser = {
+             id: user.id,
+             name: user.name,
+             email: user.email,
+             role: user.role,
+             company_name: user.company_name,
+             company_logo: user.company_logo
+           };
+           const token = jwt.sign(tokenUser, JWT_SECRET, { expiresIn: '1d' });
            return res.json({ success: true, user, token });
         }
         
-        const fallbackUser = fallbackUsers.find(u => (typeof u.email === 'string' ? u.email.trim().toLowerCase() : '') === cleanEmail && u.password === password);
-        if (fallbackUser) {
-           const tokenUser = {
-             id: fallbackUser.id,
-             name: fallbackUser.name,
-             email: fallbackUser.email,
-             role: fallbackUser.role,
-             company_name: fallbackUser.company_name,
-             company_logo: fallbackUser.company_logo
-           };
-           const token = jwt.sign(tokenUser, JWT_SECRET, { expiresIn: '1d' });
-           return res.json({ success: true, user: fallbackUser, token });
+        // Tratamento de erro no login demo (Incr. falha)
+        tracker.errorCount += 1;
+        tracker.lastFailureTime = Date.now();
+        if (tracker.errorCount === 5) {
+          tracker.lockoutEndTime = Date.now() + 60000; // Bloqueio de 1 minuto
+          loginFailures.set(cleanEmail, tracker);
+          return res.status(429).json({
+            success: false,
+            error: 'Você errou a senha 5 vezes consecutivas em menos de 1 minuto. Acesso bloqueado por 1 minuto.'
+          });
+        } else if (tracker.errorCount >= 10) {
+          loginFailures.delete(cleanEmail);
+          return res.status(403).json({
+            success: false,
+            error: 'Usuário bloqueado permanentemente por segurança após 10 tentativas inválidas de login.'
+          });
+        } else {
+          loginFailures.set(cleanEmail, tracker);
+          return res.status(401).json({
+            success: false,
+            error: `Credenciais inválidas. Tentativa ${tracker.errorCount} de 10.`
+          });
         }
-
-        return res.status(401).json({ success: false, error: 'Credenciais inválidas. Tente admin@valentina.com e admin ou crie uma conta' });
       }
 
-      let dbResult = await pool.query('SELECT id, name, email, role, is_approved, company_name, company_logo, wallet, can_transfer, can_request, can_request_delivery, nickname FROM users WHERE (LOWER(email) = $1 OR LOWER(nickname) = $1 OR id = $1) AND password = $2', [cleanEmail, password]);
+      // Verificação em Banco Produtivo
+      // Primeiro verificar se o usuário existe e se já está bloqueado
+      let userCheck = await pool.query('SELECT role FROM users WHERE LOWER(email) = $1 OR LOWER(nickname) = $1 OR id::text = $1', [cleanEmail]);
+      if (userCheck.rows.length > 0 && userCheck.rows[0].role === 'blocked') {
+        await logAction(null, cleanEmail, 'login_falhou', 'Tentativa de login em usuário já bloqueado');
+        return res.status(403).json({ success: false, error: 'Usuário bloqueado pelo administrador.' });
+      }
 
+      let dbResult = await pool.query('SELECT id, name, email, role, is_approved, company_name, company_logo, wallet, can_transfer, can_request, can_request_delivery, nickname FROM users WHERE (LOWER(email) = $1 OR LOWER(nickname) = $1 OR id::text = $1) AND password = $2', [cleanEmail, password]);
+      
       if (dbResult.rows.length > 0) {
         const user = dbResult.rows[0];
         if (user.role === 'blocked') {
@@ -2322,6 +2410,9 @@ async function startServer() {
            return res.status(403).json({ success: false, error: 'Seu cadastro está aguardando aprovação do administrador.' });
         }
         normalizeUserWallet(user);
+        
+        // Sucesso de login -> limpa mapa de falhas
+        loginFailures.delete(cleanEmail);
         
         // Obter qtde de produtos ativos
         let activeProducts = 0;
@@ -2346,8 +2437,39 @@ async function startServer() {
         const token = jwt.sign(tokenUser, JWT_SECRET, { expiresIn: '1d' });
         res.json({ success: true, user, token });
       } else {
-        await logAction(null, cleanEmail, 'login_falhou', 'Credenciais inválidas');
-        res.status(401).json({ success: false, error: 'Credenciais inválidas. Tente novamente.' });
+        // Incrementa o número de falhas de login
+        tracker.errorCount += 1;
+        tracker.lastFailureTime = Date.now();
+
+        if (tracker.errorCount === 5) {
+          tracker.lockoutEndTime = Date.now() + 60000; // Impede tentativas por 1 minuto (60 segundos)
+          loginFailures.set(cleanEmail, tracker);
+          await logAction(null, cleanEmail, 'login_bloqueio_temp', 'Muitos erros de login. Conta bloqueada temporariamente por 1 minuto.');
+          return res.status(429).json({
+            success: false,
+            error: 'Você errou a senha 5 vezes consecutivas. Acesso bloqueado por 1 minuto.'
+          });
+        } else if (tracker.errorCount >= 10) {
+          // Bloqueia permanentemente o usuário cadastrado no banco de dados mudando a role para blocked
+          try {
+            await pool.query("UPDATE users SET role = 'blocked' WHERE LOWER(email) = $1 OR LOWER(nickname) = $1 OR id::text = $1", [cleanEmail]);
+          } catch(dbErr) {
+            console.error('Erro ao salvar bloqueio definitivo no BD:', dbErr);
+          }
+          loginFailures.delete(cleanEmail);
+          await logAction(null, cleanEmail, 'login_bloqueio_perm', 'Usuário bloqueado por segurança após errar 10 vezes');
+          return res.status(403).json({
+            success: false,
+            error: 'Usuário bloqueado permanentemente por segurança após 10 tentativas inválidas.'
+          });
+        } else {
+          loginFailures.set(cleanEmail, tracker);
+          await logAction(null, cleanEmail, 'login_falhou', `Credenciais inválidas: tentativa ${tracker.errorCount} de 10`);
+          return res.status(401).json({
+            success: false,
+            error: `Credenciais inválidas. Tentativa ${tracker.errorCount} de 10. Você será bloqueado temporariamente por 1 minuto se errar 5 vezes.`
+          });
+        }
       }
     } catch (err) {
       console.error('Erro no login:', err);

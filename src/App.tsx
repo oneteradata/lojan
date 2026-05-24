@@ -440,7 +440,7 @@ function Storefront() {
               <div className="text-center mb-8 relative z-10">
                 <h2 className="font-serif text-3xl mb-2 text-gray-900">{isRegistering ? 'Criar Conta' : 'Acesso Exclusivo'}</h2>
                 <p className="text-[10px] text-[#007AFF] uppercase tracking-[0.2em] font-bold">
-                  {isRegistering ? 'Junte-se à Maison Valentina' : 'Faça login para continuar'}
+                  {isRegistering ? 'Junte-se à Vitrine' : 'Faça login para continuar'}
                 </p>
               </div>
               
@@ -657,10 +657,10 @@ function Storefront() {
               Redefinindo o luxo contemporâneo através de <span className="italic text-[#007AFF]">silhuetas impecáveis</span> e tecidos nobres.
             </h3>
             <p className="font-sans text-sm text-gray-600 leading-relaxed max-w-md mb-8">
-              Cada peça Valentina é uma celebração da feminilidade moderna. Desenhada em nosso ateliê, costurada à mão com maestria e pensada para transcender as estações.
+              Cada peça da Vitrine é uma celebração da sofisticação moderna. Desenhada em nosso ateliê, costurada à mão com maestria e pensada para transcender as estações.
             </p>
             <a href="#" className="font-sans text-xs uppercase tracking-widest flex items-center gap-2 hover:text-[#007AFF] transition-colors text-gray-900 font-bold">
-              Conheça a Maison <ArrowRight className="w-4 h-4" />
+              Conheça a Vitrine <ArrowRight className="w-4 h-4" />
             </a>
           </div>
         </motion.div>
@@ -859,7 +859,7 @@ function Storefront() {
               <div className="w-8 h-[2px] bg-[#007AFF] mb-8"></div>
               
               <p className="text-gray-600 text-sm leading-relaxed mb-10">
-                {selectedProduct.details || selectedProduct.description || 'Uma peça exclusiva da coleção Valentina. Confeccionada com os mais altos padrões de luxo em nosso ateliê, pensada para trazer elegância e sofisticação instantânea ao seu guarda-roupa.'}
+                {selectedProduct.details || selectedProduct.description || 'Uma peça exclusiva da coleção da Vitrine. Confeccionada com os mais altos padrões de luxo em nosso ateliê, pensada para trazer elegância e sofisticação instantânea ao seu guarda-roupa.'}
               </p>
 
               {selectedProduct.variations && selectedProduct.variations.length > 0 && typeof selectedProduct.variations !== 'string' && (
