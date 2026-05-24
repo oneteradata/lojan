@@ -144,13 +144,18 @@ function buildWalletObject(tokens: string[]): any {
 }
 
 function normalizeUserWallet(user: any) {
-  if (!user) return;
-  let rawWallet = user.wallet || {};
-  if (typeof rawWallet === 'string') {
-    try { rawWallet = JSON.parse(rawWallet); } catch (e) {}
+  try {
+    if (!user) return;
+    let rawWallet = user.wallet || {};
+    if (typeof rawWallet === 'string') {
+      try { rawWallet = JSON.parse(rawWallet); } catch (e) {}
+    }
+    const userTokens = extractAllTokens(rawWallet);
+    user.wallet = buildWalletObject(userTokens);
+  } catch (err) {
+    console.error("Erro ao normalizar wallet do usuário:", err);
+    user.wallet = { tokens: [], token_1: [] };
   }
-  const userTokens = extractAllTokens(rawWallet);
-  user.wallet = buildWalletObject(userTokens);
 }
 
 async function logAction(userId: string | number | null, userEmail: string | null, eventName: string, details: string) {
@@ -457,12 +462,12 @@ async function initDB() {
     try { await pool.query(`ALTER TABLE orders ADD COLUMN seller_id INTEGER;`); } catch (e) {}
     try { await pool.query(`ALTER TABLE orders ADD COLUMN default_shipping JSONB;`); } catch (e) {}
 
-    // Inserção de um usuário admin teste se não existir
-    const userResult = await pool.query('SELECT COUNT(*) FROM users');
-    if (parseInt(userResult.rows[0].count) === 0) {
+    // Inserção de um usuário admin teste se não existir por email
+    const adminResult = await pool.query('SELECT id FROM users WHERE email = $1', ['admin@valentina.com']);
+    if (adminResult.rows.length === 0) {
       await pool.query(`
-        INSERT INTO users (email, password, name, role) VALUES 
-        ('admin@valentina.com', 'admin', 'Admin Valentina', 'admin');
+        INSERT INTO users (email, password, name, role, is_approved) VALUES 
+        ('admin@valentina.com', 'admin', 'Admin Valentina', 'admin', true);
       `);
     }
 
@@ -2129,16 +2134,17 @@ async function startServer() {
   // Login de usuários
   app.post('/api/login', async (req, res) => {
     const { email, password } = req.body;
+    const cleanEmail = typeof email === 'string' ? email.trim().toLowerCase() : String(email || '').trim();
     try {
       if (!dbConnected) {
         // Fallback de demonstração caso o banco não conecte (Modo dev)
-        if (email === 'admin@valentina.com' && password === 'admin') {
-           const user = { id: 1, name: 'Admin Valentina', email, role: 'admin' };
+        if (cleanEmail === 'admin@valentina.com' && password === 'admin') {
+           const user = { id: 1, name: 'Admin Valentina', email: cleanEmail, role: 'admin' };
            const token = jwt.sign(user, JWT_SECRET, { expiresIn: '1d' });
            return res.json({ success: true, user, token });
         }
         
-        const fallbackUser = fallbackUsers.find(u => u.email === email && u.password === password);
+        const fallbackUser = fallbackUsers.find(u => (typeof u.email === 'string' ? u.email.trim().toLowerCase() : '') === cleanEmail && u.password === password);
         if (fallbackUser) {
            const token = jwt.sign(fallbackUser, JWT_SECRET, { expiresIn: '1d' });
            return res.json({ success: true, user: fallbackUser, token });
@@ -2148,10 +2154,10 @@ async function startServer() {
       }
 
       let dbResult;
-      if (!isNaN(Number(email))) {
-        dbResult = await pool.query('SELECT id, name, email, role, is_approved, company_name, company_logo, wallet, can_transfer, can_request, can_request_delivery FROM users WHERE (email = $1 OR id = $2) AND password = $3', [email, Number(email), password]);
+      if (cleanEmail && !isNaN(Number(cleanEmail))) {
+        dbResult = await pool.query('SELECT id, name, email, role, is_approved, company_name, company_logo, wallet, can_transfer, can_request, can_request_delivery FROM users WHERE (LOWER(email) = $1 OR id = $2) AND password = $3', [cleanEmail, Number(cleanEmail), password]);
       } else {
-        dbResult = await pool.query('SELECT id, name, email, role, is_approved, company_name, company_logo, wallet, can_transfer, can_request, can_request_delivery FROM users WHERE email = $1 AND password = $2', [email, password]);
+        dbResult = await pool.query('SELECT id, name, email, role, is_approved, company_name, company_logo, wallet, can_transfer, can_request, can_request_delivery FROM users WHERE LOWER(email) = $1 AND password = $2', [cleanEmail, password]);
       }
 
       if (dbResult.rows.length > 0) {
@@ -2179,12 +2185,12 @@ async function startServer() {
         const token = jwt.sign(user, JWT_SECRET, { expiresIn: '1d' });
         res.json({ success: true, user, token });
       } else {
-        await logAction(null, email, 'login_falhou', 'Credenciais inválidas');
+        await logAction(null, cleanEmail, 'login_falhou', 'Credenciais inválidas');
         res.status(401).json({ success: false, error: 'Credenciais inválidas. Tente novamente.' });
       }
     } catch (err) {
-      console.error(err);
-      await logAction(null, email, 'erro', 'Erro no login');
+      console.error('Erro no login:', err);
+      await logAction(null, cleanEmail, 'erro', 'Erro no login: ' + (err as any).message);
       res.status(500).json({ error: 'Erro de conexão com o banco de dados.' });
     }
   });
@@ -2197,29 +2203,31 @@ async function startServer() {
       return res.status(400).json({ success: false, error: 'Preencha todos os campos obrigatórios.' });
     }
 
+    const cleanEmail = typeof email === 'string' ? email.trim().toLowerCase() : String(email || '').trim();
+
     try {
       if (!dbConnected) {
-        const existing = fallbackUsers.find(u => u.email === email);
+        const existing = fallbackUsers.find(u => (typeof u.email === 'string' ? u.email.trim().toLowerCase() : '') === cleanEmail);
         if (existing) {
            return res.status(400).json({ success: false, error: 'Este e-mail já está em uso.' });
         }
-        const user = { id: Date.now(), name, email, password, role: requested_role === 'delivery' ? 'delivery' : 'user', company_name, company_logo };
+        const user = { id: Date.now(), name, email: cleanEmail, password, role: requested_role === 'delivery' ? 'delivery' : 'user', company_name, company_logo };
         fallbackUsers.push(user);
         const token = jwt.sign(user, JWT_SECRET, { expiresIn: '1d' });
         return res.json({ success: true, user, token });
       }
 
       // Verifica se o email já existe
-      const checkResult = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
+      const checkResult = await pool.query('SELECT id FROM users WHERE LOWER(email) = $1', [cleanEmail]);
       if (checkResult.rows.length > 0) {
-        await logAction(null, email, 'registro_falhou', 'E-mail já em uso');
+        await logAction(null, cleanEmail, 'registro_falhou', 'E-mail já em uso');
         return res.status(400).json({ success: false, error: 'Este e-mail já está em uso.' });
       }
 
       // Insere o novo usuário
       const insertResult = await pool.query(
         'INSERT INTO users (name, email, password, role, company_name, company_logo, is_approved, telefone, endereco, bairro, cidade, numero, cep) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id, name, email, role, company_name, company_logo, is_approved',
-        [name, email, password, requested_role === 'delivery' ? 'delivery' : 'user', company_name || null, company_logo || null, false, telefone || null, endereco || null, bairro || null, cidade || null, numero || null, cep || null]
+        [name, cleanEmail, password, requested_role === 'delivery' ? 'delivery' : 'user', company_name || null, company_logo || null, false, telefone || null, endereco || null, bairro || null, cidade || null, numero || null, cep || null]
       );
       
       const user = insertResult.rows[0];
