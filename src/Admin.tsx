@@ -13,6 +13,7 @@ import { GlobalSettings } from "./GlobalSettings";
 import { Wallet, MessageSquare, Menu, Settings } from "lucide-react";
 import { AdminSettings } from "./AdminSettings";
 import { NotificationPanel } from "./components/NotificationPanel";
+import { playSoftNotificationSound } from "./utils";
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -2226,12 +2227,169 @@ export function AdminUsers() {
   );
 }
 
+// -- Floating Toast Notification Component --
+function FloatingToast({ toast, onClose }: { toast: any; onClose: () => void; key?: any }) {
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      onClose();
+    }, 6000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  const getEventStyle = (eventName: string) => {
+    const name = (eventName || '').toLowerCase();
+    if (name === 'compra_registrada') {
+      return {
+        bg: 'border-l-[6px] border-l-[#34C759] bg-white/95 text-gray-900 shadow-xl shadow-green-500/5 dark:bg-[#1C1C1E]/95 dark:text-white',
+        icon: <ShoppingCart className="w-5 h-5 text-[#34C759]" />,
+        title: 'Nova Venda!'
+      };
+    }
+    if (name === 'compra' || name.includes('transf') || name.includes('saque') || name.includes('credito') || name.includes('transferencia')) {
+      return {
+        bg: 'border-l-[6px] border-l-[#007AFF] bg-white/95 text-gray-900 shadow-xl shadow-blue-500/5 dark:bg-[#1C1C1E]/95 dark:text-white',
+        icon: <Wallet className="w-5 h-5 text-[#007AFF]" />,
+        title: 'Movimentação'
+      };
+    }
+    if (name.includes('usuario') || name.includes('registro')) {
+      return {
+        bg: 'border-l-[6px] border-l-[#AF52DE] bg-white/95 text-gray-900 shadow-xl shadow-purple-500/5 dark:bg-[#1C1C1E]/95 dark:text-white',
+        icon: <Users className="w-5 h-5 text-[#AF52DE]" />,
+        title: 'Membro Novo / Equipe'
+      };
+    }
+    if (name.includes('login') || name.includes('auth')) {
+      return {
+        bg: 'border-l-[6px] border-l-[#FF9500] bg-white/95 text-gray-900 shadow-xl shadow-amber-500/5 dark:bg-[#1C1C1E]/95 dark:text-white',
+        icon: <Lock className="w-5 h-5 text-[#FF9500]" />,
+        title: 'Sistema de Acesso'
+      };
+    }
+    if (name.includes('erro') || name.includes('bloqueio') || name.includes('falhou')) {
+      return {
+        bg: 'border-l-[6px] border-l-[#FF3B30] bg-white/95 text-gray-900 shadow-xl shadow-red-500/5 dark:bg-[#1C1C1E]/95 dark:text-white',
+        icon: <Activity className="w-5 h-5 text-[#FF3B30]" />,
+        title: 'Alerta / Bloqueio'
+      };
+    }
+    return {
+      bg: 'border-l-[6px] border-l-[#8E8E93] bg-white/95 text-gray-900 shadow-xl shadow-gray-500/5 dark:bg-[#1C1C1E]/95 dark:text-white',
+      icon: <Bell className="w-5 h-5 text-[#8E8E93]" />,
+      title: 'Atividade'
+    };
+  };
+
+  const style = getEventStyle(toast.eventName);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 50, scale: 0.95 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: -20, scale: 0.9, transition: { duration: 0.2 } }}
+      className={cn(
+        "pointer-events-auto rounded-[1.25rem] p-4 flex gap-3.5 backdrop-blur-md border border-black/5 relative overflow-hidden transition-all duration-300 dark:border-white/5",
+        style.bg
+      )}
+    >
+      <div className="shrink-0 p-2 bg-black/5 dark:bg-white/5 opacity-90 rounded-xl flex items-center justify-center">
+        {style.icon}
+      </div>
+      <div className="flex-1 min-w-0 pr-4 text-left">
+        <h5 className="font-extrabold text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-0.5 leading-none">
+          {style.title}
+        </h5>
+        <p className="font-sans font-bold text-gray-900 dark:text-white text-xs leading-relaxed">
+          {toast.details}
+        </p>
+        {toast.userEmail && (
+          <p className="text-[9px] text-gray-500 font-semibold truncate mt-1">
+            Membro: {toast.userEmail}
+          </p>
+        )}
+      </div>
+      <button 
+        onClick={onClose}
+        className="absolute top-2.5 right-2 text-gray-400 hover:text-gray-900 dark:hover:text-white p-1 rounded-full transition-colors"
+      >
+        <X className="w-3.5 h-3.5" />
+      </button>
+    </motion.div>
+  );
+}
+
 // -- Main Router Shell --
 export default function AdminApp() {
   const [user, setUser] = useState<any>(null);
   const [showNotifications, setShowNotifications] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  
+  // Real-time system notifications
+  const [toasts, setToasts] = useState<any[]>([]);
+  const lastIdRef = React.useRef<number>(0);
+
+  useEffect(() => {
+    if (!user || user.role !== 'admin') return;
+
+    let isMounted = true;
+
+    // 1. Fetch initial logs to prevent spamming previous history on page load/reload
+    const fetchInitial = async () => {
+      try {
+        const res = await apiFetch('/api/admin/live-activity?sinceId=0');
+        const data = await res.json();
+        if (isMounted && data.success && Array.isArray(data.logs) && data.logs.length > 0) {
+          const maxId = Math.max(...data.logs.map((l: any) => l.id));
+          lastIdRef.current = maxId;
+        }
+      } catch (err) {
+        console.error('Erro de inicialização live activity:', err);
+      }
+    };
+
+    fetchInitial();
+
+    // 2. High-frequency active polling every 5 seconds to get events in real-time
+    const interval = setInterval(async () => {
+      if (lastIdRef.current === 0) return; // Wait for initial fetch
+      try {
+        const res = await apiFetch(`/api/admin/live-activity?sinceId=${lastIdRef.current}`);
+        const data = await res.json();
+        if (!isMounted) return;
+        if (data.success && Array.isArray(data.logs) && data.logs.length > 0) {
+          const newLogs = data.logs.filter((l: any) => l.id > lastIdRef.current);
+          if (newLogs.length > 0) {
+            const maxId = Math.max(...newLogs.map((l: any) => l.id));
+            lastIdRef.current = maxId;
+
+            // Play the gentle custom sound tone!
+            playSoftNotificationSound();
+
+            // Set the brand new floating toast notifications
+            setToasts(prev => [
+              ...prev,
+              ...newLogs.map((log: any) => ({
+                id: log.id,
+                eventName: log.event_name,
+                userEmail: log.user_email,
+                details: log.details,
+                createdAt: log.created_at
+              }))
+            ]);
+          }
+        }
+      } catch (err) {
+        console.warn('Erro ao pollar live activities:', err);
+      }
+    }, 5000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [user]);
+
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -2411,6 +2569,19 @@ export default function AdminApp() {
       {showNotifications && (
          <NotificationPanel onClose={() => setShowNotifications(false)} />
       )}
+
+      {/* Floating System Event Toasts */}
+      <div className="fixed bottom-6 right-6 z-[9999] flex flex-col gap-3 max-w-sm w-full pointer-events-none">
+        <AnimatePresence>
+          {toasts.map((toast) => (
+            <FloatingToast 
+              key={toast.id} 
+              toast={toast} 
+              onClose={() => setToasts(prev => prev.filter(t => t.id !== toast.id))} 
+            />
+          ))}
+        </AnimatePresence>
+      </div>
     </div>
   );
 }

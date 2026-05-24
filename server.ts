@@ -1933,6 +1933,25 @@ async function startServer() {
     }
   });
 
+  // GET /api/admin/live-activity
+  app.get('/api/admin/live-activity', requireAuth, async (req: any, res) => {
+    try {
+      if (!dbConnected) return res.json({ success: true, logs: [] });
+      const sinceId = parseInt(req.query.sinceId as string || '0');
+      const isAdmin = req.user.role === 'admin';
+      
+      let dbResult;
+      if (isAdmin) {
+        dbResult = await pool.query('SELECT * FROM logs WHERE id > $1 ORDER BY id ASC LIMIT 100', [sinceId]);
+      } else {
+        dbResult = await pool.query('SELECT * FROM logs WHERE id > $1 AND (user_id = $2 OR user_email = $3) ORDER BY id ASC LIMIT 100', [sinceId, req.user.id, req.user.email]);
+      }
+      res.json({ success: true, logs: dbResult.rows });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
   // ========== CREDITS (PEDIDOS DE CRÉDITO) ==========
   app.get('/api/credit-requests', requireAuth, async (req: any, res) => {
     try {
@@ -2598,6 +2617,8 @@ async function startServer() {
            console.warn(`Erro ao inserir item ${item.id} no pedido ${orderId}. Produto pode ter sido deletado do banco ou o tipo de dado está errado. Msg: ${itemErr.message}`);
          }
       }
+
+      await logAction(userId, null, 'compra_registrada', `Novo pedido #${orderId} no valor total de R$ ${total} registrado com sucesso.`);
 
       res.json({ success: true, orderId });
     } catch (err: any) {
