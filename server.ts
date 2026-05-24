@@ -168,21 +168,28 @@ async function logAction(userId: string | number | null, userEmail: string | nul
   }
 }
 
-async function waitForWebhook(url: string, data: any): Promise<number> {
+async function waitForWebhook(url: string, data: any = null, method: string = 'POST'): Promise<number> {
   const startTime = Date.now();
   let lastStatus = 0;
   
   while (Date.now() - startTime < 30000) {
     try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...data, timestamp: Date.now() })
-      });
+      const options: any = {
+        method: method,
+        headers: {}
+      };
+      if (method === 'POST') {
+        options.headers['Content-Type'] = 'application/json';
+        options.body = JSON.stringify({ ...data, timestamp: Date.now() });
+      } else {
+        options.headers['Accept'] = 'application/json';
+      }
+      
+      const response = await fetch(url, options);
       lastStatus = response.status;
       
       const text = await response.text();
-      console.log(`[waitForWebhook] URL: ${url}, HTTP: ${response.status}, Resposta: ${text}`);
+      console.log(`[waitForWebhook] Method: ${method}, URL: ${url}, HTTP: ${response.status}, Resposta: ${text}`);
       
       let statusVal: any = null;
       try {
@@ -210,8 +217,8 @@ async function waitForWebhook(url: string, data: any): Promise<number> {
       if (response.status === 200 && (statusVal === 200 || statusVal === '200' || statusVal === null)) {
         return 200;
       }
-    } catch (e) {
-      console.error(`Erro ao chamar webhook (${url}):`, e);
+    } catch (e: any) {
+      console.error(`Erro ao chamar webhook (${url}):`, e.message);
     }
     await new Promise(resolve => setTimeout(resolve, 3000));
   }
@@ -786,45 +793,9 @@ async function startServer() {
       const webhookUrl = `https://system.voryx.com.br/webhook/pagamentodetokenemcadastro?userId=${userId}&email=${encodeURIComponent(userEmail)}&productId=${result.rows[0].id}&amount=${requiredAmount}&typeLength=${requiredTypeLength}`;
       console.log(`Disparando webhook de cadastro e aguardando resposta: ${webhookUrl}`);
       
-      let webhookStatus = 0;
-      let responseBodyText = '';
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 30000);
-        
-        const webRes = await fetch(webhookUrl, { 
-          method: 'GET',
-          signal: controller.signal
-        });
-        clearTimeout(timeoutId);
-        
-        webhookStatus = webRes.status;
-        responseBodyText = await webRes.text().catch(() => '');
-        console.log(`[Webhook Sincrono] Retornou status: ${webRes.status}, body: ${responseBodyText}`);
-      } catch (err: any) {
-        console.error('[Webhook Sincrono] Falhou em disparar ou deu timeout:', err.message);
-        webhookStatus = 504;
-      }
+      const webhookStatus = await waitForWebhook(webhookUrl, null, 'GET');
 
-      let parsedStatus: any = null;
-      try {
-        const json = JSON.parse(responseBodyText);
-        if (json && typeof json === 'object') {
-          parsedStatus = json.status !== undefined ? json.status : (json.code !== undefined ? json.code : (json.statusCode !== undefined ? json.statusCode : null));
-        } else if (typeof json === 'number' || typeof json === 'string') {
-          parsedStatus = json;
-        }
-      } catch (jsonErr) {
-        if (responseBodyText.includes('100')) {
-          parsedStatus = 100;
-        } else if (responseBodyText.includes('200')) {
-          parsedStatus = 200;
-        }
-      }
-
-      const isFailed = webhookStatus !== 200 || parsedStatus === 100 || parsedStatus === '100' || parsedStatus === 500;
-
-      if (!isFailed) {
+      if (webhookStatus === 200) {
         // Ativa o produto imediatamente na DB
         await pool.query('UPDATE products SET is_available = true WHERE id = $1', [result.rows[0].id]);
         
@@ -1853,13 +1824,7 @@ async function startServer() {
       const reqId = insertResult.rows[0].id;
       
       // Chamar webhook de saldo com 30s de limite
-      const webhookStatus = await waitForWebhook('https://system.voryx.com.br/webhook/atualizasaldo', {
-         id_solicitacao: reqId,
-         user_id: user_id_recebedor,
-         quantidade: quantidade,
-         tipo_token: tipo_token,
-         tipo_operacao: 'geracao_credito'
-      });
+      const webhookStatus = await waitForWebhook('https://system.voryx.com.br/webhook/atualizasaldo', null, 'GET');
 
       if (webhookStatus !== 200) {
         // Se falhou (timeout ou retorno não-200), cancela inserção e retorna erro padrão
