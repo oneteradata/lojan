@@ -606,12 +606,96 @@ interface RateLimitRecord {
   windowStart: number;
 }
 const ipRateLimits = new Map<string, RateLimitRecord>();
+const blockedIPs = new Set<string>();
 
 async function startServer() {
   const app = express();
   app.use(express.json({ limit: '250mb' }));
   app.use(express.urlencoded({ extended: true, limit: '250mb' }));
   const PORT = 3000;
+
+  // --- ANTI-HACK & ANTI-SCRAPING SECURITY AUDIT (WAF) ---
+  app.use((req: any, res: any, next: any) => {
+    const ip = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || 'unknown';
+
+    // 1. Check if IP is permanently or temporarily blacklisted
+    if (blockedIPs.has(ip)) {
+      return res.status(403).json({
+        success: false,
+        error: "Acesso negado: Seu IP foi bloqueado sob suspeita de hacking, scraping ou ataques maliciosos de acordo com politicas de seguranca."
+      });
+    }
+
+    // 2. Anti-Scraping: Block common headless / scraper / automation user agents
+    const userAgent = (req.headers['user-agent'] || '').toLowerCase();
+    const scraperKeywords = [
+      'puppeteer', 'headless', 'playwright', 'selenium', 'webdriver', 'scrapy', 
+      'python', 'urllib', 'axios', 'node-fetch', 'got-node', 'phantomjs', 'postman', 
+      'curl', 'wget', 'apachebench', 'sqlmap', 'nmap', 'go-http-client', 'java/'
+    ];
+
+    const isBot = scraperKeywords.some(keyword => userAgent.includes(keyword));
+    if (isBot) {
+      blockedIPs.add(ip);
+      console.warn(`[SECURITY WARN] Scraper detected from IP: ${ip}, User-Agent: ${req.headers['user-agent']}`);
+      return res.status(403).json({
+        success: false,
+        error: "Acesso negado: Deteccao Anti-Scraping ativa. Acesso automatizado, scrapers, crawlers ou bots nao sao permitidos nesta plataforma."
+      });
+    }
+
+    // 3. WAF: Inspect request URL, Query parameters, and Body content for hacking exploit payloads (SQLi, XSS, Path Traversal)
+    const hackingPatterns = [
+      /union\s+select/i,
+      /or\s+\d+=\d+/i,
+      /or\s+'\d+'='\d+'/i,
+      /\.\.\//, // Path traversal
+      /\.\.\\/, // Windows path traversal
+      /<\/script>/i, // XSS Script closing
+      /javascript:/i, // javascript protocol injection
+      /onerror=/i,
+      /onload=/i,
+      /xp_cmdshell/i,
+      /drop\s+table/i,
+      /select\s+.*\s+from\s+users/i
+    ];
+
+    // Recursive search in request parameters or objects
+    const hasMaliciousPayload = (val: any): boolean => {
+      if (!val) return false;
+      if (typeof val === 'string') {
+        return hackingPatterns.some(pattern => pattern.test(val));
+      }
+      if (typeof val === 'object') {
+        for (const k in val) {
+          if (Object.prototype.hasOwnProperty.call(val, k)) {
+            if (hasMaliciousPayload(val[k])) return true;
+          }
+        }
+      }
+      return false;
+    };
+
+    // Scan request paths, queries, and request bodies for hacking payloads
+    const cleanUrl = decodeURIComponent(req.originalUrl || req.url || '');
+    if (hackingPatterns.some(pattern => pattern.test(cleanUrl)) || hasMaliciousPayload(req.query) || hasMaliciousPayload(req.body)) {
+      blockedIPs.add(ip);
+      console.warn(`[SECURITY WARN] Malicious payload detected from IP: ${ip}. URL: ${req.originalUrl}`);
+      
+      if (dbConnected) {
+        pool.query('INSERT INTO logs (user_id, user_email, event_name, details, ip_address) VALUES ($1, $2, $3, $4, $5)', [
+          null, null, 'bloqueio_security_waf', `Ataque Bloqueado: Tentativa de payload malicioso detectado. IP adicionado a blacklist do firewall. URL: ${req.originalUrl}`, ip
+        ]).catch(() => {});
+      }
+
+      return res.status(403).json({
+        success: false,
+        error: "Acesso negado: Atividade suspeita detectada pelas regras do WAF. Seu IP foi bloqueado por motivos de seguranca."
+      });
+    }
+
+    next();
+  });
 
   // --- SERVIR UPLOADS LOCAL (FALLBACK SE O MINIO FALHAR) ---
   const uploadsDir = path.join(process.cwd(), 'uploads');
@@ -2136,10 +2220,11 @@ async function startServer() {
     try {
       ipRateLimits.clear();
       loginFailures.clear();
+      blockedIPs.clear();
       if (dbConnected) {
-        await logAction(req.user.id, req.user.email, 'reset_rate_limit', 'Admin limpou todas as tentativas e bloqueios de rate limit de API, Webhook e Login');
+        await logAction(req.user.id, req.user.email, 'reset_rate_limit', 'Admin limpou todas as tentativas e bloqueios de rate limit, blacklists do WAF e Logins');
       }
-      res.json({ success: true, message: 'Todas as tentativas e bloqueios de rate limit de API, Webhook e Login foram reiniciados com sucesso!' });
+      res.json({ success: true, message: 'Todas as tentativas e bloqueios de rate limit, blacklists do WAF e Logins foram reiniciados com sucesso!' });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }

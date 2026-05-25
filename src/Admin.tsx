@@ -13,6 +13,7 @@ import { GlobalSettings } from "./GlobalSettings";
 import { Wallet, MessageSquare, Menu, Settings } from "lucide-react";
 import { AdminSettings } from "./AdminSettings";
 import { NotificationPanel } from "./components/NotificationPanel";
+import { SmartCursor } from "./components/SmartCursor";
 import { playSoftNotificationSound } from "./utils";
 
 function cn(...inputs: ClassValue[]) {
@@ -2324,6 +2325,7 @@ export default function AdminApp() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [showSmartCursor, setShowSmartCursor] = useState(false);
   
   // Real-time system notifications
   const [toasts, setToasts] = useState<any[]>([]);
@@ -2486,6 +2488,11 @@ export default function AdminApp() {
             <span className={cn("text-sm", location.pathname === '/settings' ? "font-bold" : "font-semibold")}>Configurações</span>
           </button>
 
+          <button onClick={() => { setIsMobileMenuOpen(false); setShowSmartCursor(prev => !prev); }} className={cn("flex w-full items-center gap-4 px-5 py-3.5 rounded-2xl transition-all", showSmartCursor ? "bg-[#007AFF] text-white shadow-lg shadow-[#007AFF]/20" : isDark ? "text-gray-300 hover:bg-white/5" : "text-[#414755] hover:bg-white hover:shadow-sm")}>
+            <Sparkles className="w-5 h-5" />
+            <span className={cn("text-sm", showSmartCursor ? "font-bold" : "font-semibold")}>Cursor Inteligente</span>
+          </button>
+
         </nav>
 
         <div className="px-4 mt-auto space-y-2">
@@ -2568,6 +2575,10 @@ export default function AdminApp() {
 
       {showNotifications && (
          <NotificationPanel onClose={() => setShowNotifications(false)} />
+      )}
+
+      {showSmartCursor && (
+        <SmartCursor onClose={() => setShowSmartCursor(false)} isDark={isDark} />
       )}
 
       {/* Floating System Event Toasts */}
