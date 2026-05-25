@@ -24,8 +24,10 @@ export function SmartCursor({ onClose, isDark = false }: SmartCursorProps) {
   const [showSkeleton, setShowSkeleton] = useState(true);
 
   // Sistema Híbrido: Neural ou Óptico
-  const [activeTrackingMode, setActiveTrackingMode] = useState<'neural' | 'optical'>('neural');
+  const [activeTrackingMode, setActiveTrackingMode] = useState<'neural' | 'optical'>('optical');
   const [hoverProgress, setHoverProgress] = useState<number>(0);
+  const [isNeuralLoading, setIsNeuralLoading] = useState(false);
+  const [isNeuralAvailable, setIsNeuralAvailable] = useState(false);
 
   // Refs para controle do Loop e Canvas
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -51,16 +53,16 @@ export function SmartCursor({ onClose, isDark = false }: SmartCursorProps) {
   const lastTimeRef = useRef<number>(Date.now());
   const lastSwipeTimeRef = useRef<number>(0);
 
-  // Injetar script CDN do MediaPipe Hands dinamicamente com timeout para não travar
+  // Injetar script CDN do MediaPipe Hands dinamicamente com timeout rápido para não travar o app
   const loadMediaPipe = async (): Promise<boolean> => {
     if ((window as any).Hands) return true;
 
     return new Promise((resolve) => {
-      // Se não carregar em 3.5 segundos, faz o fallback gracioso para o Motor Óptico Local
+      // Se não carregar em 4 segundos, faz o fallback gracioso para o Motor Óptico Local
       const timeoutId = setTimeout(() => {
-        console.warn("Loading of MediaPipe Hands CDN timed out. Activating smart optical flow sensor...");
+        console.warn("MediaPipe CDN load timed out. Running on local optical flow sensor...");
         resolve(false);
-      }, 3500);
+      }, 4000);
 
       const script = document.createElement('script');
       script.src = 'https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js';
@@ -77,13 +79,74 @@ export function SmartCursor({ onClose, isDark = false }: SmartCursorProps) {
     });
   };
 
-  // Iniciar Câmera e WebRTC
+  // Carregar Rede Neural em segundo plano de forma silenciosa e não-bloqueante
+  const startBackgroundNeuralLoad = async () => {
+    if ((window as any).Hands && isNeuralAvailable) {
+      return;
+    }
+    setIsNeuralLoading(true);
+    setLastAction('Carregando Rede Neural [IA] em segundo plano...');
+    
+    try {
+      const loadSuccess = await loadMediaPipe();
+      if (!loadSuccess || !(window as any).Hands) {
+        setIsNeuralLoading(false);
+        setLastAction('Rede Neural indisponível [Rede lenta ou CDN bloqueado]. Modo Óptico ativo.');
+        return;
+      }
+
+      // Inicializa a instância do detector
+      const hands = new (window as any).Hands({
+        locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+      });
+
+      hands.setOptions({
+        maxNumHands: 1,
+        modelComplexity: 1,
+        minDetectionConfidence: 0.6,
+        minTrackingConfidence: 0.6
+      });
+
+      hands.onResults((results: any) => {
+        onResults(results);
+      });
+
+      handsRef.current = hands;
+      setIsNeuralAvailable(true);
+      setIsNeuralLoading(false);
+      setLastAction('Rede Neural [IA] ativada automaticamente com sucesso!');
+      
+      // Auto upgrade: muda para neural automaticamente se estiver no modo padrão
+      setActiveTrackingMode('neural');
+
+      // Loop de processamento de rede neural
+      const processFrame = async () => {
+        if (videoRef.current && videoRef.current.readyState >= 2 && handsRef.current) {
+          try {
+            await handsRef.current.send({ image: videoRef.current });
+          } catch (err) {
+            // Silencioso se der skip frame
+          }
+        }
+        if (permissionState === 'active' && activeTrackingMode === 'neural') {
+          requestRef.current = requestAnimationFrame(processFrame);
+        }
+      };
+
+      requestRef.current = requestAnimationFrame(processFrame);
+    } catch (err) {
+      console.warn("Could not load neural background model:", err);
+      setIsNeuralLoading(false);
+      setLastAction('Falha ao processar Rede Neural. Usando modo Óptico.');
+    }
+  };
+
+  // Iniciar Câmera e WebRTC com ativação INSTANTÂNEA do Sensor Óptico
   const startCamera = async () => {
     setPermissionState('loading');
     setErrorMessage('');
     try {
-      const loadSuccess = await loadMediaPipe();
-      
+      // 1. Reclama apenas a permissão da câmera (super rápido)
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { width: 320, height: 240, facingMode: 'user' },
         audio: false
@@ -95,14 +158,12 @@ export function SmartCursor({ onClose, isDark = false }: SmartCursorProps) {
         videoRef.current.onloadedmetadata = () => {
           videoRef.current?.play().catch(err => console.error("Video play error:", err));
           
-          if (loadSuccess && (window as any).Hands) {
-            setActiveTrackingMode('neural');
-            initializeTracker();
-          } else {
-            // Entrar em modo óptico ultrarrápido (totalmente local, zero dependências)
-            setActiveTrackingMode('motion');
-            initializeOpticalTracker();
-          }
+          // 2. Transiciona IMEDIATAMENTE para ativo usando o Sensor Óptico Local
+          setActiveTrackingMode('optical');
+          initializeOpticalTracker();
+          
+          // 3. Carrega a rede neural em background de forma totalmente assíncrona
+          startBackgroundNeuralLoad();
         };
       }
     } catch (err: any) {
@@ -138,36 +199,16 @@ export function SmartCursor({ onClose, isDark = false }: SmartCursorProps) {
     };
   }, []);
 
-  // Inicializar o detector de Landmarks do MediaPipe Hands
-  const initializeTracker = () => {
-    if (!(window as any).Hands) {
-      initializeOpticalTracker();
-      return;
-    }
-
-    try {
-      const hands = new (window as any).Hands({
-        locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-      });
-
-      hands.setOptions({
-        maxNumHands: 1,
-        modelComplexity: 1,
-        minDetectionConfidence: 0.6,
-        minTrackingConfidence: 0.6
-      });
-
-      hands.onResults(onResults);
-      handsRef.current = hands;
-
-      setPermissionState('active');
-      setLastAction('Câmera Ativa [Rede Neural]. Mostre a mão aberta.');
-
-      // Iniciar o loop de processamento de frame
+  // Inicializar o detector de Landmarks manualmente
+  const initializeTracker = async () => {
+    if (isNeuralAvailable && handsRef.current) {
+      setActiveTrackingMode('neural');
+      setLastAction('Alternado para Rede Neural [IA].');
+      
       const processFrame = async () => {
-        if (videoRef.current && videoRef.current.readyState >= 2) {
+        if (videoRef.current && videoRef.current.readyState >= 2 && handsRef.current) {
           try {
-            await hands.send({ image: videoRef.current });
+            await handsRef.current.send({ image: videoRef.current });
           } catch (err) {
             // Silencioso se der skip frame
           }
@@ -176,11 +217,10 @@ export function SmartCursor({ onClose, isDark = false }: SmartCursorProps) {
           requestRef.current = requestAnimationFrame(processFrame);
         }
       };
-
       requestRef.current = requestAnimationFrame(processFrame);
-    } catch (err: any) {
-      console.warn("Failing initializing neural, switching to optical tracker...", err);
-      initializeOpticalTracker();
+    } else {
+      // Se ainda não carregou, recomeça o carregamento em background
+      startBackgroundNeuralLoad();
     }
   };
 
@@ -788,19 +828,29 @@ export function SmartCursor({ onClose, isDark = false }: SmartCursorProps) {
               <div className="p-1 px-1 bg-black/5 dark:bg-black/20 rounded-2xl flex items-center gap-1 border border-black/5 dark:border-white/5">
                 <button
                   type="button"
+                  disabled={isNeuralLoading}
                   onClick={() => {
-                    setActiveTrackingMode('neural');
-                    initializeTracker();
+                    if (isNeuralAvailable) {
+                      setActiveTrackingMode('neural');
+                      initializeTracker();
+                    } else {
+                      startBackgroundNeuralLoad();
+                    }
                   }}
                   className={cn(
                     "flex-1 text-[9px] py-2 rounded-xl font-extrabold tracking-wider uppercase transition-all flex items-center justify-center gap-1 cursor-pointer",
                     activeTrackingMode === 'neural' 
                       ? "bg-[#007AFF] text-white shadow-md shadow-[#007AFF]/10" 
-                      : "text-gray-400 hover:text-[#1D1D1F] dark:hover:text-white"
+                      : "text-gray-400 hover:text-[#1D1D1F] dark:hover:text-white",
+                    isNeuralLoading && "opacity-60 cursor-wait"
                   )}
                 >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  Rede Neural [IA]
+                  {isNeuralLoading ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-3.5 h-3.5" />
+                  )}
+                  {isNeuralLoading ? 'Carregando IA...' : !isNeuralAvailable ? 'Modo IA (Ativar)' : 'Rede Neural [IA]'}
                 </button>
                 <button
                   type="button"
