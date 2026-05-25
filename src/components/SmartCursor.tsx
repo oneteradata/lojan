@@ -18,10 +18,14 @@ export function SmartCursor({ onClose, isDark = false }: SmartCursorProps) {
   const [handDetected, setHandDetected] = useState(false);
   const [isClicking, setIsClicking] = useState(false);
   const [isPipVisible, setIsPipVisible] = useState(true);
-  const [sensitivity, setSensitivity] = useState(1.5); // Multiplicador de cursor
-  const [smoothing, setSmoothing] = useState(0.75); // Fator de amortecimento
+  const [sensitivity, setSensitivity] = useState(1.7); // Multiplicador de cursor
+  const [smoothing, setSmoothing] = useState(0.8); // Fator de amortecimento
   const [lastAction, setLastAction] = useState<string>('Inicializando...');
   const [showSkeleton, setShowSkeleton] = useState(true);
+
+  // Sistema Híbrido: Neural ou Óptico
+  const [activeTrackingMode, setActiveTrackingMode] = useState<'neural' | 'optical'>('neural');
+  const [hoverProgress, setHoverProgress] = useState<number>(0);
 
   // Refs para controle do Loop e Canvas
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -37,21 +41,38 @@ export function SmartCursor({ onClose, isDark = false }: SmartCursorProps) {
   const cursorCoords = useRef({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
   const wasClickingRef = useRef(false);
 
+  // Coisas para o Tracker Óptico (Fallback Zero-Dependency)
+  const prevFrameBuffer = useRef<Uint8ClampedArray | null>(null);
+  const hoverTimerRef = useRef<number | null>(null);
+  const hoverTargetRef = useRef<HTMLElement | null>(null);
+
   // Histórico para detecção de gestos (Swipes)
   const lastWristXRef = useRef<number | null>(null);
   const lastTimeRef = useRef<number>(Date.now());
   const lastSwipeTimeRef = useRef<number>(0);
 
-  // Injetar script CDN do MediaPipe Hands dinamicamente
-  const loadMediaPipe = async (): Promise<void> => {
-    if ((window as any).Hands) return Promise.resolve();
+  // Injetar script CDN do MediaPipe Hands dinamicamente com timeout para não travar
+  const loadMediaPipe = async (): Promise<boolean> => {
+    if ((window as any).Hands) return true;
 
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
+      // Se não carregar em 3.5 segundos, faz o fallback gracioso para o Motor Óptico Local
+      const timeoutId = setTimeout(() => {
+        console.warn("Loading of MediaPipe Hands CDN timed out. Activating smart optical flow sensor...");
+        resolve(false);
+      }, 3500);
+
       const script = document.createElement('script');
       script.src = 'https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js';
       script.async = true;
-      script.onload = () => resolve();
-      script.onerror = () => reject(new Error('Não foi possível baixar os pacotes de detecção de gestos de alta performance (MediaPipe CDN).'));
+      script.onload = () => {
+        clearTimeout(timeoutId);
+        resolve(true);
+      };
+      script.onerror = () => {
+        clearTimeout(timeoutId);
+        resolve(false);
+      };
       document.head.appendChild(script);
     });
   };
@@ -61,10 +82,10 @@ export function SmartCursor({ onClose, isDark = false }: SmartCursorProps) {
     setPermissionState('loading');
     setErrorMessage('');
     try {
-      await loadMediaPipe();
+      const loadSuccess = await loadMediaPipe();
       
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 480, height: 360, facingMode: 'user' },
+        video: { width: 320, height: 240, facingMode: 'user' },
         audio: false
       });
 
@@ -73,11 +94,19 @@ export function SmartCursor({ onClose, isDark = false }: SmartCursorProps) {
         videoRef.current.srcObject = stream;
         videoRef.current.onloadedmetadata = () => {
           videoRef.current?.play().catch(err => console.error("Video play error:", err));
-          initializeTracker();
+          
+          if (loadSuccess && (window as any).Hands) {
+            setActiveTrackingMode('neural');
+            initializeTracker();
+          } else {
+            // Entrar em modo óptico ultrarrápido (totalmente local, zero dependências)
+            setActiveTrackingMode('motion');
+            initializeOpticalTracker();
+          }
         };
       }
     } catch (err: any) {
-      console.error('Camera/MediaPipe Error:', err);
+      console.error('Camera Error:', err);
       setPermissionState('error');
       setErrorMessage(err.message || 'Erro de hardware ou permissão negada ao tentar carregar a câmera.');
     }
@@ -98,6 +127,9 @@ export function SmartCursor({ onClose, isDark = false }: SmartCursorProps) {
         console.warn(e);
       }
     }
+    if (hoverTimerRef.current) {
+      window.clearInterval(hoverTimerRef.current);
+    }
   };
 
   useEffect(() => {
@@ -109,8 +141,7 @@ export function SmartCursor({ onClose, isDark = false }: SmartCursorProps) {
   // Inicializar o detector de Landmarks do MediaPipe Hands
   const initializeTracker = () => {
     if (!(window as any).Hands) {
-      setPermissionState('error');
-      setErrorMessage('Classes do MediaPipe Hands não encontradas.');
+      initializeOpticalTracker();
       return;
     }
 
@@ -130,7 +161,7 @@ export function SmartCursor({ onClose, isDark = false }: SmartCursorProps) {
       handsRef.current = hands;
 
       setPermissionState('active');
-      setLastAction('Câmera Ativa. Mostre a mão aberta para começar');
+      setLastAction('Câmera Ativa [Rede Neural]. Mostre a mão aberta.');
 
       // Iniciar o loop de processamento de frame
       const processFrame = async () => {
@@ -138,18 +169,175 @@ export function SmartCursor({ onClose, isDark = false }: SmartCursorProps) {
           try {
             await hands.send({ image: videoRef.current });
           } catch (err) {
-            // Silencioso em caso de frames pulados ou re-layouts rápidos
+            // Silencioso se der skip frame
           }
         }
-        requestRef.current = requestAnimationFrame(processFrame);
+        if (permissionState === 'active' && activeTrackingMode === 'neural') {
+          requestRef.current = requestAnimationFrame(processFrame);
+        }
       };
 
       requestRef.current = requestAnimationFrame(processFrame);
     } catch (err: any) {
-      console.error(err);
-      setPermissionState('error');
-      setErrorMessage(err.message || 'Erro crítico ao inicializar o MediaPipe.');
+      console.warn("Failing initializing neural, switching to optical tracker...", err);
+      initializeOpticalTracker();
     }
+  };
+
+  // --- MOTOR ÓPTICO LOCAL (100% SEGURO, ULTRA PERFORMANCE) ---
+  const initializeOpticalTracker = () => {
+    setActiveTrackingMode('optical');
+    setPermissionState('active');
+    setLastAction('Câmera Ativa [Sensor Óptico]. Mova a mão para mover o cursor.');
+
+    const offscreenCanvas = document.createElement('canvas');
+    offscreenCanvas.width = 160;
+    offscreenCanvas.height = 120;
+    const offCtx = offscreenCanvas.getContext('2d');
+
+    const processOpticalFrame = () => {
+      if (!videoRef.current || videoRef.current.readyState < 2 || !offCtx) {
+        requestRef.current = requestAnimationFrame(processOpticalFrame);
+        return;
+      }
+
+      // 1. Desenhar frame menor no offscreen para maximizar os FPS
+      offCtx.drawImage(videoRef.current, 0, 0, 160, 120);
+      const frameData = offCtx.getImageData(0, 0, 160, 120);
+      const pixels = frameData.data;
+
+      if (!prevFrameBuffer.current) {
+        prevFrameBuffer.current = new Uint8ClampedArray(pixels.length);
+        prevFrameBuffer.current.set(pixels);
+        requestRef.current = requestAnimationFrame(processOpticalFrame);
+        return;
+      }
+
+      const prevPixels = prevFrameBuffer.current;
+      let sumX = 0, sumY = 0, motionCount = 0;
+
+      // 2. Analisar diferença de imagem pixel por pixel (Optical Flow) para pegar o centro da maior movimentação
+      for (let i = 0; i < pixels.length; i += 16) { // Pula a cada 4 pixels (multiplica velocidade por 4x)
+        const rDiff = Math.abs(pixels[i] - prevPixels[i]);
+        const gDiff = Math.abs(pixels[i+1] - prevPixels[i+1]);
+        const bDiff = Math.abs(pixels[i+2] - prevPixels[i+2]);
+        
+        // Se a diferença de cor ultrapassar a tolerância do movimento da mão
+        if (rDiff + gDiff + bDiff > 75) {
+          const pixelIndex = i / 4;
+          const px = pixelIndex % 160;
+          const py = Math.floor(pixelIndex / 160);
+          sumX += px;
+          sumY += py;
+          motionCount++;
+        }
+      }
+
+      // Salvar buffer atual
+      prevFrameBuffer.current.set(pixels);
+
+      const canvas = canvasRef.current;
+      if (canvas) {
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          // Desenhar círculos do radar óptico no canvas
+          if (motionCount > 15) {
+            ctx.fillStyle = 'rgba(0, 122, 255, 0.2)';
+            ctx.beginPath();
+            const rawX = (sumX / motionCount);
+            const rawY = (sumY / motionCount);
+            // Espelhado horizontalmente
+            ctx.arc((1 - rawX / 160) * canvas.width, (rawY / 120) * canvas.height, 12, 0, 2 * Math.PI);
+            ctx.fill();
+          }
+        }
+      }
+
+      // Se houver movimento expressivo, calcula e reposiciona o cursor
+      if (motionCount > 25) {
+        setHandDetected(true);
+
+        const normX = 1 - (sumX / motionCount) / 160; // Espelhado para espelhar a própria câmera
+        const normY = (sumY / motionCount) / 120;
+
+        const screenWidth = window.innerWidth;
+        const screenHeight = window.innerHeight;
+
+        const targetX = (normX - 0.5) * sensitivity * screenWidth + (screenWidth / 2);
+        const targetY = (normY - 0.5) * sensitivity * screenHeight + (screenHeight / 2);
+
+        const boundedX = Math.max(10, Math.min(screenWidth - 10, targetX));
+        const boundedY = Math.max(10, Math.min(screenHeight - 10, targetY));
+
+        const factor = 1 - smoothing;
+        const finalX = cursorCoords.current.x * smoothing + boundedX * factor;
+        const finalY = cursorCoords.current.y * smoothing + boundedY * factor;
+
+        cursorCoords.current = { x: finalX, y: finalY };
+
+        if (cursorRef.current) {
+          cursorRef.current.style.left = `${finalX}px`;
+          cursorRef.current.style.top = `${finalY}px`;
+        }
+
+        // --- SISTEMA INTELIGENTE DE SELEÇÃO HOVER-AND-CLICK ---
+        // Se o cursor estiver em cima de um botão, links ou inputs interativos
+        const hoveredElement = document.elementFromPoint(finalX, finalY) as HTMLElement;
+        if (hoveredElement && (
+          hoveredElement.tagName === 'BUTTON' || 
+          hoveredElement.tagName === 'A' || 
+          hoveredElement.classList.contains('cursor-pointer') ||
+          hoveredElement.closest('button') ||
+          hoveredElement.closest('a')
+        )) {
+          const clickable = (hoveredElement.tagName === 'BUTTON' || hoveredElement.tagName === 'A') 
+            ? hoveredElement 
+            : (hoveredElement.closest('button') || hoveredElement.closest('a') || hoveredElement) as HTMLElement;
+
+          if (hoverTargetRef.current !== clickable) {
+            hoverTargetRef.current = clickable;
+            setHoverProgress(0);
+            if (hoverTimerRef.current) window.clearInterval(hoverTimerRef.current);
+
+            let progress = 0;
+            setLastAction(`Focando elemento clicável...`);
+            hoverTimerRef.current = window.setInterval(() => {
+              progress += 8;
+              if (progress >= 100) {
+                progress = 100;
+                setHoverProgress(100);
+                window.clearInterval(hoverTimerRef.current!);
+                hoverTimerRef.current = null;
+                dispatchVirtualClick(finalX, finalY);
+              } else {
+                setHoverProgress(progress);
+              }
+            }, 80); // Fica parado ~1 segundo sobre o botão para clicar!
+          }
+        } else {
+          // Reseta contagem do clique por hover se mover para longe
+          if (hoverTargetRef.current) {
+            hoverTargetRef.current = null;
+            setHoverProgress(0);
+            if (hoverTimerRef.current) {
+              window.clearInterval(hoverTimerRef.current);
+              hoverTimerRef.current = null;
+            }
+          }
+        }
+
+        // --- DETECÇÃO CONTRA AVANÇAR E VOLTAR (SWIPES HORIZONTAIS) ---
+        const fakeWrist = { x: normX, y: normY };
+        handleSwipeDetection(fakeWrist);
+      } else {
+        setHandDetected(false);
+      }
+
+      requestRef.current = requestAnimationFrame(processOpticalFrame);
+    };
+
+    requestRef.current = requestAnimationFrame(processOpticalFrame);
   };
 
   // Função auxiliar para detecção do gesto de Punho Fechado (Fist)
@@ -422,6 +610,31 @@ export function SmartCursor({ onClose, isDark = false }: SmartCursorProps) {
               transition: 'border-color 0.1s, background-color 0.1s'
             }}
           >
+            {/* Círculo de carregamento de clique automático em Modo Óptico */}
+            {activeTrackingMode === 'optical' && hoverProgress > 0 && (
+              <svg className="absolute w-[44px] h-[44px] transform -rotate-90 pointer-events-none scale-105">
+                <circle
+                  cx="22"
+                  cy="22"
+                  r="18"
+                  stroke={isDark ? "rgba(255, 255, 255, 0.2)" : "rgba(0, 122, 255, 0.15)"}
+                  strokeWidth="3.5"
+                  fill="transparent"
+                />
+                <circle
+                  cx="22"
+                  cy="22"
+                  r="18"
+                  stroke="#34C759"
+                  strokeWidth="4"
+                  fill="transparent"
+                  strokeDasharray={113}
+                  strokeDashoffset={113 - (113 * hoverProgress) / 100}
+                  className="transition-all duration-75 ease-out"
+                />
+              </svg>
+            )}
+
             {/* Ponto central do alvo */}
             <div 
               className="rounded-full shrink-0" 
@@ -569,6 +782,42 @@ export function SmartCursor({ onClose, isDark = false }: SmartCursorProps) {
                 <p className="text-[10px] text-gray-500 dark:text-gray-300 font-bold truncate leading-relaxed">
                   Log: <span className="font-semibold text-gray-400 dark:text-gray-500">{lastAction}</span>
                 </p>
+              </div>
+
+              {/* Seletor de Tecnologia / Modo de Rastreamento */}
+              <div className="p-1 px-1 bg-black/5 dark:bg-black/20 rounded-2xl flex items-center gap-1 border border-black/5 dark:border-white/5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTrackingMode('neural');
+                    initializeTracker();
+                  }}
+                  className={cn(
+                    "flex-1 text-[9px] py-2 rounded-xl font-extrabold tracking-wider uppercase transition-all flex items-center justify-center gap-1 cursor-pointer",
+                    activeTrackingMode === 'neural' 
+                      ? "bg-[#007AFF] text-white shadow-md shadow-[#007AFF]/10" 
+                      : "text-gray-400 hover:text-[#1D1D1F] dark:hover:text-white"
+                  )}
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  Rede Neural [IA]
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTrackingMode('optical');
+                    initializeOpticalTracker();
+                  }}
+                  className={cn(
+                    "flex-1 text-[9px] py-2 rounded-xl font-extrabold tracking-wider uppercase transition-all flex items-center justify-center gap-1 cursor-pointer",
+                    activeTrackingMode === 'optical' 
+                      ? "bg-[#34C759] text-white shadow-md shadow-[#34C759]/10" 
+                      : "text-gray-400 hover:text-[#1D1D1F] dark:hover:text-white"
+                  )}
+                >
+                  <Hand className="w-3.5 h-3.5" />
+                  Sensor Óptico [Local]
+                </button>
               </div>
 
               {/* Ajustes de Rastreamento (Calibração) */}
