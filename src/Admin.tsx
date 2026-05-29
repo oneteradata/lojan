@@ -998,8 +998,9 @@ function ProductModal({ item, user, onClose }: { item?: any, user?: any, onClose
               </div>
               <input 
                 type="text" placeholder="Nome do produto" 
+                disabled={!!item && user?.role === 'user'}
                 value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})}
-                className="w-full bg-white border border-gray-200 focus:border-[#007AFF] rounded-2xl px-4 py-3.5 text-sm outline-none transition-all shadow-sm"
+                className="w-full bg-white border border-gray-200 focus:border-[#007AFF] rounded-2xl px-4 py-3.5 text-sm outline-none transition-all shadow-sm disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
               />
             </div>
 
@@ -1249,92 +1250,101 @@ function ProductModal({ item, user, onClose }: { item?: any, user?: any, onClose
                   ))}
                </div>
             </div>
+
+         {/* Seção Reservada para Confirmação e Botão Salvar (abaixo dos inputs) */}
+         <div className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm mt-6 mb-2">
+           {(() => {
+             const duration = parseInt(formData.duration_days) === 30 ? 30 : 7;
+             let requiredAmount = 1;
+             let requiredTypeLength = 128;
+             
+             if (duration === 30) {
+               requiredAmount = settings && settings.cost_30d_amount !== null ? settings.cost_30d_amount : 2;
+               requiredTypeLength = settings && settings.cost_30d_type !== null ? settings.cost_30d_type : 256;
+             } else {
+               requiredAmount = settings && settings.cost_7d_amount !== null ? settings.cost_7d_amount : (settings?.product_token_cost_amount || 1);
+               requiredTypeLength = settings && settings.cost_7d_type !== null ? settings.cost_7d_type : (settings?.product_token_cost_type || 128);
+             }
+
+             const isUserAdmin = user?.role === 'admin';
+             const availableMatchingTokens = Array.isArray(user?.wallet?.tokens)
+               ? user?.wallet?.tokens.filter((t: string) => t && typeof t === 'string' && t.length === requiredTypeLength).length
+               : 0;
+
+             const hasEnoughTokens = isUserAdmin || availableMatchingTokens >= requiredAmount;
+
+             if (showConfirmation) {
+               return (
+                 <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 flex flex-col gap-3">
+                    <div>
+                      <h4 className="font-bold text-[#1D1D1F] text-sm">{item ? 'Confirmar Edição' : 'Confirmar Cadastro'}</h4>
+                      {!item ? (
+                        <div className="text-xs text-blue-800 mt-1.5 space-y-1">
+                          <p>Ao cadastrar o produto, os tokens correspondentes ao anúncio serão liquidados do seu saldo após conclusão.</p>
+                          <div className="mt-2.5 p-3 bg-white/75 rounded-xl border border-blue-100 space-y-1">
+                            <p className="flex justify-between">
+                              <span className="text-gray-500 font-medium">Plano Publicação:</span>
+                              <span className="font-bold text-[#1D1D1F]">{duration} dias</span>
+                            </p>
+                            <p className="flex justify-between">
+                              <span className="text-gray-500 font-medium">Custo Exigido:</span>
+                              <span className="font-bold text-[#007AFF]">{requiredAmount} token(s) (Tipo E{requiredTypeLength})</span>
+                            </p>
+                            <p className="flex justify-between">
+                              <span className="text-gray-500 font-medium">Seu Saldo Disponível:</span>
+                              <span className={`font-bold ${hasEnoughTokens ? 'text-green-600' : 'text-red-500'}`}>{availableMatchingTokens} token(s) (Tipo E{requiredTypeLength})</span>
+                            </p>
+                          </div>
+                          {hasEnoughTokens ? (
+                            <p className="text-green-700 font-semibold mt-2.5">✓ Saldo disponível suficiente. O anúncio será cadastrado e ficará Pendente até a aprovação automática pelo webhook.</p>
+                          ) : (
+                            <p className="text-red-600 font-bold mt-2.5">✗ Você não tem saldo de eTokens do tipo E{requiredTypeLength} suficiente para este anúncio. Por favor, adquira mais moedas.</p>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-blue-800 mt-1">Deseja autorizar as alterações no produto?</p>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => setShowConfirmation(false)} className="flex-1 bg-white text-blue-600 font-bold text-xs py-3 rounded-xl border border-blue-200 hover:bg-blue-50 transition-colors">Cancelar</button>
+                      <button 
+                        onClick={handleSubmit} 
+                        disabled={loading || uploading || (!item && !hasEnoughTokens)} 
+                        className="flex-1 bg-[#007AFF] text-white font-bold text-xs py-3 rounded-xl shadow-sm hover:bg-[#0066CC] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {loading ? 'Processando...' : 'Autorizar & Concluir'}
+                      </button>
+                    </div>
+                 </div>
+               );
+             }
+
+             return (
+               <button 
+                 type="button"
+                 onClick={() => setShowConfirmation(true)} 
+                 disabled={loading || uploading}
+                 className="w-full bg-[#007AFF] hover:bg-[#0066CC] active:scale-[0.99] transition-all text-white font-semibold rounded-2xl py-4 flex items-center justify-center shadow-lg shadow-blue-500/20 disabled:opacity-70 disabled:cursor-not-allowed"
+               >
+                 {loading ? 'Processando...' : <><RefreshCw className="w-4 h-4 mr-2" /> Salvar Produto</>}
+               </button>
+             );
+           })()}
          </div>
 
-          <div className="px-6 py-5 border-t border-gray-100 bg-white sm:rounded-b-[32px]">{item && <ProductInteractionsArea item={item} user={user} />}
-             {(() => {
-               const duration = parseInt(formData.duration_days) === 30 ? 30 : 7;
-               let requiredAmount = 1;
-               let requiredTypeLength = 128;
-               
-               if (duration === 30) {
-                 requiredAmount = settings && settings.cost_30d_amount !== null ? settings.cost_30d_amount : 2;
-                 requiredTypeLength = settings && settings.cost_30d_type !== null ? settings.cost_30d_type : 256;
-               } else {
-                 requiredAmount = settings && settings.cost_7d_amount !== null ? settings.cost_7d_amount : (settings?.product_token_cost_amount || 1);
-                 requiredTypeLength = settings && settings.cost_7d_type !== null ? settings.cost_7d_type : (settings?.product_token_cost_type || 128);
-               }
-
-               const isUserAdmin = user?.role === 'admin';
-               const availableMatchingTokens = Array.isArray(user?.wallet?.tokens)
-                 ? user?.wallet?.tokens.filter((t: string) => t && typeof t === 'string' && t.length === requiredTypeLength).length
-                 : 0;
-
-               const hasEnoughTokens = isUserAdmin || availableMatchingTokens >= requiredAmount;
-
-               if (showConfirmation) {
-                 return (
-                   <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 flex flex-col gap-3">
-                      <div>
-                        <h4 className="font-bold text-[#1D1D1F] text-sm">{item ? 'Confirmar Edição' : 'Confirmar Cadastro'}</h4>
-                        {!item ? (
-                          <div className="text-xs text-blue-800 mt-1.5 space-y-1">
-                            <p>Ao cadastrar o produto, os tokens correspondentes ao anúncio serão liquidados do seu saldo após conclusão.</p>
-                            <div className="mt-2.5 p-3 bg-white/75 rounded-xl border border-blue-100 space-y-1">
-                              <p className="flex justify-between">
-                                <span className="text-gray-500 font-medium">Plano Publicação:</span>
-                                <span className="font-bold text-[#1D1D1F]">{duration} dias</span>
-                              </p>
-                              <p className="flex justify-between">
-                                <span className="text-gray-500 font-medium">Custo Exigido:</span>
-                                <span className="font-bold text-[#007AFF]">{requiredAmount} token(s) (Tipo E{requiredTypeLength})</span>
-                              </p>
-                              <p className="flex justify-between">
-                                <span className="text-gray-500 font-medium">Seu Saldo Disponível:</span>
-                                <span className={`font-bold ${hasEnoughTokens ? 'text-green-600' : 'text-red-500'}`}>{availableMatchingTokens} token(s) (Tipo E{requiredTypeLength})</span>
-                              </p>
-                            </div>
-                            {hasEnoughTokens ? (
-                              <p className="text-green-700 font-semibold mt-2.5">✓ Saldo disponível suficiente. O anúncio será cadastrado e ficará Pendente até a aprovação automática pelo webhook.</p>
-                            ) : (
-                              <p className="text-red-600 font-bold mt-2.5">✗ Você não tem saldo de eTokens do tipo E{requiredTypeLength} suficiente para este anúncio. Por favor, adquira mais moedas.</p>
-                            )}
-                          </div>
-                        ) : (
-                          <p className="text-xs text-blue-800 mt-1">Deseja autorizar as alterações no produto?</p>
-                        )}
-                      </div>
-                      <div className="flex gap-2">
-                        <button onClick={() => setShowConfirmation(false)} className="flex-1 bg-white text-blue-600 font-bold text-xs py-3 rounded-xl border border-blue-200 hover:bg-blue-50 transition-colors">Cancelar</button>
-                        <button 
-                          onClick={handleSubmit} 
-                          disabled={loading || uploading || (!item && !hasEnoughTokens)} 
-                          className="flex-1 bg-[#007AFF] text-white font-bold text-xs py-3 rounded-xl shadow-sm hover:bg-[#0066CC] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          {loading ? 'Processando...' : 'Autorizar & Concluir'}
-                        </button>
-                      </div>
-                   </div>
-                 );
-               }
-
-               return (
-                 <button 
-                   onClick={() => setShowConfirmation(true)} 
-                   disabled={loading || uploading}
-                   className="w-full bg-[#007AFF] hover:bg-[#0066CC] active:scale-[0.99] transition-all text-white font-semibold rounded-2xl py-4 flex items-center justify-center shadow-lg shadow-blue-500/20 disabled:opacity-70 disabled:cursor-not-allowed"
-                 >
-                   {loading ? 'Processando...' : <><RefreshCw className="w-4 h-4 mr-2" /> Salvar Produto</>}
-                 </button>
-               );
-             })()}
-          </div>
+         {/* Seção de Métricas de Engajamento e Histórico de Feedback (abaixo de tudo!) */}
+         {item && (
+           <div className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm mt-6">
+             <ProductInteractionsArea item={item} user={user} hideInteractions={true} />
+           </div>
+         )}
+         </div>
        </motion.div>
     </div>
   );
 }
 
-function ProductInteractionsArea({ item, user }: { item: any, user: any }) {
+function ProductInteractionsArea({ item, user, hideInteractions = false }: { item: any, user?: any, hideInteractions?: boolean }) {
   const [likesCount, setLikesCount] = useState(item.likes_count || 0);
   const [liked, setLiked] = useState(false);
   const [comments, setComments] = useState<any[]>([]);
@@ -1411,19 +1421,21 @@ function ProductInteractionsArea({ item, user }: { item: any, user: any }) {
           <span>📊 Estatísticas & Feedback</span>
         </h3>
         
-        <button
-          onClick={handleToggleLike}
-          type="button"
-          className={cn(
-            "h-9 px-4 rounded-full border text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer active:scale-95",
-            liked 
-              ? "bg-red-50 border-red-100 text-red-500 shadow-sm shadow-red-500/10" 
-              : "bg-white border-gray-200 hover:bg-gray-50 text-gray-600"
-          )}
-        >
-          <Heart className={cn("w-4 h-4", liked && "fill-current")} />
-          <span>{liked ? 'Curtido' : 'Curtir'}</span>
-        </button>
+        {!hideInteractions && (
+          <button
+            onClick={handleToggleLike}
+            type="button"
+            className={cn(
+              "h-9 px-4 rounded-full border text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer active:scale-95",
+              liked 
+                ? "bg-red-50 border-red-100 text-red-500 shadow-sm shadow-red-500/10" 
+                : "bg-white border-gray-200 hover:bg-gray-50 text-gray-600"
+            )}
+          >
+            <Heart className={cn("w-4 h-4", liked && "fill-current")} />
+            <span>{liked ? 'Curtido' : 'Curtir'}</span>
+          </button>
+        )}
       </div>
 
       {/* Grid de Métricas do Produto */}
@@ -1451,23 +1463,25 @@ function ProductInteractionsArea({ item, user }: { item: any, user: any }) {
         <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest">Comentários ({comments.length})</h4>
         
         {/* Escrever comentário */}
-        <form onSubmit={handleAddComment} className="flex gap-2">
-          <input
-            type="text"
-            placeholder="Escreva um comentário sobre o anúncio..."
-            value={newComment}
-            onChange={e => setNewComment(e.target.value)}
-            className="flex-1 bg-white border border-gray-200 focus:border-[#007AFF] rounded-xl px-4 py-2.5 text-xs outline-none transition-all shadow-sm"
-            required
-          />
-          <button
-            type="submit"
-            disabled={sendingComment || !newComment.trim()}
-            className="px-4 bg-[#007AFF] hover:bg-blue-600 text-white font-bold text-xs rounded-xl flex items-center justify-center transition-all cursor-pointer disabled:opacity-50"
-          >
-            {sendingComment ? '...' : 'Enviar'}
-          </button>
-        </form>
+        {!hideInteractions && (
+          <form onSubmit={handleAddComment} className="flex gap-2">
+            <input
+              type="text"
+              placeholder="Escreva um comentário sobre o anúncio..."
+              value={newComment}
+              onChange={e => setNewComment(e.target.value)}
+              className="flex-1 bg-white border border-gray-200 focus:border-[#007AFF] rounded-xl px-4 py-2.5 text-xs outline-none transition-all shadow-sm"
+              required
+            />
+            <button
+              type="submit"
+              disabled={sendingComment || !newComment.trim()}
+              className="px-4 bg-[#007AFF] hover:bg-blue-600 text-white font-bold text-xs rounded-xl flex items-center justify-center transition-all cursor-pointer disabled:opacity-50"
+            >
+              {sendingComment ? '...' : 'Enviar'}
+            </button>
+          </form>
+        )}
 
         {/* Lista de Comentários */}
         <div className="space-y-3 max-h-56 overflow-y-auto pr-1 scrollbar-none">

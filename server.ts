@@ -1119,9 +1119,14 @@ async function startServer() {
             return res.status(403).json({ success: false, error: 'Sem permissão para deletar este produto.' });
          }
       }
+      // Deletar todas as interações, comentários, curtidas, cliques, visualizações e itens de pedidos associados ao produto
       await pool.query('DELETE FROM product_interactions WHERE product_id = $1', [req.params.id]);
       await pool.query('DELETE FROM product_views WHERE product_id = $1', [req.params.id]);
       await pool.query('DELETE FROM product_clicks WHERE product_id = $1', [req.params.id]);
+      await pool.query('DELETE FROM product_likes WHERE product_id = $1', [req.params.id]);
+      await pool.query('DELETE FROM product_comments WHERE product_id = $1', [req.params.id]);
+      await pool.query('DELETE FROM order_items WHERE product_id = $1', [req.params.id]);
+
       const dbResult = await pool.query('DELETE FROM products WHERE id = $1 RETURNING id', [req.params.id]);
       if (dbResult.rows.length > 0) {
           await logAction(req.user.id, userEmail, 'produto_removido', `Produto ${req.params.id} removido`);
@@ -1130,6 +1135,7 @@ async function startServer() {
           res.status(404).json({ success: false, error: 'Produto não encontrado.' });
       }
     } catch(err) {
+      console.error('Erro ao deletar produto:', err);
       res.status(500).json({ success: false, error: 'Erro ao deletar produto.' });
     }
   });
@@ -1148,6 +1154,11 @@ async function startServer() {
       
       if (!isAdmin && productObj.rows[0].user_id !== req.user.id) {
           return res.status(403).json({ success: false, error: 'Sem permissão para editar este produto' });
+      }
+
+      // Impedir de atualizar o nome do produto se o papel do usuário for 'user'
+      if (req.user.role === 'user' && name && name !== productObj.rows[0].name) {
+        return res.status(400).json({ success: false, error: 'Impedido: Usuários com papel "user" não podem alterar o nome do produto.' });
       }
 
       // Se for admin, permite alterar is_available, se não, mantém o anterior
