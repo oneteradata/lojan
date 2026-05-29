@@ -460,7 +460,60 @@ async function initDB() {
     try { await pool.query(`ALTER TABLE system_settings ADD COLUMN cost_30d_amount INTEGER DEFAULT 2;`); } catch (e) {}
     try { await pool.query(`ALTER TABLE system_settings ADD COLUMN cost_30d_type INTEGER DEFAULT 256;`); } catch (e) {}
     try { await pool.query(`ALTER TABLE products ADD COLUMN duration_days INTEGER DEFAULT 7;`); } catch (e) {}
-    try { await pool.query(`ALTER TABLE logs ALTER COLUMN user_id TYPE VARCHAR(255);`); } catch (e) {}
+    
+    // Suporte robusto a UUID nas tabelas acessórias
+    try { await pool.query(`ALTER TABLE logs ALTER COLUMN user_id TYPE VARCHAR(255) USING user_id::text;`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE product_views ALTER COLUMN user_id TYPE VARCHAR(255) USING user_id::text;`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE product_clicks ALTER COLUMN user_id TYPE VARCHAR(255) USING user_id::text;`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE product_interactions ALTER COLUMN user_id TYPE VARCHAR(255) USING user_id::text;`); } catch (e) {}
+    
+    // Criação das tabelas auxiliares de Likes e Comentários do Produto
+    try {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS product_likes (
+          id SERIAL PRIMARY KEY,
+          product_id INTEGER NOT NULL,
+          user_id VARCHAR(255) NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(product_id, user_id)
+        );
+      `);
+    } catch(e) {}
+
+    try {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS product_comments (
+          id SERIAL PRIMARY KEY,
+          product_id INTEGER NOT NULL,
+          user_id VARCHAR(255) NOT NULL,
+          user_name VARCHAR(255) NOT NULL,
+          user_image TEXT,
+          comment TEXT NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+    } catch(e) {}
+
+    // Criação da tabela de sessões MFA para Login por QR Code
+    try {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS mfa_sessions (
+          id SERIAL PRIMARY KEY,
+          session_token VARCHAR(255) UNIQUE NOT NULL,
+          status VARCHAR(50) DEFAULT 'pending',
+          user_id VARCHAR(255),
+          jwt_token TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          expires_at TIMESTAMP NOT NULL
+        );
+      `);
+    } catch(e) {}
+
+    // Colunas de MFA e Biometria na tabela de usuários
+    try { await pool.query(`ALTER TABLE users ADD COLUMN mfa_biometric_enabled BOOLEAN DEFAULT false;`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE users ADD COLUMN mfa_device_id VARCHAR(255);`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE users ADD COLUMN mfa_device_name VARCHAR(255);`); } catch (e) {}
+
     try { await pool.query(`ALTER TABLE logs ADD COLUMN status BOOLEAN DEFAULT false;`); } catch (e) {}
     try { await pool.query(`ALTER TABLE products ADD COLUMN is_available BOOLEAN DEFAULT false;`); } catch (e) {}
     try { await pool.query(`ALTER TABLE products ADD COLUMN req_token_amount INTEGER DEFAULT 1;`); } catch (e) {}
@@ -809,6 +862,8 @@ async function startServer() {
           SELECT p.*,
                  (SELECT COUNT(*) FROM product_views WHERE product_id = p.id) as views_count,
                  (SELECT COUNT(*) FROM product_clicks WHERE product_id = p.id) as clicks_count,
+                 (SELECT COUNT(*) FROM product_likes WHERE product_id = p.id) as likes_count,
+                 (SELECT COUNT(*) FROM product_comments WHERE product_id = p.id) as comments_count,
                  (SELECT COUNT(*) FROM product_interactions WHERE product_id = p.id) as interactions_count
           FROM products p
           ORDER BY p.id DESC
@@ -818,6 +873,8 @@ async function startServer() {
           SELECT p.*,
                  (SELECT COUNT(*) FROM product_views WHERE product_id = p.id) as views_count,
                  (SELECT COUNT(*) FROM product_clicks WHERE product_id = p.id) as clicks_count,
+                 (SELECT COUNT(*) FROM product_likes WHERE product_id = p.id) as likes_count,
+                 (SELECT COUNT(*) FROM product_comments WHERE product_id = p.id) as comments_count,
                  (SELECT COUNT(*) FROM product_interactions WHERE product_id = p.id) as interactions_count
           FROM products p
           WHERE p.user_id = $1
@@ -2436,13 +2493,292 @@ async function startServer() {
     }
   });
 
-  app.delete('/api/user_client/:id', requireAuth, requireAdmin, async (req, res) => {
+  // ========== REQ: BIOMETRIA, LIKES, COMENTARIOS E LOGS ENDPOINTS ==========
+
+  // Curtir/Descurtir Produto
+  app.post('/api/products/:id/like', requireAuth, async (req: any, res) => {
     try {
       if (!dbConnected) throw new Error("DB offline");
-      await pool.query('DELETE FROM user_client WHERE id = $1', [req.params.id]);
-      res.json({ success: true });
-    } catch(err) {
-      res.status(500).json({ success: false, error: 'Erro ao deletar cliente.' });
+      const product_id = parseInt(req.params.id);
+      const user_id = req.user.id;
+
+      const checkLike = await pool.query('SELECT * FROM product_likes WHERE product_id = $1 AND user_id = $2', [product_id, user_id]);
+      if (checkLike.rows.length > 0) {
+        await pool.query('DELETE FROM product_likes WHERE product_id = $1 AND user_id = $2', [product_id, user_id]);
+        return res.json({ success: true, liked: false, message: 'Curtida removida com sucesso.' });
+      } else {
+        await pool.query('INSERT INTO product_likes (product_id, user_id) VALUES ($1, $2)', [product_id, user_id]);
+        return res.json({ success: true, liked: true, message: 'Produto curtido com sucesso.' });
+      }
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Verificar se o usuário curtiu determinado produto
+  app.get('/api/products/:id/liked', requireAuth, async (req: any, res) => {
+    try {
+      if (!dbConnected) throw new Error("DB offline");
+      const product_id = parseInt(req.params.id);
+      const user_id = req.user.id;
+      const checkLike = await pool.query('SELECT * FROM product_likes WHERE product_id = $1 AND user_id = $2', [product_id, user_id]);
+      res.json({ success: true, liked: checkLike.rows.length > 0 });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Obter Likes de um Produto
+  app.get('/api/products/:id/likes', async (req: any, res) => {
+    try {
+      if (!dbConnected) throw new Error("DB offline");
+      const product_id = parseInt(req.params.id);
+      const result = await pool.query('SELECT COUNT(*) FROM product_likes WHERE product_id = $1', [product_id]);
+      res.json({ success: true, count: parseInt(result.rows[0].count) || 0 });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Comentar em um Produto
+  app.post('/api/products/:id/comments', requireAuth, async (req: any, res) => {
+    try {
+      if (!dbConnected) throw new Error("DB offline");
+      const product_id = parseInt(req.params.id);
+      const { comment } = req.body;
+      const user_id = req.user.id;
+      const user_name = req.user.name || 'Usuário';
+
+      if (!comment || comment.trim() === '') {
+        return res.status(400).json({ success: false, error: 'Comentário não pode ser vazio.' });
+      }
+
+      const insertRes = await pool.query(
+        'INSERT INTO product_comments (product_id, user_id, user_name, comment) VALUES ($1, $2, $3, $4) RETURNING *',
+        [product_id, user_id, user_name, comment]
+      );
+
+      res.json({ success: true, comment: insertRes.rows[0] });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Listar Comentários de um Produto
+  app.get('/api/products/:id/comments', async (req: any, res) => {
+    try {
+      if (!dbConnected) throw new Error("DB offline");
+      const product_id = parseInt(req.params.id);
+      const result = await pool.query('SELECT * FROM product_comments WHERE product_id = $1 ORDER BY created_at DESC', [product_id]);
+      res.json({ success: true, comments: result.rows });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Configuração do MFA pelo próprio usuário logado
+  app.post('/api/users/me/toggle-mfa', requireAuth, async (req: any, res) => {
+    try {
+      if (!dbConnected) throw new Error("DB offline");
+      const { enabled } = req.body;
+      const userId = req.user.id;
+      const deviceId = crypto.randomUUID();
+      const deviceName = 'Celular Biométrico Cadastrado';
+
+      if (enabled) {
+        await pool.query(
+          "UPDATE users SET mfa_biometric_enabled = true, mfa_device_id = $1, mfa_device_name = $2 WHERE id = $3",
+          [deviceId, deviceName, userId]
+        );
+        await logAction(userId, req.user.email, 'mfa_ativado', 'Ativou autenticação rápida de 2 fatores por digital');
+        res.json({ success: true, mfa_biometric_enabled: true, mfa_device_id: deviceId, mfa_device_name: deviceName });
+      } else {
+        await pool.query(
+          "UPDATE users SET mfa_biometric_enabled = false, mfa_device_id = NULL, mfa_device_name = NULL WHERE id = $1",
+          [userId]
+        );
+        await logAction(userId, req.user.email, 'mfa_desativado', 'Desativou autenticação por digital de 2 fatores');
+        res.json({ success: true, mfa_biometric_enabled: false });
+      }
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Reset do MFA de um usuário feito apenas por um Administrador
+  app.post('/api/admin/users/:id/reset-mfa', requireAuth, requireAdmin, async (req: any, res) => {
+    try {
+      if (!dbConnected) throw new Error("DB offline");
+      const targetUserId = req.params.id;
+
+      await pool.query(
+        "UPDATE users SET mfa_biometric_enabled = false, mfa_device_id = NULL, mfa_device_name = NULL WHERE id = $1",
+        [targetUserId]
+      );
+      
+      await logAction(req.user.id, req.user.email, 'admin_reset_mfa', `MFA biométrico desativado pelo admin para o usuário ID: ${targetUserId}`);
+      res.json({ success: true, message: 'Autenticação multifator biométrica redefinida (desativada) com sucesso.' });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Criar uma nova sessão MFA para QR Code (chamado pela tela de login)
+  app.post('/api/auth/mfa/initiate', async (req: any, res) => {
+    try {
+      if (!dbConnected) throw new Error("DB offline");
+      const session_token = crypto.randomUUID();
+      const expires_at = new Date(Date.now() + 120 * 1000); // 2 minutos
+
+      await pool.query(
+        "INSERT INTO mfa_sessions (session_token, status, expires_at) VALUES ($1, $2, $3)",
+        [session_token, 'pending', expires_at]
+      );
+
+      res.json({
+        success: true,
+        session_token,
+        token: session_token,
+        expires_at
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Consultar status de uma sessão MFA (Desktop polla esse endpoint)
+  app.get('/api/auth/mfa/check', async (req: any, res) => {
+    try {
+      if (!dbConnected) throw new Error("DB offline");
+      const { token } = req.query;
+
+      if (!token) return res.status(400).json({ success: false, error: 'Token é necessário' });
+
+      const result = await pool.query("SELECT * FROM mfa_sessions WHERE session_token = $1", [token]);
+      if (result.rows.length === 0) {
+        return res.status(404).json({ success: false, status: 'expired', error: 'Sessão MFA não encontrada' });
+      }
+
+      const session = result.rows[0];
+      if (new Date() > new Date(session.expires_at)) {
+        return res.json({ success: true, status: 'expired', error: 'Sessão QR-Code expirada.' });
+      }
+
+      res.json({
+        success: true,
+        status: session.status,
+        token: session.jwt_token
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Smartphone solicita os dados básicos do QR lido para validação
+  app.get('/api/auth/mfa/session/:token', requireAuth, async (req: any, res) => {
+    try {
+      if (!dbConnected) throw new Error("DB offline");
+      const session_token = req.params.token;
+
+      const result = await pool.query("SELECT * FROM mfa_sessions WHERE session_token = $1", [session_token]);
+      if (result.rows.length === 0) {
+        return res.status(404).json({ success: false, error: 'Código de login inválido ou expirado.' });
+      }
+
+      const session = result.rows[0];
+      if (new Date() > new Date(session.expires_at)) {
+        return res.status(400).json({ success: false, error: 'Código QR Code expirado.' });
+      }
+
+      res.json({
+        success: true,
+        session_token: session.session_token,
+        status: session.status,
+        expires_at: session.expires_at
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Celular aprova o acesso digitando digital / biometria (dispositivo cadastrado)
+  app.post('/api/auth/mfa/approve', requireAuth, async (req: any, res) => {
+    try {
+      if (!dbConnected) throw new Error("DB offline");
+      const { session_token } = req.body;
+
+      if (!session_token) return res.status(400).json({ success: false, error: 'Token é necessário' });
+
+      const userRes = await pool.query(
+        "SELECT id, name, email, role, mfa_biometric_enabled, company_name, company_logo, is_approved, nickname FROM users WHERE id = $1",
+        [req.user.id]
+      );
+      if (userRes.rows.length === 0) {
+        return res.status(404).json({ success: false, error: 'Usuário não localizado.' });
+      }
+
+      const user = userRes.rows[0];
+
+      if (!user.mfa_biometric_enabled) {
+        return res.status(400).json({ success: false, error: 'Você não ativou a autenticação biométrica rápida em seu perfil.' });
+      }
+
+      const sessionRes = await pool.query("SELECT * FROM mfa_sessions WHERE session_token = $1", [session_token]);
+      if (sessionRes.rows.length === 0) {
+        return res.status(404).json({ success: false, error: 'Conexão de login não encontrada ou expirada.' });
+      }
+
+      const session = sessionRes.rows[0];
+      if (new Date() > new Date(session.expires_at)) {
+        return res.status(400).json({ success: false, error: 'Código QR expirado.' });
+      }
+
+      const tokenUser = {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        company_name: user.company_name,
+        company_logo: user.company_logo,
+        is_approved: user.is_approved,
+        nickname: user.nickname
+      };
+      const token = jwt.sign(tokenUser, JWT_SECRET, { expiresIn: '1d' });
+
+      await pool.query(
+        "UPDATE mfa_sessions SET status = 'approved', user_id = $1, jwt_token = $2 WHERE session_token = $3",
+        [user.id, token, session_token]
+      );
+
+      await logAction(user.id, user.email, 'login_mfa_autorizado', 'Liberou acesso no computador via QR Code biométrico');
+
+      res.json({ success: true, message: 'Acesso liberado no computador com sucesso!' });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Admin limpa os logs - requer senha
+  app.post('/api/logs/clear', requireAuth, requireAdmin, async (req: any, res) => {
+    try {
+      if (!dbConnected) throw new Error("DB offline");
+      const { password } = req.body;
+
+      if (!password) {
+        return res.status(400).json({ success: false, error: 'A confirmação de senha é obrigatória para esta ação.' });
+      }
+
+      const adminRes = await pool.query('SELECT password FROM users WHERE id = $1', [req.user.id]);
+      if (adminRes.rows.length === 0 || password !== adminRes.rows[0].password) {
+        return res.status(403).json({ success: false, error: 'Senha de administrador incorreta.' });
+      }
+
+      await pool.query('DELETE FROM logs');
+      await logAction(req.user.id, req.user.email, 'logs_limpos', 'O administrador limpou todos os logs do banco de dados.');
+
+      res.json({ success: true, message: 'Todos os logs limpos com sucesso.' });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
     }
   });
 
@@ -2461,6 +2797,26 @@ async function startServer() {
           success: false,
           error: `Muitas tentativas incorretas. Login temporariamente bloqueado por ${remainingSec} segundos.`
         });
+      }
+
+      // Verificação em Banco Produtivo
+      // Primeiro verificar se o usuário existe, se está bloqueado, ou se tem MFA habilitado bloqueando senha convencional
+      if (dbConnected) {
+        let userCheck = await pool.query('SELECT id, role, mfa_biometric_enabled, email FROM users WHERE LOWER(email) = $1 OR LOWER(nickname) = $1 OR id::text = $1', [cleanEmail]);
+        if (userCheck.rows.length > 0) {
+          const checkUsr = userCheck.rows[0];
+          if (checkUsr.role === 'blocked') {
+            await logAction(null, cleanEmail, 'login_falhou', 'Tentativa de login em usuário já bloqueado');
+            return res.status(403).json({ success: false, error: 'Usuário bloqueado pelo administrador.' });
+          }
+          if (checkUsr.mfa_biometric_enabled) {
+            await logAction(checkUsr.id, checkUsr.email, 'login_bloqueado_por_mfa', 'Acesso por senha negado pois a autenticação multifator biométrica está ativada.');
+            return res.status(403).json({
+              success: false,
+              error: 'Este usuário configurou o Login de 2 Fatores Biométrico. O acesso por senha convencional está desabilitado por segurança. Use o Login Rápido QR Code, ou solicite ao admin para redefinir o seu 2FA se não tiver seu smartphone cadastrado.'
+            });
+          }
+        }
       }
 
       if (!dbConnected) {
@@ -2508,14 +2864,7 @@ async function startServer() {
         }
       }
 
-      // Verificação em Banco Produtivo
-      // Primeiro verificar se o usuário existe e se já está bloqueado
-      let userCheck = await pool.query('SELECT role FROM users WHERE LOWER(email) = $1 OR LOWER(nickname) = $1 OR id::text = $1', [cleanEmail]);
-      if (userCheck.rows.length > 0 && userCheck.rows[0].role === 'blocked') {
-        await logAction(null, cleanEmail, 'login_falhou', 'Tentativa de login em usuário já bloqueado');
-        return res.status(403).json({ success: false, error: 'Usuário bloqueado pelo administrador.' });
-      }
-
+      // Verificação em Banco Produtivo (A verificação de conta bloqueada e MFA ativos já foi realizada na etapa inicial)
       let dbResult = await pool.query('SELECT id, name, email, role, is_approved, company_name, company_logo, wallet, can_transfer, can_request, can_request_delivery, nickname FROM users WHERE (LOWER(email) = $1 OR LOWER(nickname) = $1 OR id::text = $1) AND password = $2', [cleanEmail, password]);
       
       if (dbResult.rows.length > 0) {

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { LayoutDashboard, Bell, ShoppingBag, EyeOff, ChevronRight, RefreshCw, LogOut, TrendingUp, Package, ShoppingCart, Heart, Activity, Plus, X, Trash2, Home, Users, User, Lock, Unlock, Search, Copy, Check, Pickaxe, Landmark, List, FileText, Sparkles } from 'lucide-react';
+import { LayoutDashboard, Bell, ShoppingBag, EyeOff, ChevronRight, RefreshCw, LogOut, TrendingUp, Package, ShoppingCart, Heart, Activity, Plus, X, Trash2, Home, Users, User, Lock, Unlock, Search, Copy, Check, Pickaxe, Landmark, List, FileText, Sparkles, Fingerprint } from 'lucide-react';
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { AdminCredits } from "./AdminCredits";
@@ -1167,7 +1167,7 @@ function ProductModal({ item, user, onClose }: { item?: any, user?: any, onClose
             </div>
          </div>
 
-          <div className="px-6 py-5 border-t border-gray-100 bg-white sm:rounded-b-[32px]">
+          <div className="px-6 py-5 border-t border-gray-100 bg-white sm:rounded-b-[32px]">{item && <ProductInteractionsArea item={item} user={user} />}
              {(() => {
                const duration = parseInt(formData.duration_days) === 30 ? 30 : 7;
                let requiredAmount = 1;
@@ -1246,6 +1246,161 @@ function ProductModal({ item, user, onClose }: { item?: any, user?: any, onClose
              })()}
           </div>
        </motion.div>
+    </div>
+  );
+}
+
+function ProductInteractionsArea({ item, user }: { item: any, user: any }) {
+  const [likesCount, setLikesCount] = useState(item.likes_count || 0);
+  const [liked, setLiked] = useState(false);
+  const [comments, setComments] = useState<any[]>([]);
+  const [newComment, setNewComment] = useState('');
+  const [sendingComment, setSendingComment] = useState(false);
+
+  const loadLikes = async () => {
+    try {
+      const likedRes = await apiFetch(`/api/products/${item.id}/liked`);
+      const likedData = await likedRes.json();
+      setLiked(likedData.liked);
+
+      const countRes = await apiFetch(`/api/products/${item.id}/likes`);
+      const countData = await countRes.json();
+      setLikesCount(countData.count);
+    } catch (e) {}
+  };
+
+  const loadComments = async () => {
+    try {
+      const res = await apiFetch(`/api/products/${item.id}/comments`);
+      const data = await res.json();
+      if (Array.isArray(data.comments)) {
+        setComments(data.comments);
+      }
+    } catch(e) {}
+  };
+
+  useEffect(() => {
+    loadLikes();
+    loadComments();
+  }, [item.id]);
+
+  const handleToggleLike = async () => {
+    try {
+      const res = await apiFetch(`/api/products/${item.id}/like`, { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        setLiked(data.liked);
+        setLikesCount((prev: number) => data.liked ? prev + 1 : Math.max(0, prev - 1));
+      }
+    } catch(e) {
+      alert('Erro ao processar curtida.');
+    }
+  };
+
+  const handleAddComment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newComment.trim()) return;
+    setSendingComment(true);
+    try {
+      const res = await apiFetch(`/api/products/${item.id}/comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ comment: newComment })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setComments((prev) => [data.comment, ...prev]);
+        setNewComment('');
+      } else {
+        alert(data.error || 'Erro ao publicar comentário.');
+      }
+    } catch(e) {
+      alert('Erro ao enviar.');
+    }
+    setSendingComment(false);
+  };
+
+  return (
+    <div className="mt-8 pt-6 border-t border-gray-150 space-y-6">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-extrabold text-[#1D1D1F] uppercase tracking-wider flex items-center gap-1.5">
+          <span>📊 Estatísticas & Feedback</span>
+        </h3>
+        
+        <button
+          onClick={handleToggleLike}
+          type="button"
+          className={cn(
+            "h-9 px-4 rounded-full border text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer active:scale-95",
+            liked 
+              ? "bg-red-50 border-red-100 text-red-500 shadow-sm shadow-red-500/10" 
+              : "bg-white border-gray-200 hover:bg-gray-50 text-gray-600"
+          )}
+        >
+          <Heart className={cn("w-4 h-4", liked && "fill-current")} />
+          <span>{liked ? 'Curtido' : 'Curtir'}</span>
+        </button>
+      </div>
+
+      {/* Grid de Métricas do Produto */}
+      <div className="grid grid-cols-4 gap-2">
+        <div className="bg-gray-55 p-3 rounded-2xl border border-gray-100 flex flex-col items-center">
+          <span className="text-gray-400 text-[8px] font-bold uppercase tracking-widest text-center">Views</span>
+          <span className="text-[#1D1D1F] font-extrabold text-xs mt-1">{item.views_count || 0}</span>
+        </div>
+        <div className="bg-gray-55 p-3 rounded-2xl border border-gray-100 flex flex-col items-center">
+          <span className="text-gray-400 text-[8px] font-bold uppercase tracking-widest text-center">Cliques</span>
+          <span className="text-[#1D1D1F] font-extrabold text-xs mt-1">{item.clicks_count || 0}</span>
+        </div>
+        <div className="bg-gray-55 p-3 rounded-2xl border border-gray-100 flex flex-col items-center">
+          <span className="text-gray-400 text-[8px] font-bold uppercase tracking-widest text-center">Curtidas</span>
+          <span className="text-[#1D1D1F] font-extrabold text-xs mt-1">{likesCount}</span>
+        </div>
+        <div className="bg-gray-55 p-3 rounded-2xl border border-gray-100 flex flex-col items-center">
+          <span className="text-gray-400 text-[8px] font-bold uppercase tracking-widest text-center">Coments</span>
+          <span className="text-[#1D1D1F] font-extrabold text-xs mt-1">{comments.length}</span>
+        </div>
+      </div>
+
+      {/* Comentários */}
+      <div className="space-y-4 pt-2">
+        <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest">Comentários ({comments.length})</h4>
+        
+        {/* Escrever comentário */}
+        <form onSubmit={handleAddComment} className="flex gap-2">
+          <input
+            type="text"
+            placeholder="Escreva um comentário sobre o anúncio..."
+            value={newComment}
+            onChange={e => setNewComment(e.target.value)}
+            className="flex-1 bg-white border border-gray-200 focus:border-[#007AFF] rounded-xl px-4 py-2.5 text-xs outline-none transition-all shadow-sm"
+            required
+          />
+          <button
+            type="submit"
+            disabled={sendingComment || !newComment.trim()}
+            className="px-4 bg-[#007AFF] hover:bg-blue-600 text-white font-bold text-xs rounded-xl flex items-center justify-center transition-all cursor-pointer disabled:opacity-50"
+          >
+            {sendingComment ? '...' : 'Enviar'}
+          </button>
+        </form>
+
+        {/* Lista de Comentários */}
+        <div className="space-y-3 max-h-56 overflow-y-auto pr-1 scrollbar-none">
+          {comments.map((c) => (
+            <div key={c.id} className="bg-gray-50/40 p-3.5 rounded-2xl border border-gray-200/60 leading-relaxed text-xs text-left">
+              <div className="flex justify-between items-start gap-2">
+                <span className="font-extrabold text-gray-700">{c.user_name}</span>
+                <span className="text-[9px] text-gray-400">{new Date(c.created_at).toLocaleDateString('pt-BR')}</span>
+              </div>
+              <p className="text-gray-600 mt-1">{c.comment}</p>
+            </div>
+          ))}
+          {comments.length === 0 && (
+            <p className="text-center text-gray-400 text-xs py-3">Este anúncio ainda não recebeu comentários.</p>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -1956,7 +2111,7 @@ export function AdminUsers() {
                          {u.is_approved ? <><X className="w-4 h-4 text-red-500" title="Revogar Aprovação" /><span className="text-[10px] text-red-500 font-bold uppercase ml-1">Revogar</span></> : <><Check className="w-4 h-4 text-green-500" title="Aprovar Usuário" /><span className="text-[10px] text-green-500 font-bold uppercase ml-1">Aprovar</span></>}
                        </button>
                        <button onClick={() => handleToggleBlock(u, 'team')} className="flex-1 sm:flex-initial py-3 sm:px-3 sm:py-2 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors flex items-center justify-center">
-                         {u.role === 'blocked' ? <Unlock className="w-4 h-4 text-green-600" /> : <Lock className="w-4 h-4 text-orange-500" />}
+                         {u.role === 'blocked' ? <Unlock className="w-4 h-4 text-green-600" /> : <Lock className="w-4 h-4 text-orange-500" />}</button>{u.mfa_biometric_enabled && <button onClick={async () => { if (window.confirm("Deseja desativar o 2FA biométrico do usuário " + u.name + "? Ele voltará a acessar usando sua senha padrão comercial.")) { try { const r = await apiFetch("/api/admin/users/" + u.id + "/reset-mfa", { method: 'POST' }); const d = await r.json(); if (d.success) { alert(d.message); fetchData(); } } catch(e) { alert("Erro ao realizar solicitação."); } } }} type="button" className="flex-1 sm:flex-initial py-3 sm:px-3 sm:py-2 bg-amber-50 text-amber-700 hover:bg-amber-100 rounded-xl transition-colors flex items-center justify-center cursor-pointer" title="Resetar 2FA Biométrico"><Fingerprint className="w-4 h-4 text-amber-600 shadow-sm" /></button>}<button style={{ display: 'none' }}>
                        </button>
                        <button onClick={() => handleDelete(u, 'team')} className="flex-1 sm:flex-initial py-3 sm:px-3 sm:py-2 bg-red-50 rounded-xl hover:bg-red-100 transition-colors flex items-center justify-center">
                          <Trash2 className="w-4 h-4 text-red-500" />
