@@ -10,7 +10,7 @@ import { AdminInteractions } from "./AdminInteractions";
 import { AdminDeliveries } from "./AdminDeliveries";
 import { AdminWallet } from "./AdminWallet";
 import { GlobalSettings } from "./GlobalSettings";
-import { Wallet, MessageSquare, Menu, Settings } from "lucide-react";
+import { Wallet, MessageSquare, Menu, Settings, Eye, MousePointerClick } from "lucide-react";
 import { AdminSettings } from "./AdminSettings";
 import { NotificationPanel } from "./components/NotificationPanel";
 import { SmartCursor } from "./components/SmartCursor";
@@ -299,20 +299,44 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveCont
 
 // -- Overview Component --
 function AdminOverview({ user, onRefreshUser }: { user: any, onLogout?: () => void, onRefreshUser?: () => void }) {
-  const [stats, setStats] = useState({ products: 0, orders: 0, stock: 0, likes: 0, monthlySales: [] });
+  const [stats, setStats] = useState({
+    products: 0,
+    orders: 0,
+    stock: 0,
+    views: 0,
+    clicks: 0,
+    likes: 0,
+    comments: 0,
+    monthlySales: []
+  });
   const [recentOrders, setRecentOrders] = useState<any[]>([]);
+  const [dashboardComments, setDashboardComments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchStats = async () => {
     setLoading(true);
     try {
       if (onRefreshUser) onRefreshUser();
-      const [res, ordersRes] = await Promise.all([apiFetch('/api/stats'), apiFetch('/api/orders')]);
+      const [res, ordersRes, commentsRes] = await Promise.all([
+        apiFetch('/api/stats'),
+        apiFetch('/api/orders'),
+        apiFetch('/api/dashboard/comments')
+      ]);
       const data = await res.json();
       if (data.success) setStats(data.stats);
+
       const ordersData = await ordersRes.json();
-      if (ordersData.success) setRecentOrders(ordersData.sales.slice(0, 5));
-    } catch (e) {}
+      if (ordersData.success) {
+        setRecentOrders(ordersData.sales ? ordersData.sales.slice(0, 5) : []);
+      }
+
+      const commentsData = await commentsRes.json();
+      if (commentsData.success) {
+        setDashboardComments(commentsData.comments || []);
+      }
+    } catch (e) {
+      console.error(e);
+    }
     setLoading(false);
   };
 
@@ -330,7 +354,7 @@ function AdminOverview({ user, onRefreshUser }: { user: any, onLogout?: () => vo
                     <Package className="w-6 h-6" />
                 </div>
             </div>
-            <p className="text-[#414755] text-[10px] font-extrabold uppercase tracking-widest opacity-60">Produtos Ativos</p>
+            <p className="text-[#414755] text-[10px] font-extrabold uppercase tracking-widest opacity-60">{isAdmin ? 'Total de Produtos' : 'Meus Produtos'}</p>
             <h3 className="text-3xl font-extrabold mt-2 tracking-tight">{stats.products}</h3>
         </div>
         <div className="bg-white p-7 rounded-[2rem] shadow-[0_10px_40px_-10px_rgba(0,0,0,0.04),_0_2px_10px_-2px_rgba(0,0,0,0.02)] hover:shadow-2xl hover:scale-[1.02] transition-all duration-300 group">
@@ -339,7 +363,7 @@ function AdminOverview({ user, onRefreshUser }: { user: any, onLogout?: () => vo
                     <ShoppingCart className="w-6 h-6" />
                 </div>
             </div>
-            <p className="text-[#414755] text-[10px] font-extrabold uppercase tracking-widest opacity-60">Total de Pedidos</p>
+            <p className="text-[#414755] text-[10px] font-extrabold uppercase tracking-widest opacity-60">{isAdmin ? 'Total de Pedidos' : 'Meus Pedidos'}</p>
             <h3 className="text-3xl font-extrabold mt-2 tracking-tight">{stats.orders}</h3>
         </div>
         <div className="bg-white p-7 rounded-[2rem] shadow-[0_10px_40px_-10px_rgba(0,0,0,0.04),_0_2px_10px_-2px_rgba(0,0,0,0.02)] hover:shadow-2xl hover:scale-[1.02] transition-all duration-300 group">
@@ -348,17 +372,71 @@ function AdminOverview({ user, onRefreshUser }: { user: any, onLogout?: () => vo
                     <ShoppingBag className="w-6 h-6" />
                 </div>
             </div>
-            <p className="text-[#414755] text-[10px] font-extrabold uppercase tracking-widest opacity-60">Inventário</p>
+            <p className="text-[#414755] text-[10px] font-extrabold uppercase tracking-widest opacity-60">{isAdmin ? 'Estoque Geral' : 'Meu Estoque'}</p>
             <h3 className="text-3xl font-extrabold mt-2 tracking-tight">{stats.stock}</h3>
         </div>
         <div className="bg-white p-7 rounded-[2rem] shadow-[0_10px_40px_-10px_rgba(0,0,0,0.04),_0_2px_10px_-2px_rgba(0,0,0,0.02)] hover:shadow-2xl hover:scale-[1.02] transition-all duration-300 group">
             <div className="flex justify-between items-start mb-6">
-                <div className="p-3 bg-[#0058bc]/10 text-[#0058bc] rounded-2xl group-hover:bg-[#0058bc] group-hover:text-white transition-colors">
+                <div className="p-3 bg-red-50 text-red-500 rounded-2xl group-hover:bg-red-500 group-hover:text-white transition-colors">
                     <Heart className="w-6 h-6" />
                 </div>
             </div>
-            <p className="text-[#414755] text-[10px] font-extrabold uppercase tracking-widest opacity-60">Interações</p>
+            <p className="text-[#414755] text-[10px] font-extrabold uppercase tracking-widest opacity-60">Total de Curtidas</p>
             <h3 className="text-3xl font-extrabold mt-2 tracking-tight">{stats.likes}</h3>
+        </div>
+      </div>
+
+      {/* Dynamic Catalog Engagement Stats Grid */}
+      <div className="bg-white p-8 md:p-10 rounded-[2.5rem] shadow-[0_10px_40px_-10px_rgba(0,0,0,0.04),_0_2px_10px_-2px_rgba(0,0,0,0.02)] space-y-6">
+        <div>
+          <h4 className="text-xl font-extrabold tracking-tight text-[#1D1D1F]">Estatísticas e Engajamento do Catálogo</h4>
+          <p className="text-xs text-gray-500 mt-1">
+            {isAdmin 
+              ? 'Métricas de engajamento consolidadas de todos os anúncios e vendedores cadastrados no sistema.' 
+              : 'Veja o engajamento direto e feedback dos clientes em seus anúncios ativos.'}
+          </p>
+        </div>
+        
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="bg-[#faf9fe] p-6 rounded-3xl border border-gray-100 flex items-center gap-4 hover:shadow-md transition-shadow">
+            <div className="p-3 bg-blue-500/10 text-blue-600 rounded-2xl">
+              <Eye className="w-6 h-6" />
+            </div>
+            <div>
+              <p className="text-[#414755] text-[10px] font-extrabold uppercase tracking-widest opacity-60">Visualizações</p>
+              <h4 className="text-2xl font-extrabold text-[#1D1D1F] mt-1">{stats.views}</h4>
+            </div>
+          </div>
+
+          <div className="bg-[#faf9fe] p-6 rounded-3xl border border-gray-100 flex items-center gap-4 hover:shadow-md transition-shadow">
+            <div className="p-3 bg-indigo-500/10 text-indigo-600 rounded-2xl">
+              <MousePointerClick className="w-6 h-6" />
+            </div>
+            <div>
+              <p className="text-[#414755] text-[10px] font-extrabold uppercase tracking-widest opacity-60">Cliques</p>
+              <h4 className="text-2xl font-extrabold text-[#1D1D1F] mt-1">{stats.clicks}</h4>
+            </div>
+          </div>
+
+          <div className="bg-[#faf9fe] p-6 rounded-3xl border border-gray-100 flex items-center gap-4 hover:shadow-md transition-shadow">
+            <div className="p-3 bg-red-500/10 text-red-600 rounded-2xl">
+              <Heart className="w-6 h-6 fill-red-100" />
+            </div>
+            <div>
+              <p className="text-[#414755] text-[10px] font-extrabold uppercase tracking-widest opacity-60">Curtidas</p>
+              <h4 className="text-2xl font-extrabold text-[#1D1D1F] mt-1">{stats.likes}</h4>
+            </div>
+          </div>
+
+          <div className="bg-[#faf9fe] p-6 rounded-3xl border border-gray-100 flex items-center gap-4 hover:shadow-md transition-shadow">
+            <div className="p-3 bg-teal-500/10 text-teal-600 rounded-2xl">
+              <MessageSquare className="w-6 h-6" />
+            </div>
+            <div>
+              <p className="text-[#414755] text-[10px] font-extrabold uppercase tracking-widest opacity-60">Comentários</p>
+              <h4 className="text-2xl font-extrabold text-[#1D1D1F] mt-1">{stats.comments}</h4>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -415,27 +493,33 @@ function AdminOverview({ user, onRefreshUser }: { user: any, onLogout?: () => vo
            </div>
         </div>
         
-        {/* Active eTokens / Security */}
+        {/* Dynamic Catalog Comments Feed */}
         <div className="bg-white p-8 md:p-10 rounded-[2.5rem] shadow-[0_10px_40px_-10px_rgba(0,0,0,0.04),_0_2px_10px_-2px_rgba(0,0,0,0.02)] flex flex-col">
-          <h4 className="text-xl font-extrabold mb-10 tracking-tight">Segurança eTokens</h4>
-          <div className="space-y-6 flex-grow">
-             <div className="p-6 bg-[#faf9fe] rounded-3xl border border-white/50">
-                <div className="flex items-center gap-3 mb-4">
-                   <div className="p-2 bg-[#0058bc]/10 text-[#0058bc] rounded-xl">
-                      <Lock className="w-4 h-4" />
-                   </div>
-                   <span className="text-[11px] font-extrabold uppercase tracking-widest opacity-60">Acesso Atual</span>
-                </div>
-                <div className="flex justify-between items-end">
-                   <div>
-                      <p className="text-2xl font-mono font-extrabold tracking-[0.2em] text-[#0058bc]">ATIVA</p>
-                      <p className="text-[10px] text-[#414755] font-medium mt-1">Status da conta</p>
-                   </div>
-                   <Wallet className="w-5 h-5 text-[#0058bc] opacity-50" />
-                </div>
-             </div>
+          <div className="flex justify-between items-center mb-8">
+            <h4 className="text-xl font-extrabold tracking-tight">Comentários do Catálogo</h4>
           </div>
-          <button className="w-full mt-10 py-4 bg-[#1a1b1f] text-white rounded-2xl font-extrabold text-[11px] uppercase tracking-widest hover:opacity-90 shadow-xl transition-all">Token Validação</button>
+          
+          <div className="space-y-4 flex-grow overflow-y-auto max-h-[380px] pr-2 scrollbar-none font-sans">
+            {dashboardComments.length > 0 ? (
+              dashboardComments.map((c) => (
+                <div key={c.id} className="bg-[#faf9fe] p-4 rounded-3xl border border-gray-100 space-y-2 text-xs text-left">
+                  <div className="flex justify-between items-start gap-1">
+                    <span className="font-extrabold text-gray-800">{c.user_name}</span>
+                    <span className="text-[9px] text-gray-400 font-medium">{new Date(c.created_at).toLocaleDateString('pt-BR')}</span>
+                  </div>
+                  <div className="text-[10px] text-[#0058bc] font-extrabold bg-[#0058bc]/5 px-2.5 py-1 rounded-xl inline-block max-w-full truncate">
+                    Produto: {c.product_name}
+                  </div>
+                  <p className="text-gray-600 leading-relaxed italic">"{c.comment}"</p>
+                </div>
+              ))
+            ) : (
+              <div className="flex flex-col items-center justify-center py-10 text-center text-gray-400">
+                <MessageSquare className="w-8 h-8 opacity-30 mb-2" />
+                <p className="text-xs">Nenhum comentário recebido recentemente.</p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

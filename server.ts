@@ -1446,6 +1446,15 @@ async function startServer() {
       let monthlySalesQuery = `SELECT TO_CHAR(created_at, 'MM/YYYY') as month, COUNT(*) as count FROM orders GROUP BY month ORDER BY month DESC LIMIT 6`;
       let monthlySalesVals = [];
 
+      let viewsQuery = 'SELECT COUNT(*) FROM product_views';
+      let viewsVals: any[] = [];
+      let clicksQuery = 'SELECT COUNT(*) FROM product_clicks';
+      let clicksVals: any[] = [];
+      let likesQuery = 'SELECT COUNT(*) FROM product_likes';
+      let likesVals: any[] = [];
+      let commentsQuery = 'SELECT COUNT(*) FROM product_comments';
+      let commentsVals: any[] = [];
+
       if (!isAdmin) {
           prodQuery += ' WHERE user_id = $1';
           prodVals.push(userId);
@@ -1455,12 +1464,25 @@ async function startServer() {
           ordersVals.push(userId);
           monthlySalesQuery = `SELECT TO_CHAR(o.created_at, 'MM/YYYY') as month, COUNT(DISTINCT o.id) as count FROM orders o JOIN order_items oi ON o.id = oi.order_id JOIN products p ON oi.product_id = p.id WHERE p.user_id = $1 GROUP BY month ORDER BY month DESC LIMIT 6`;
           monthlySalesVals.push(userId);
+
+          viewsQuery = 'SELECT COUNT(*) FROM product_views pv JOIN products p ON pv.product_id = p.id WHERE p.user_id = $1';
+          viewsVals.push(userId);
+          clicksQuery = 'SELECT COUNT(*) FROM product_clicks pc JOIN products p ON pc.product_id = p.id WHERE p.user_id = $1';
+          clicksVals.push(userId);
+          likesQuery = 'SELECT COUNT(*) FROM product_likes pl JOIN products p ON pl.product_id = p.id WHERE p.user_id = $1';
+          likesVals.push(userId);
+          commentsQuery = 'SELECT COUNT(*) FROM product_comments pc JOIN products p ON pc.product_id = p.id WHERE p.user_id = $1';
+          commentsVals.push(userId);
       }
 
       const prodRes = await pool.query(prodQuery, prodVals);
       const ordersRes = await pool.query(ordersQuery, ordersVals);
       const stockRes = await pool.query(stockQuery, stockVals);
       const monthlySalesRes = await pool.query(monthlySalesQuery, monthlySalesVals);
+      const viewsRes = await pool.query(viewsQuery, viewsVals);
+      const clicksRes = await pool.query(clicksQuery, clicksVals);
+      const likesRes = await pool.query(likesQuery, likesVals);
+      const commentsRes = await pool.query(commentsQuery, commentsVals);
       
       res.json({
         success: true,
@@ -1468,7 +1490,10 @@ async function startServer() {
           products: parseInt(prodRes.rows[0].count) || 0,
           orders: parseInt(ordersRes.rows[0].count) || 0,
           stock: parseInt(stockRes.rows[0].total_stock) || 0,
-          likes: parseInt((await pool.query("SELECT COUNT(*) FROM product_interactions WHERE interaction_type = 'like'")).rows[0]?.count) || 0,
+          views: parseInt(viewsRes.rows[0].count) || 0,
+          clicks: parseInt(clicksRes.rows[0].count) || 0,
+          likes: parseInt(likesRes.rows[0].count) || 0,
+          comments: parseInt(commentsRes.rows[0].count) || 0,
           monthlySales: monthlySalesRes.rows.reverse()
         }
       });
@@ -2570,6 +2595,34 @@ async function startServer() {
       if (!dbConnected) throw new Error("DB offline");
       const product_id = parseInt(req.params.id);
       const result = await pool.query('SELECT * FROM product_comments WHERE product_id = $1 ORDER BY created_at DESC', [product_id]);
+      res.json({ success: true, comments: result.rows });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Listar Comentários Recentes para o Dashboard
+  app.get('/api/dashboard/comments', requireAuth, async (req: any, res) => {
+    try {
+      if (!dbConnected) throw new Error("DB offline");
+      const userId = req.user.id;
+      const isAdmin = req.user.role === 'admin';
+
+      let queryStr = `
+        SELECT c.*, p.name as product_name 
+        FROM product_comments c
+        JOIN products p ON c.product_id = p.id
+      `;
+      let queryVals: any[] = [];
+
+      if (!isAdmin) {
+        queryStr += ' WHERE p.user_id = $1';
+        queryVals.push(userId);
+      }
+
+      queryStr += ' ORDER BY c.created_at DESC LIMIT 10';
+
+      const result = await pool.query(queryStr, queryVals);
       res.json({ success: true, comments: result.rows });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
