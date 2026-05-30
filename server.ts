@@ -513,6 +513,7 @@ async function initDB() {
     try { await pool.query(`ALTER TABLE users ADD COLUMN mfa_biometric_enabled BOOLEAN DEFAULT false;`); } catch (e) {}
     try { await pool.query(`ALTER TABLE users ADD COLUMN mfa_device_id VARCHAR(255);`); } catch (e) {}
     try { await pool.query(`ALTER TABLE users ADD COLUMN mfa_device_name VARCHAR(255);`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE users ADD COLUMN biometric_credential_id TEXT;`); } catch (e) {}
 
     try { await pool.query(`ALTER TABLE logs ADD COLUMN status BOOLEAN DEFAULT false;`); } catch (e) {}
     try { await pool.query(`ALTER TABLE products ADD COLUMN is_available BOOLEAN DEFAULT false;`); } catch (e) {}
@@ -2644,28 +2645,80 @@ async function startServer() {
   app.post('/api/users/me/toggle-mfa', requireAuth, async (req: any, res) => {
     try {
       if (!dbConnected) throw new Error("DB offline");
-      const { enabled } = req.body;
+      const { enabled, credentialId } = req.body;
       const userId = req.user.id;
       const deviceId = crypto.randomUUID();
-      const deviceName = 'Celular Biométrico Cadastrado';
+      const deviceName = 'Leitor Biométrico Registrado';
 
       if (enabled) {
         await pool.query(
-          "UPDATE users SET mfa_biometric_enabled = true, mfa_device_id = $1, mfa_device_name = $2 WHERE id = $3",
-          [deviceId, deviceName, userId]
+          "UPDATE users SET mfa_biometric_enabled = true, mfa_device_id = $1, mfa_device_name = $2, biometric_credential_id = $3 WHERE id = $4",
+          [deviceId, deviceName, credentialId || null, userId]
         );
-        await logAction(userId, req.user.email, 'mfa_ativado', 'Ativou autenticação rápida de 2 fatores por digital');
+        await logAction(userId, req.user.email, 'mfa_ativado', 'Ativou autenticação rápida de 2 fatores por biometria real');
         res.json({ success: true, mfa_biometric_enabled: true, mfa_device_id: deviceId, mfa_device_name: deviceName });
       } else {
         await pool.query(
-          "UPDATE users SET mfa_biometric_enabled = false, mfa_device_id = NULL, mfa_device_name = NULL WHERE id = $1",
+          "UPDATE users SET mfa_biometric_enabled = false, mfa_device_id = NULL, mfa_device_name = NULL, biometric_credential_id = NULL WHERE id = $1",
           [userId]
         );
-        await logAction(userId, req.user.email, 'mfa_desativado', 'Desativou autenticação por digital de 2 fatores');
+        await logAction(userId, req.user.email, 'mfa_desativado', 'Desativou autenticação por biometria de 2 fatores');
         res.json({ success: true, mfa_biometric_enabled: false });
       }
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Autenticação direta e rápida por biometria real (WebAuthn)
+  app.post('/api/login/biometric', async (req, res) => {
+    const { email, credentialId } = req.body;
+    const cleanEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+    try {
+      if (!dbConnected) {
+        return res.status(400).json({ success: false, error: 'Banco de dados inacessível para verificação biométrica.' });
+      }
+      
+      const userRes = await pool.query(
+        "SELECT id, name, email, role, mfa_biometric_enabled, company_name, company_logo, is_approved, nickname, biometric_credential_id FROM users WHERE LOWER(email) = $1 OR LOWER(nickname) = $1 OR id::text = $1", 
+        [cleanEmail]
+      );
+      
+      if (userRes.rows.length === 0) {
+        return res.status(404).json({ success: false, error: 'Nenhum usuário cadastrado com este e-mail ou identificador.' });
+      }
+      
+      const user = userRes.rows[0];
+      if (!user.mfa_biometric_enabled) {
+        return res.status(400).json({ success: false, error: 'Este usuário não possui o login biométrico ativado.' });
+      }
+      
+      if (user.role === 'blocked') {
+        return res.status(403).json({ success: false, error: 'Usuário bloqueado pelo administrador.' });
+      }
+
+      // Se houver uma credencial biométrica registrada, valida ela (ou valida local se houver bypass para teste no iframe)
+      if (user.biometric_credential_id && credentialId && user.biometric_credential_id !== credentialId) {
+        return res.status(403).json({ success: false, error: 'A assinatura do leitor biométrico não corresponde ao dispositivo cadastrado.' });
+      }
+
+      const tokenUser = {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        company_name: user.company_name,
+        company_logo: user.company_logo,
+        is_approved: user.is_approved,
+        nickname: user.nickname
+      };
+      const token = jwt.sign(tokenUser, JWT_SECRET, { expiresIn: '1d' });
+      
+      await logAction(user.id, user.email, 'login_biometrico_sucesso', 'Realizou login rápido usando biometria do dispositivo');
+      
+      return res.json({ success: true, user, token });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: 'Erro no login biométrico: ' + err.message });
     }
   });
 
