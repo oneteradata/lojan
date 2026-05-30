@@ -1813,7 +1813,6 @@ async function startServer() {
     }
   });
 
-  // POST /api/transfer_tokens
   app.post('/api/transfer_tokens', requireAuth, async (req: any, res) => {
     try {
       if (!dbConnected) throw new Error("DB offline");
@@ -1822,7 +1821,26 @@ async function startServer() {
       const tokenLenInt = parseInt(token_length);
       const senderId = req.user.id;
 
-      if (!req.user.can_transfer && req.user.role !== 'admin') {
+      // 1. Fetch Sender (Can be in users OR user_client)
+      let senderRes = await pool.query('SELECT id, wallet, name, email, password, can_transfer, role FROM users WHERE id::text = $1', [senderId]);
+      let senderType = 'users';
+
+      if (senderRes.rows.length === 0) {
+        senderRes = await pool.query('SELECT id, wallet, nome_completo AS name, email, senha_mestre AS password, role FROM user_client WHERE id::text = $1', [senderId]);
+        if (senderRes.rows.length > 0) {
+          senderType = 'user_client';
+        }
+      }
+
+      if (senderRes.rows.length === 0) {
+        return res.status(404).json({ success: false, error: 'Remetente não encontrado no sistema.' });
+      }
+
+      const sender = senderRes.rows[0];
+
+      // 2. Perform permission/blocking checks
+      const isSenderBlockedFromTransfer = senderType === 'users' && !sender.can_transfer && sender.role !== 'admin';
+      if (isSenderBlockedFromTransfer) {
         return res.status(403).json({ success: false, error: 'A transferência de tokens está bloqueada para sua conta.' });
       }
 
@@ -1830,12 +1848,9 @@ async function startServer() {
         return res.status(400).json({ success: false, error: 'A senha é obrigatória para realizar transferências.' });
       }
 
-      const senderValidationRes = await pool.query('SELECT password FROM users WHERE id::text = $1', [senderId]);
-      if (senderValidationRes.rows.length === 0) return res.status(404).json({ success: false, error: 'Remetente não encontrado.' });
-      
-      const senderPasswordHash = senderValidationRes.rows[0].password;
+      const senderPasswordHash = sender.password;
       if (!senderPasswordHash) {
-         return res.status(401).json({ success: false, error: 'Conta sem senha configurada.' });
+         return res.status(401).json({ success: false, error: 'Conta de origem sem senha cadastrada.' });
       }
 
       if (password !== senderPasswordHash) {
@@ -1843,38 +1858,61 @@ async function startServer() {
       }
 
       if (!receiver_id || !amountInt || !tokenLenInt || amountInt <= 0) {
-        return res.status(400).json({ success: false, error: 'Parâmetros inválidos.' });
+        return res.status(400).json({ success: false, error: 'Parâmetros de transferência inválidos.' });
       }
 
+      // 3. Look up Receiver (Can be in users OR user_client)
       let destinationId = receiver_id;
       let receiverRes = await pool.query('SELECT id, wallet, email FROM users WHERE id::text = $1', [receiver_id]);
       let receiverType = 'users';
 
       if (receiverRes.rows.length === 0) {
-        // Try searching by nickname
-        const nickRes = await pool.query('SELECT id, wallet, email FROM users WHERE LOWER(nickname) = LOWER($1)', [receiver_id.trim()]);
-        if (nickRes.rows.length > 0) {
-          receiverRes = nickRes;
-          destinationId = nickRes.rows[0].id;
+        // Try searching users by nickname or email
+        const nickEmailRes = await pool.query(
+          'SELECT id, wallet, email FROM users WHERE LOWER(nickname) = LOWER($1) OR LOWER(email) = LOWER($1)',
+          [receiver_id.trim()]
+        );
+        if (nickEmailRes.rows.length > 0) {
+          receiverRes = nickEmailRes;
+          destinationId = nickEmailRes.rows[0].id;
+          receiverType = 'users';
         }
       }
 
       if (receiverRes.rows.length === 0) {
-         receiverRes = await pool.query('SELECT id, wallet, email FROM user_client WHERE id::text = $1', [receiver_id]);
-         if (receiverRes.rows.length > 0) {
+         // Try searching user_client by ID
+         const ucIdRes = await pool.query('SELECT id, wallet, email FROM user_client WHERE id::text = $1', [receiver_id]);
+         if (ucIdRes.rows.length > 0) {
+            receiverRes = ucIdRes;
             receiverType = 'user_client';
-            destinationId = receiverRes.rows[0].id;
+            destinationId = ucIdRes.rows[0].id;
          }
       }
 
-      if (receiverRes.rows.length === 0) return res.status(404).json({ success: false, error: 'Destinatário não encontrado por UUID ou Nickname.' });
+      if (receiverRes.rows.length === 0) {
+         // Try searching user_client by email or full name
+         const ucSearchRes = await pool.query(
+           'SELECT id, wallet, email FROM user_client WHERE LOWER(email) = LOWER($1) OR LOWER(nome_completo) = LOWER($1)',
+           [receiver_id.trim()]
+         );
+         if (ucSearchRes.rows.length > 0) {
+            receiverRes = ucSearchRes;
+            receiverType = 'user_client';
+            destinationId = ucSearchRes.rows[0].id;
+         }
+      }
+
+      if (receiverRes.rows.length === 0) {
+        return res.status(404).json({ success: false, error: 'Destinatário não encontrado por ID, Nickname, E-mail ou Nome.' });
+      }
+
       const receiver = receiverRes.rows[0];
 
       if (senderId.toString() === destinationId.toString()) {
         return res.status(400).json({ success: false, error: 'Não é possível transferir para si mesmo.' });
       }
 
-      // Webhook validation with 30s wait
+      // 4. Webhook validation with 30s wait
       const webhookStatus = await waitForWebhook('https://system.voryx.com.br/webhook/transferencia', {
          remetente_id: senderId,
          quantidade: amountInt,
@@ -1885,17 +1923,13 @@ async function startServer() {
       });
 
       if (webhookStatus !== 200) {
-        return res.status(400).json({ success: false, error: 'deu problema com validação' });
+        return res.status(400).json({ success: false, error: 'Validação da operação via webhook recusada.' });
       }
 
       // Ensure user_client table has wallet column
       try { await pool.query(`ALTER TABLE user_client ADD COLUMN wallet JSONB DEFAULT '{"tokens": []}';`); } catch (e) {}
 
-      // Check sender limits
-      const senderRes = await pool.query('SELECT wallet, name, email FROM users WHERE id::text = $1', [senderId]);
-      if (senderRes.rows.length === 0) return res.status(404).json({ success: false, error: 'Remetente não encontrado.' });
-      const sender = senderRes.rows[0];
-      
+      // 5. Transfer logic
       let rawWallet = sender.wallet || {};
       if (typeof rawWallet === 'string') {
         try { rawWallet = JSON.parse(rawWallet); } catch (e) {}
@@ -1914,7 +1948,6 @@ async function startServer() {
         return res.status(400).json({ success: false, error: `Saldo insuficiente de eTokens do tipo E${tokenLenInt}. Você tem ${matchingIndices.length}.` });
       }
 
-      // Transfer Process
       const tokensToTransfer: string[] = [];
       for (let i = 0; i < amountInt; i++) {
          const idxToRemove = matchingIndices.pop();
@@ -1935,9 +1968,13 @@ async function startServer() {
       receiverTokens = receiverTokens.concat(tokensToTransfer);
       const updatedReceiverWallet = buildWalletObject(receiverTokens);
 
-      // Save
-      await pool.query('UPDATE users SET wallet = $1 WHERE id::text = $2', [JSON.stringify(updatedSenderWallet), senderId]);
-      
+      // Save both sender and receiver wallets to their respective tables (users or user_client)
+      if (senderType === 'user_client') {
+         await pool.query('UPDATE user_client SET wallet = $1 WHERE id::text = $2', [JSON.stringify(updatedSenderWallet), senderId]);
+      } else {
+         await pool.query('UPDATE users SET wallet = $1 WHERE id::text = $2', [JSON.stringify(updatedSenderWallet), senderId]);
+      }
+
       if (receiverType === 'user_client') {
          await pool.query('UPDATE user_client SET wallet = $1 WHERE id::text = $2', [JSON.stringify(updatedReceiverWallet), destinationId]);
       } else {
@@ -1950,7 +1987,7 @@ async function startServer() {
       res.json({ success: true });
     } catch (err: any) {
       console.error(err);
-      res.status(500).json({ success: false, error: 'Erro interno ao transferir. ' + (err.message || String(err)) });
+      res.status(500).json({ success: false, error: 'Erro interno ao transferir: ' + (err.message || String(err)) });
     }
   });
 
