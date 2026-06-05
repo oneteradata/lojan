@@ -38,6 +38,8 @@ function AdminLogin({ onLogin }: { onLogin: (user: any) => void }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [nickname, setNickname] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [companyLogo, setCompanyLogo] = useState('');
   const [requestedRole, setRequestedRole] = useState('user');
@@ -48,6 +50,11 @@ function AdminLogin({ onLogin }: { onLogin: (user: any) => void }) {
   const [numero, setNumero] = useState('');
   const [bairro, setBairro] = useState('');
   const [cidade, setCidade] = useState('');
+
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [forcePasswordResetUserId, setForcePasswordResetUserId] = useState<string | null>(null);
+  const [resetMessage, setResetMessage] = useState('');
 
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [error, setError] = useState('');
@@ -125,7 +132,7 @@ function AdminLogin({ onLogin }: { onLogin: (user: any) => void }) {
             userVerification: "required",
             timeout: 60000
           };
-
+          
           const assertion = await navigator.credentials.get({
             publicKey: publicKeyCredentialRequestOptions
           }) as any;
@@ -163,14 +170,57 @@ function AdminLogin({ onLogin }: { onLogin: (user: any) => void }) {
     setLoading(false);
   };
 
+  const handleForcedPasswordSetupSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (password !== confirmPassword) {
+      setError('As senhas não conferem.');
+      return;
+    }
+    setLoading(true);
+    setError('');
+    try {
+       const res = await apiFetch('/api/auth/setup-new-password', {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify({ userId: forcePasswordResetUserId, password, confirmPassword })
+       });
+       const data = await res.json();
+       if (data.success) {
+         alert(data.message || 'Nova senha comercial cadastrada com sucesso!');
+         setForcePasswordResetUserId(null);
+         setPassword('');
+         setConfirmPassword('');
+         setError('');
+       } else {
+         setError(data.error || 'Falha ao redefinir a nova senha.');
+       }
+    } catch (err) {
+       setError('Erro ao conectar ao servidor.');
+    }
+    setLoading(false);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (uploadingLogo) return;
+    
+    if (isRegistering) {
+       if (!nickname.trim()) {
+         setError('O campo Nickname é obrigatório.');
+         return;
+       }
+       if (password !== confirmPassword) {
+         setError('As senhas de cadastro não conferem.');
+         return;
+       }
+    }
+    
     setLoading(true);
+    setError('');
     try {
       const endpoint = isRegistering ? '/api/register' : '/api/login';
       const body = isRegistering 
-        ? { name, email, password, company_name: companyName, company_logo: companyLogo, requested_role: requestedRole, telefone, endereco, bairro, cidade, numero, cep } 
+        ? { name, email, password, company_name: companyName, company_logo: companyLogo, requested_role: requestedRole, telefone, endereco, bairro, cidade, numero, cep, nickname: nickname.trim() } 
         : { email, password };
       
       const res = await apiFetch(endpoint, {
@@ -179,6 +229,16 @@ function AdminLogin({ onLogin }: { onLogin: (user: any) => void }) {
         body: JSON.stringify(body)
       });
       const data = await res.json();
+      
+      if (data.requireNewPassword) {
+         setForcePasswordResetUserId(data.userId);
+         setResetMessage(data.message || 'Criptografia Obrigatória ou Reset da Senha Comercial ativo.');
+         setPassword('');
+         setConfirmPassword('');
+         setLoading(false);
+         return;
+      }
+
       if (data.success) {
         if (data.message) {
             alert(data.message);
@@ -215,161 +275,281 @@ function AdminLogin({ onLogin }: { onLogin: (user: any) => void }) {
         animate={{ opacity: 1, y: 0 }}
         className="w-full max-w-md bg-white rounded-[32px] shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-8 box-border"
       >
-        <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-          {isRegistering && (
-            <>
-              <div>
-                <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">TIPO DE CONTA</label>
-                <div className="flex gap-4 p-2 bg-[#F5F5F7] rounded-2xl mb-2">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                       <input type="radio" name="role" checked={requestedRole === 'user'} onChange={() => setRequestedRole('user')} className="accent-[#007AFF]" />
-                       <span className="text-sm font-medium">Conta de Vendedor</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                       <input type="radio" name="role" checked={requestedRole === 'delivery'} onChange={() => setRequestedRole('delivery')} className="accent-[#007AFF]" />
-                       <span className="text-sm font-medium">Entregador Parceiro</span>
-                    </label>
-                </div>
-              </div>
-              <div>
-                <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">NOME</label>
+        {forcePasswordResetUserId ? (
+          <form onSubmit={handleForcedPasswordSetupSubmit} className="flex flex-col gap-5">
+            <div>
+              <h2 className="text-lg font-semibold text-[#1D1D1F] mb-1">Cadastrar Nova Senha Comercial</h2>
+              <p className="text-xs text-blue-600 bg-blue-50 p-3 rounded-2xl leading-relaxed mb-4">
+                {resetMessage}
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">NOVA SENHA</label>
+              <div className="relative">
                 <input 
-                  type="text" 
-                  value={name}
-                  onChange={e => setName(e.target.value)}
-                  placeholder="Seu nome"
-                  className="w-full bg-[#F5F5F7] border border-transparent focus:border-[#007AFF]/30 focus:bg-white rounded-2xl px-4 py-3.5 text-sm outline-none transition-all"
+                  type={showPassword ? "text" : "password"} 
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder="Sua nova senha"
+                  className="w-full bg-[#F5F5F7] border border-transparent focus:border-[#007AFF]/30 focus:bg-white rounded-2xl px-4 py-3.5 text-sm outline-none transition-all pr-12"
                   required
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-[#86868B] p-1 hover:text-[#1D1D1F]"
+                >
+                  {showPassword ? <Eye className="w-5 h-5" /> : <EyeOff className="w-5 h-5" />}
+                </button>
               </div>
-              <div>
-                <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">NOME DA EMPRESA (OPCIONAL)</label>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">CONFERIR E CONFIRMAR NOVA SENHA</label>
+              <div className="relative">
                 <input 
-                  type="text" 
-                  value={companyName}
-                  onChange={e => setCompanyName(e.target.value)}
-                  placeholder="Nome da sua empresa"
-                  className="w-full bg-[#F5F5F7] border border-transparent focus:border-[#007AFF]/30 focus:bg-white rounded-2xl px-4 py-3.5 text-sm outline-none transition-all"
+                  type={showConfirmPassword ? "text" : "password"} 
+                  value={confirmPassword}
+                  onChange={e => setConfirmPassword(e.target.value)}
+                  placeholder="Confirme sua nova senha"
+                  className="w-full bg-[#F5F5F7] border border-transparent focus:border-[#007AFF]/30 focus:bg-white rounded-2xl px-4 py-3.5 text-sm outline-none transition-all pr-12"
+                  required
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-[#86868B] p-1 hover:text-[#1D1D1F]"
+                >
+                  {showConfirmPassword ? <Eye className="w-5 h-5" /> : <EyeOff className="w-5 h-5" />}
+                </button>
               </div>
-              <div>
-                <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">FOTO DA EMPRESA (OPCIONAL)</label>
-                <div className="flex items-center gap-4">
+            </div>
+
+            {error && <p className="text-[#FF3B30] text-xs mt-2 px-2">{error}</p>}
+
+            <button 
+              type="submit" 
+              disabled={loading}
+              className="w-full bg-[#007AFF] hover:bg-[#0066CC] active:scale-[0.98] transition-all text-white font-semibold rounded-2xl py-3.5 mt-2 flex items-center justify-center shadow-sm disabled:opacity-70 cursor-pointer"
+            >
+              {loading ? 'Processando...' : 'Salvar Senha Comercial'} <ChevronRight className="w-4 h-4 ml-1" />
+            </button>
+
+            <div className="text-center mt-2">
+              <button 
+                type="button" 
+                onClick={() => {
+                  setForcePasswordResetUserId(null);
+                  setError('');
+                }} 
+                className="text-[#86868B] text-xs font-medium hover:underline"
+              >
+                Voltar ao login comum
+              </button>
+            </div>
+          </form>
+        ) : (
+          <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+            {isRegistering && (
+              <>
+                <div>
+                  <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">TIPO DE CONTA</label>
+                  <div className="flex gap-4 p-2 bg-[#F5F5F7] rounded-2xl mb-2">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                         <input type="radio" name="role" checked={requestedRole === 'user'} onChange={() => setRequestedRole('user')} className="accent-[#007AFF]" />
+                         <span className="text-sm font-medium">Conta de Vendedor</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                         <input type="radio" name="role" checked={requestedRole === 'delivery'} onChange={() => setRequestedRole('delivery')} className="accent-[#007AFF]" />
+                         <span className="text-sm font-medium">Entregador Parceiro</span>
+                      </label>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">NICKNAME / APELIDO (EXCLUSIVO E OBRIGATÓRIO)</label>
                   <input 
-                    type="file" 
-                    accept="image/*"
-                    onChange={handleLogoUpload}
-                    disabled={uploadingLogo}
-                    className="text-xs file:mr-2 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-[10px] file:bg-[#E8F0FE] file:text-[#007AFF] hover:file:bg-[#D2E3FC] cursor-pointer"
+                    type="text" 
+                    value={nickname}
+                    onChange={e => setNickname(e.target.value)}
+                    placeholder="ex: joaodasilva (sem espaços)"
+                    className="w-full bg-[#F5F5F7] border border-transparent focus:border-[#007AFF]/30 focus:bg-white rounded-2xl px-4 py-3.5 text-sm outline-none transition-all"
+                    required
                   />
-                  {uploadingLogo && <span className="text-[10px] text-[#007AFF] font-bold">ENVIANDO...</span>}
-                  {companyLogo && <img src={companyLogo} alt="Logo" className="w-10 h-10 object-cover rounded-md" />}
                 </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3 mt-4">
-                <div className="col-span-2 sm:col-span-1">
-                  <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">TELEFONE (OPCIONAL)</label>
-                  <input type="text" value={telefone} onChange={e => setTelefone(e.target.value)} placeholder="(00) 00000-0000" className="w-full bg-[#F5F5F7] border border-transparent focus:border-[#007AFF]/30 focus:bg-white rounded-2xl px-4 py-3.5 text-sm outline-none transition-all" />
+
+                <div>
+                  <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">NOME</label>
+                  <input 
+                    type="text" 
+                    value={name}
+                    onChange={e => setName(e.target.value)}
+                    placeholder="Seu nome"
+                    className="w-full bg-[#F5F5F7] border border-transparent focus:border-[#007AFF]/30 focus:bg-white rounded-2xl px-4 py-3.5 text-sm outline-none transition-all"
+                    required
+                  />
                 </div>
-                <div className="col-span-2 sm:col-span-1">
-                  <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">CEP (OPCIONAL)</label>
-                  <input type="text" value={cep} onChange={e => setCep(e.target.value)} placeholder="00000-000" className="w-full bg-[#F5F5F7] border border-transparent focus:border-[#007AFF]/30 focus:bg-white rounded-2xl px-4 py-3.5 text-sm outline-none transition-all" />
+                <div>
+                  <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">NOME DA EMPRESA (OPCIONAL)</label>
+                  <input 
+                    type="text" 
+                    value={companyName}
+                    onChange={e => setCompanyName(e.target.value)}
+                    placeholder="Nome da sua empresa"
+                    className="w-full bg-[#F5F5F7] border border-transparent focus:border-[#007AFF]/30 focus:bg-white rounded-2xl px-4 py-3.5 text-sm outline-none transition-all"
+                  />
                 </div>
-                <div className="col-span-2">
-                  <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">ENDEREÇO (OPCIONAL)</label>
-                  <input type="text" value={endereco} onChange={e => setEndereco(e.target.value)} placeholder="Rua, Avenida..." className="w-full bg-[#F5F5F7] border border-transparent focus:border-[#007AFF]/30 focus:bg-white rounded-2xl px-4 py-3.5 text-sm outline-none transition-all" />
+                <div>
+                  <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">FOTO DA EMPRESA (OPCIONAL)</label>
+                  <div className="flex items-center gap-4">
+                    <input 
+                      type="file" 
+                      accept="image/*"
+                      onChange={handleLogoUpload}
+                      disabled={uploadingLogo}
+                      className="text-xs file:mr-2 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-[10px] file:bg-[#E8F0FE] file:text-[#007AFF] hover:file:bg-[#D2E3FC] cursor-pointer"
+                    />
+                    {uploadingLogo && <span className="text-[10px] text-[#007AFF] font-bold">ENVIANDO...</span>}
+                    {companyLogo && <img src={companyLogo} alt="Logo" className="w-10 h-10 object-cover rounded-md" />}
+                  </div>
                 </div>
-                <div className="col-span-2 sm:col-span-1">
-                  <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">NÚMERO (OPCIONAL)</label>
-                  <input type="text" value={numero} onChange={e => setNumero(e.target.value)} placeholder="123" className="w-full bg-[#F5F5F7] border border-transparent focus:border-[#007AFF]/30 focus:bg-white rounded-2xl px-4 py-3.5 text-sm outline-none transition-all" />
+                <div className="grid grid-cols-2 gap-3 mt-4">
+                  <div className="col-span-2 sm:col-span-1">
+                    <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">TELEFONE (OPCIONAL)</label>
+                    <input type="text" value={telefone} onChange={e => setTelefone(e.target.value)} placeholder="(00) 00000-0000" className="w-full bg-[#F5F5F7] border border-transparent focus:border-[#007AFF]/30 focus:bg-white rounded-2xl px-4 py-3.5 text-sm outline-none transition-all" />
+                  </div>
+                  <div className="col-span-2 sm:col-span-1">
+                    <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">CEP (OPCIONAL)</label>
+                    <input type="text" value={cep} onChange={e => setCep(e.target.value)} placeholder="00000-000" className="w-full bg-[#F5F5F7] border border-transparent focus:border-[#007AFF]/30 focus:bg-white rounded-2xl px-4 py-3.5 text-sm outline-none transition-all" />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">ENDEREÇO (OPCIONAL)</label>
+                    <input type="text" value={endereco} onChange={e => setEndereco(e.target.value)} placeholder="Rua, Avenida..." className="w-full bg-[#F5F5F7] border border-transparent focus:border-[#007AFF]/30 focus:bg-white rounded-2xl px-4 py-3.5 text-sm outline-none transition-all" />
+                  </div>
+                  <div className="col-span-2 sm:col-span-1">
+                    <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">NÚMERO (OPCIONAL)</label>
+                    <input type="text" value={numero} onChange={e => setNumero(e.target.value)} placeholder="123" className="w-full bg-[#F5F5F7] border border-transparent focus:border-[#007AFF]/30 focus:bg-white rounded-2xl px-4 py-3.5 text-sm outline-none transition-all" />
+                  </div>
+                  <div className="col-span-2 sm:col-span-1">
+                    <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">BAIRRO (OPCIONAL)</label>
+                    <input type="text" value={bairro} onChange={e => setBairro(e.target.value)} placeholder="Bairro" className="w-full bg-[#F5F5F7] border border-transparent focus:border-[#007AFF]/30 focus:bg-white rounded-2xl px-4 py-3.5 text-sm outline-none transition-all" />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">CIDADE (OPCIONAL)</label>
+                    <input type="text" value={cidade} onChange={e => setCidade(e.target.value)} placeholder="Sua Cidade" className="w-full bg-[#F5F5F7] border border-transparent focus:border-[#007AFF]/30 focus:bg-white rounded-2xl px-4 py-3.5 text-sm outline-none transition-all" />
+                  </div>
                 </div>
-                <div className="col-span-2 sm:col-span-1">
-                  <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">BAIRRO (OPCIONAL)</label>
-                  <input type="text" value={bairro} onChange={e => setBairro(e.target.value)} placeholder="Bairro" className="w-full bg-[#F5F5F7] border border-transparent focus:border-[#007AFF]/30 focus:bg-white rounded-2xl px-4 py-3.5 text-sm outline-none transition-all" />
-                </div>
-                <div className="col-span-2">
-                  <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">CIDADE (OPCIONAL)</label>
-                  <input type="text" value={cidade} onChange={e => setCidade(e.target.value)} placeholder="Sua Cidade" className="w-full bg-[#F5F5F7] border border-transparent focus:border-[#007AFF]/30 focus:bg-white rounded-2xl px-4 py-3.5 text-sm outline-none transition-all" />
-                </div>
-              </div>
-            </>
-          )}
-          <div>
-            <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">{isRegistering ? 'E-MAIL' : 'ID OU E-MAIL'}</label>
-            <input 
-              type="text" 
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              placeholder={isRegistering ? "email@exemplo.com" : "Seu ID ou E-mail"}
-              className="w-full bg-[#F5F5F7] border border-transparent focus:border-[#007AFF]/30 focus:bg-white rounded-2xl px-4 py-3.5 text-sm outline-none transition-all"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">SENHA</label>
-            <div className="relative">
+              </>
+            )}
+            <div>
+              <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">{isRegistering ? 'E-MAIL COMERCIAL' : 'ID, APELIDO OU E-MAIL'}</label>
               <input 
-                type="password" 
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                placeholder="••••••••"
+                type="text" 
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                placeholder={isRegistering ? "email@exemplo.com" : "Seu ID, apelido (@) ou e-mail"}
                 className="w-full bg-[#F5F5F7] border border-transparent focus:border-[#007AFF]/30 focus:bg-white rounded-2xl px-4 py-3.5 text-sm outline-none transition-all"
                 required
               />
-              <EyeOff className="w-5 h-5 text-[#86868B] absolute right-4 top-1/2 -translate-y-1/2 cursor-pointer" />
             </div>
-            {error && error === 'Usuário bloqueado pelo administrador.' ? (
-              <div className="mt-4 p-4 bg-red-50 border border-red-100 rounded-2xl">
-                <p className="text-[#FF3B30] text-xs font-medium text-center">
-                  Seu cadastro possui uma irregularidade. Entre em contato para resolver aqui.
-                </p>
-                <a 
-                  href={`https://wa.me/5512981311773?text=${encodeURIComponent(`Olá, meu email é ${email} e meu cadastro consta com irregularidade.`)}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-3 w-full bg-[#25D366] hover:bg-[#1DA851] text-white flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold transition-colors"
+            
+            <div>
+              <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">SENHA</label>
+              <div className="relative">
+                <input 
+                  type={showPassword ? "text" : "password"} 
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full bg-[#F5F5F7] border border-transparent focus:border-[#007AFF]/30 focus:bg-white rounded-2xl px-4 py-3.5 text-sm outline-none transition-all pr-12"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-[#86868B] p-1 hover:text-[#1D1D1F]"
                 >
-                  Falar no WhatsApp
-                </a>
+                  {showPassword ? <Eye className="w-5 h-5" /> : <EyeOff className="w-5 h-5" />}
+                </button>
               </div>
-            ) : error ? (
-              <p className="text-[#FF3B30] text-xs mt-2 px-2">{error}</p>
-            ) : null}
-          </div>
+            </div>
 
-          <button 
-            type="submit" 
-            disabled={loading}
-            className="w-full bg-[#007AFF] hover:bg-[#0066CC] active:scale-[0.98] transition-all text-white font-semibold rounded-2xl py-3.5 mt-2 flex items-center justify-center shadow-sm disabled:opacity-70"
-          >
-            {loading ? 'Processando...' : (isRegistering ? 'Realizar Cadastro' : 'Continuar com Senha')} <ChevronRight className="w-4 h-4 ml-1" />
-          </button>
+            {isRegistering && (
+              <div>
+                <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">CONFERIR E CONFIRMAR PORTAL SENHA</label>
+                <div className="relative">
+                  <input 
+                    type={showConfirmPassword ? "text" : "password"} 
+                    value={confirmPassword}
+                    onChange={e => setConfirmPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full bg-[#F5F5F7] border border-transparent focus:border-[#007AFF]/30 focus:bg-white rounded-2xl px-4 py-3.5 text-sm outline-none transition-all pr-12"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-[#86868B] p-1 hover:text-[#1D1D1F]"
+                  >
+                    {showConfirmPassword ? <Eye className="w-5 h-5" /> : <EyeOff className="w-5 h-5" />}
+                  </button>
+                </div>
+              </div>
+            )}
 
-          {!isRegistering && (
+            {error && error === 'Usuário bloqueado pelo administrador.' ? (
+                <div className="mt-4 p-4 bg-red-50 border border-red-100 rounded-2xl">
+                  <p className="text-[#FF3B30] text-xs font-medium text-center">
+                    Seu cadastro possui uma irregularidade. Entre em contato para resolver aqui.
+                  </p>
+                  <a 
+                    href={`https://wa.me/5512981311773?text=${encodeURIComponent(`Olá, meu email é ${email} e meu cadastro consta com irregularidade.`)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-3 w-full bg-[#25D366] hover:bg-[#1DA851] text-white flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold transition-colors"
+                  >
+                    Falar no WhatsApp
+                  </a>
+                </div>
+              ) : error ? (
+                <p className="text-[#FF3B30] text-xs mt-2 px-2">{error}</p>
+              ) : null}
+
             <button 
-              type="button" 
-              onClick={handleBiometricLogin}
+              type="submit" 
               disabled={loading}
-              className="w-full border-2 border-[#E5E5EA] hover:border-[#007AFF]/30 bg-white hover:bg-[#F5F5F7] active:scale-[0.98] transition-all text-[#1D1D1F] font-bold rounded-2xl py-3.5 flex items-center justify-center gap-2.5 shadow-sm transition-all disabled:opacity-70 cursor-pointer"
+              className="w-full bg-[#007AFF] hover:bg-[#0066CC] active:scale-[0.98] transition-all text-white font-semibold rounded-2xl py-3.5 mt-2 flex items-center justify-center shadow-sm disabled:opacity-70 cursor-pointer"
             >
-              <Fingerprint className="w-5 h-5 text-[#007AFF] animate-pulse" />
-              <span>Acesso Rápido Biométrico</span>
+              {loading ? 'Processando...' : (isRegistering ? 'Realizar Cadastro' : 'Continuar com Senha')} <ChevronRight className="w-4 h-4 ml-1" />
             </button>
-          )}
 
-          <div className="text-center mt-2">
-            <button 
-              type="button" 
-              onClick={() => {
-                setIsRegistering(!isRegistering);
-                setError('');
-              }} 
-              className="text-[#007AFF] text-sm font-medium hover:underline"
-            >
-              {isRegistering ? 'Já tem uma conta? Entrar' : 'Realizar cadastro'}
-            </button>
-          </div>
-        </form>
+            {!isRegistering && (
+              <button 
+                type="button" 
+                onClick={handleBiometricLogin}
+                disabled={loading}
+                className="w-full border-2 border-[#E5E5EA] hover:border-[#007AFF]/30 bg-white hover:bg-[#F5F5F7] active:scale-[0.98] transition-all text-[#1D1D1F] font-bold rounded-2xl py-3.5 flex items-center justify-center gap-2.5 shadow-sm transition-all disabled:opacity-70 cursor-pointer"
+              >
+                <Fingerprint className="w-5 h-5 text-[#007AFF] animate-pulse" />
+                <span>Acesso Rápido Biométrico</span>
+              </button>
+            )}
+
+            <div className="text-center mt-2">
+              <button 
+                type="button" 
+                onClick={() => {
+                  setIsRegistering(!isRegistering);
+                  setError('');
+                }} 
+                className="text-[#007AFF] text-sm font-medium hover:underline"
+              >
+                {isRegistering ? 'Já tem uma conta? Entrar' : 'Realizar cadastro'}
+              </button>
+            </div>
+          </form>
+        )}
       </motion.div>
     </div>
   );
@@ -982,6 +1162,14 @@ function AdminProducts({ user, onRefreshUser }: { user: any, onRefreshUser?: () 
                          </p>
                          {p.user_name && <p className="text-[9px] text-[#86868B] uppercase font-bold truncate max-w-[80px]">By {p.user_name}</p>}
                        </div>
+                       {p.tokens && Number(p.tokens) > 0 ? (
+                         <div className="mt-1.5 flex items-center gap-1 text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full w-fit">
+                           <span>🪙</span>
+                           <span>{p.tokens} E{p.req_token_type || 2048}</span>
+                         </div>
+                       ) : null}
+                       <div className="flex gap-2 p-0 hidden shadow-none">
+                       </div>
                        <div className="flex items-center gap-3 mt-2 text-[10px] text-gray-500 font-semibold border-t border-gray-100 pt-2">
                          <div className="flex items-center gap-1" title="Visualizações">
                             <span className="text-[9px] uppercase tracking-wider">👁️</span> {p.views_count || 0}
@@ -1017,6 +1205,7 @@ function ProductModal({ item, user, onClose }: { item?: any, user?: any, onClose
     business_model: item?.business_model || 'Venda',
     price: item?.price || '', 
     tokens: item?.tokens || '', 
+    req_token_type: item?.req_token_type?.toString() || '2048',
     stock: item?.stock || '', 
     details: item?.details || '',
     tables: item?.tables || '',
@@ -1375,20 +1564,20 @@ function ProductModal({ item, user, onClose }: { item?: any, user?: any, onClose
             )}
 
             {/* Valores e Estoque */}
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                <div>
-                  <label className="text-[10px] font-bold text-[#86868B] tracking-wide mb-2 block">PREÇO</label>
+                  <label className="text-[10px] font-bold text-[#86868B] tracking-wide mb-2 block">PREÇO (BRL)</label>
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-[#86868B]">BRL</span>
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-[#86868B]">R$</span>
                     <input 
                       type="number" placeholder="0" 
                       value={formData.price} onChange={e => setFormData({...formData, price: e.target.value})}
-                      className="w-full bg-white border border-gray-200 focus:border-[#007AFF] rounded-2xl pl-10 pr-3 py-3.5 text-sm outline-none transition-all shadow-sm"
+                      className="w-full bg-white border border-gray-200 focus:border-[#007AFF] rounded-2xl pl-8 pr-3 py-3.5 text-sm outline-none transition-all shadow-sm"
                     />
                   </div>
                </div>
                <div>
-                  <label className="text-[10px] font-bold text-[#86868B] tracking-wide mb-2 block">TOKENS (MOEDA)</label>
+                  <label className="text-[10px] font-bold text-[#86868B] tracking-wide mb-2 block">QTD TOKENS</label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2">🪙</span>
                     <input 
@@ -1397,6 +1586,23 @@ function ProductModal({ item, user, onClose }: { item?: any, user?: any, onClose
                       className="w-full bg-white border border-gray-200 focus:border-[#007AFF] rounded-2xl pl-8 pr-3 py-3.5 text-sm outline-none transition-all shadow-sm"
                     />
                   </div>
+                  <p className="text-[9px] text-[#86868B] mt-1 pl-1">Escolha 0 para não usar token</p>
+               </div>
+               <div>
+                  <label className="text-[10px] font-bold text-[#86868B] tracking-wide mb-2 block">TIPO TOKEN</label>
+                  <select 
+                    value={formData.req_token_type} 
+                    onChange={e => setFormData({...formData, req_token_type: e.target.value})}
+                    className="w-full bg-white border border-gray-200 focus:border-[#007AFF] rounded-2xl px-3 py-3.5 text-sm outline-none transition-all shadow-sm"
+                  >
+                    <option value="64">E64</option>
+                    <option value="128">E128</option>
+                    <option value="256">E256</option>
+                    <option value="512">E512</option>
+                    <option value="1024">E1024</option>
+                    <option value="2048">E2048 (Padrão)</option>
+                    <option value="4096">E4096</option>
+                  </select>
                </div>
                <div>
                   <label className="text-[10px] font-bold text-[#86868B] tracking-wide mb-2 block">ESTOQUE</label>
@@ -2506,7 +2712,54 @@ export function AdminUsers() {
                          {u.is_approved ? <><X className="w-4 h-4 text-red-500" title="Revogar Aprovação" /><span className="text-[10px] text-red-500 font-bold uppercase ml-1">Revogar</span></> : <><Check className="w-4 h-4 text-green-500" title="Aprovar Usuário" /><span className="text-[10px] text-green-500 font-bold uppercase ml-1">Aprovar</span></>}
                        </button>
                        <button onClick={() => handleToggleBlock(u, 'team')} className="flex-1 sm:flex-initial py-3 sm:px-3 sm:py-2 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors flex items-center justify-center">
-                         {u.role === 'blocked' ? <Unlock className="w-4 h-4 text-green-600" /> : <Lock className="w-4 h-4 text-orange-500" />}</button>{u.mfa_biometric_enabled && <button onClick={async () => { if (window.confirm("Deseja desativar o 2FA biométrico do usuário " + u.name + "? Ele voltará a acessar usando sua senha padrão comercial.")) { try { const r = await apiFetch("/api/admin/users/" + u.id + "/reset-mfa", { method: 'POST' }); const d = await r.json(); if (d.success) { alert(d.message); fetchData(); } } catch(e) { alert("Erro ao realizar solicitação."); } } }} type="button" className="flex-1 sm:flex-initial py-3 sm:px-3 sm:py-2 bg-amber-50 text-amber-700 hover:bg-amber-100 rounded-xl transition-colors flex items-center justify-center cursor-pointer" title="Resetar 2FA Biométrico"><Fingerprint className="w-4 h-4 text-amber-600 shadow-sm" /></button>}<button style={{ display: 'none' }}>
+                         {u.role === 'blocked' ? <Unlock className="w-4 h-4 text-green-600" /> : <Lock className="w-4 h-4 text-orange-500" />}</button>
+                        
+                        <button 
+                          onClick={async () => { 
+                            if (window.confirm("Deseja desativar o 2FA biométrico do usuário " + u.name + "?")) { 
+                              try { 
+                                const r = await apiFetch("/api/admin/users/" + u.id + "/reset-mfa", { method: 'POST' }); 
+                                const d = await r.json(); 
+                                if (d.success) { 
+                                  alert(d.message); 
+                                  fetchData(); 
+                                } 
+                              } catch(e) { 
+                                alert("Erro ao realizar solicitação."); 
+                              } 
+                            } 
+                          }} 
+                          type="button" 
+                          className="flex-1 sm:flex-initial py-3 sm:px-3 sm:py-2 bg-amber-50 text-amber-700 hover:bg-amber-100 rounded-xl transition-colors flex items-center justify-center cursor-pointer" 
+                          title="Resetar 2FA Biométrico"
+                        >
+                          <Fingerprint className="w-4 h-4 text-amber-600 shadow-sm" />
+                          <span className="text-[10px] text-amber-700 font-bold uppercase ml-1 block sm:hidden md:block">Reset 2FA</span>
+                        </button>
+
+                        <button 
+                          onClick={async () => { 
+                            if (window.confirm("Deseja realmente remover a senha atual do usuário " + u.name + "? O sistema exigirá uma nova senha segura no primeiro acesso.")) { 
+                              try { 
+                                const r = await apiFetch("/api/admin/users/" + u.id + "/remove-password", { method: 'POST' }); 
+                                const d = await r.json(); 
+                                if (d.success) { 
+                                  alert(d.message); 
+                                  fetchData(); 
+                                } 
+                              } catch(e) { 
+                                alert("Erro ao remover senha."); 
+                              } 
+                            } 
+                          }} 
+                          type="button" 
+                          className="flex-1 sm:flex-initial py-3 sm:px-3 sm:py-2 bg-purple-50 text-purple-700 hover:bg-purple-100 rounded-xl transition-colors flex items-center justify-center cursor-pointer" 
+                          title="Exigir Nova Senha (Remover Senha Atual)"
+                        >
+                          <Lock className="w-4 h-4 text-purple-600 shadow-sm" />
+                          <span className="text-[10px] text-purple-700 font-bold uppercase ml-1 block sm:hidden md:block">Pedir Nova Senha</span>
+                        </button>
+                        <button style={{ display: 'none' }}>
                        </button>
                        <button onClick={() => handleDelete(u, 'team')} className="flex-1 sm:flex-initial py-3 sm:px-3 sm:py-2 bg-red-50 rounded-xl hover:bg-red-100 transition-colors flex items-center justify-center">
                          <Trash2 className="w-4 h-4 text-red-500" />
@@ -2585,6 +2838,35 @@ export function AdminUsers() {
                </div>
                
                <form onSubmit={handleAdd} className="p-6 space-y-4 overflow-y-auto max-h-[70vh]">
+                 {editingUser && activeTab === 'team' && (
+                   <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl space-y-3 mb-4">
+                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Identidade Comercial Registrada</p>
+                     
+                     <div className="flex items-center gap-3">
+                       {editingUser.company_logo ? (
+                         <img src={editingUser.company_logo} alt="Logo" className="w-12 h-12 rounded-xl object-cover border border-slate-200 shadow-xs" />
+                       ) : (
+                         <div className="w-12 h-12 bg-slate-200 text-slate-500 rounded-xl flex items-center justify-center font-bold text-xs">S/L</div>
+                       )}
+                       <div>
+                         <p className="text-xs text-gray-500 font-medium">Nickname / Apelido atual:</p>
+                         <p className="text-sm font-bold text-slate-800">@{editingUser.nickname || 'Não cadastrado'}</p>
+                       </div>
+                     </div>
+
+                     {(editingUser.endereco || editingUser.cidade || editingUser.cep) && (
+                       <div className="border-t border-slate-200 text-slate-600 pt-2 mt-2">
+                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Localização Comercial Registrada</p>
+                         <p className="text-xs font-semibold text-slate-700 leading-relaxed">
+                           {editingUser.endereco || 'Rua não informada'}, {editingUser.numero || 'S/N'}<br />
+                           {editingUser.bairro || 'Bairro não informado'} • {editingUser.cidade || 'Cidade não informada'}<br />
+                           CEP: {editingUser.cep || 'Sem CEP'}
+                         </p>
+                       </div>
+                     )}
+                   </div>
+                 )}
+
                  {activeTab === 'team' ? (
                    <>
                      <div>

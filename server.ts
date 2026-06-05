@@ -8,7 +8,28 @@ import multer from 'multer';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 
+import bcrypt from 'bcryptjs';
+
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_do_not_use_in_prod_12345';
+
+function hashPassword(plain: string): string {
+  if (!plain) return '';
+  const salt = bcrypt.genSaltSync(10);
+  return bcrypt.hashSync(plain, salt);
+}
+
+function verifyPassword(plain: string, hash: string): boolean {
+  if (!plain || !hash) return false;
+  // Fallback for legacy plain text passwords so they can login and then update
+  if (!isBcryptHash(hash)) {
+    return plain === hash;
+  }
+  return bcrypt.compareSync(plain, hash);
+}
+
+function isBcryptHash(str: string): boolean {
+  return typeof str === 'string' && str.startsWith('$2a$');
+}
 
 const requireAuth = (req: any, res: any, next: any) => {
   const authHeader = req.headers.authorization;
@@ -514,6 +535,8 @@ async function initDB() {
     try { await pool.query(`ALTER TABLE users ADD COLUMN mfa_device_id VARCHAR(255);`); } catch (e) {}
     try { await pool.query(`ALTER TABLE users ADD COLUMN mfa_device_name VARCHAR(255);`); } catch (e) {}
     try { await pool.query(`ALTER TABLE users ADD COLUMN biometric_credential_id TEXT;`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE users ADD COLUMN mfa_auth_mode VARCHAR(50) DEFAULT 'password';`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE users ADD COLUMN biometric_device_key TEXT;`); } catch (e) {}
 
     try { await pool.query(`ALTER TABLE logs ADD COLUMN status BOOLEAN DEFAULT false;`); } catch (e) {}
     try { await pool.query(`ALTER TABLE products ADD COLUMN is_available BOOLEAN DEFAULT false;`); } catch (e) {}
@@ -954,7 +977,7 @@ async function startServer() {
 
   // Criação de produto
   app.post('/api/products', requireAuth, async (req: any, res) => {
-    const { name, category, price, tokens, stock, details, media, variations, business_model, tables, seats_per_table, duration_days } = req.body;
+    const { name, category, price, tokens, stock, details, media, variations, business_model, tables, seats_per_table, duration_days, req_token_type } = req.body;
     try {
       if (!dbConnected) throw new Error("DB offline");
       let userId: any = req.body.user_id || (req.user ? req.user.id : null);
@@ -964,7 +987,7 @@ async function startServer() {
       const userName = req.user ? req.user.name : null;
       const userEmail = req.user ? req.user.email : null;
       
-      console.log(`[POST /api/products] Criando produto. userId: ${userId}, userName: ${userName}, userEmail: ${userEmail}`);
+      console.log(`[POST /api/products] Criando produto. userId: ${userId}, userName: ${userName}, userEmail: ${userEmail}, req_token_type: ${req_token_type}`);
 
       const settingsResult = await pool.query('SELECT product_token_cost_amount, product_token_cost_type, cost_7d_amount, cost_7d_type, cost_30d_amount, cost_30d_type FROM system_settings LIMIT 1');
       const settings = settingsResult.rows[0];
@@ -1028,7 +1051,7 @@ async function startServer() {
         name, category, String(price || '0'), parseInt(tokens) || 0, parseInt(stock) || 0, details, 
         JSON.stringify(mediaParsed), JSON.stringify(variationsParsed), imagesString, userId, userName, business_model || 'Venda', tables || null, seats_per_table || null, 
         isUserAdmin ? true : false, 
-        requiredAmount, requiredTypeLength, duration
+        requiredAmount, parseInt(req_token_type) || 2048, duration
       ]);
 
       // Se for administrador, disponibiliza o produto imediatamente sem necessidade de webhook de token
@@ -1143,7 +1166,7 @@ async function startServer() {
 
   // Editar produto
   app.put('/api/products/:id', requireAuth, async (req: any, res) => {
-    const { name, category, price, tokens, stock, details, media, variations, business_model, tables, seats_per_table, is_available } = req.body;
+    const { name, category, price, tokens, stock, details, media, variations, business_model, tables, seats_per_table, is_available, req_token_type } = req.body;
     try {
       if (!dbConnected) throw new Error("DB offline");
       const userEmail = req.user.email;
@@ -1182,11 +1205,12 @@ async function startServer() {
       const imagesString = (mediaParsed || []).map((m: any) => m.url).join(',');
       const result = await pool.query(`
         UPDATE products 
-        SET name = $1, category = $2, price = $3, tokens = $4, stock = $5, details = $6, media = $7, variations = $8, image = $9, business_model = $10, tables = $11, seats_per_table = $12, is_available = $13
-        WHERE id = $14 RETURNING *
+        SET name = $1, category = $2, price = $3, tokens = $4, stock = $5, details = $6, media = $7, variations = $8, image = $9, business_model = $10, tables = $11, seats_per_table = $12, is_available = $13, req_token_type = $14
+        WHERE id = $15 RETURNING *
       `, [
         name, category, String(price || '0'), parseInt(tokens) || 0, parseInt(stock) || 0, details, 
         JSON.stringify(mediaParsed), JSON.stringify(variationsParsed), imagesString, business_model || 'Venda', tables || null, seats_per_table || null, statusToSet,
+        parseInt(req_token_type) || 2048,
         req.params.id
       ]);
       await logAction(req.user.id, userEmail, 'produto_editado', `Produto ${req.params.id} (${name}) editado`);
@@ -1683,9 +1707,10 @@ async function startServer() {
       }
 
       const userId = crypto.randomUUID();
+      const encryptedPassword = hashPassword(password);
       const insertResult = await pool.query(
         'INSERT INTO users (id, name, email, password, role, company_name, company_logo, nickname, is_approved) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true) RETURNING id, name, email, role, company_name, company_logo, nickname, is_approved',
-        [userId, name, cleanEmail, password, role || 'user', company_name || null, company_logo || null, finalNickname]
+        [userId, name, cleanEmail, encryptedPassword, role || 'user', company_name || null, company_logo || null, finalNickname]
       );
       await logAction(req.user.id, req.user.email, 'usuario_adicionado', `O admin adicionou ${email} (Nickname: ${finalNickname})`);
       res.json({ success: true, user: insertResult.rows[0] });
@@ -1713,16 +1738,22 @@ async function startServer() {
         }
       }
 
+      const val_is_approved = is_approved !== undefined ? (is_approved === true || is_approved === 'true') : null;
+      const val_can_transfer = can_transfer !== undefined ? (can_transfer === true || can_transfer === 'true') : null;
+      const val_can_request = can_request !== undefined ? (can_request === true || can_request === 'true') : null;
+      const val_can_request_delivery = can_request_delivery !== undefined ? (can_request_delivery === true || can_request_delivery === 'true') : null;
+
       let u;
       if (password) {
+        const encryptedPassword = hashPassword(password);
         u = await pool.query(
           'UPDATE users SET name = $1, email = $2, role = $3, password = $4, company_name = $5, company_logo = $6, is_approved = COALESCE($8, is_approved), can_transfer = COALESCE($9, can_transfer), can_request = COALESCE($10, can_request), can_request_delivery = COALESCE($11, can_request_delivery), nickname = COALESCE($12, nickname) WHERE id = $7 RETURNING id, name, email, role, company_name, company_logo, is_approved, can_transfer, can_request, can_request_delivery, nickname',
-          [name, cleanEmail, role, password, company_name || null, company_logo || null, req.params.id, is_approved, can_transfer, can_request, can_request_delivery, finalNickname || null]
+          [name, cleanEmail, role, encryptedPassword, company_name || null, company_logo || null, req.params.id, val_is_approved, val_can_transfer, val_can_request, val_can_request_delivery, finalNickname || null]
         );
       } else {
         u = await pool.query(
           'UPDATE users SET name = $1, email = $2, role = $3, company_name = $4, company_logo = $5, is_approved = COALESCE($7, is_approved), can_transfer = COALESCE($8, can_transfer), can_request = COALESCE($9, can_request), can_request_delivery = COALESCE($10, can_request_delivery), nickname = COALESCE($11, nickname) WHERE id = $6 RETURNING id, name, email, role, company_name, company_logo, is_approved, can_transfer, can_request, can_request_delivery, nickname',
-          [name, cleanEmail, role, company_name || null, company_logo || null, req.params.id, is_approved, can_transfer, can_request, can_request_delivery, finalNickname || null]
+          [name, cleanEmail, role, company_name || null, company_logo || null, req.params.id, val_is_approved, val_can_transfer, val_can_request, val_can_request_delivery, finalNickname || null]
         );
       }
       await logAction(req.user.id, req.user.email, 'usuario_editado', `O admin editou ${email}`);
@@ -1785,9 +1816,10 @@ async function startServer() {
       
       let updateResult;
       if (password) {
+        const encryptedPassword = hashPassword(password);
         updateResult = await pool.query(
           'UPDATE users SET name = COALESCE($1, name), company_name = COALESCE($2, company_name), company_logo = COALESCE($3, company_logo), dashboard_theme = COALESCE($4, dashboard_theme), password = $5 WHERE id = $6 RETURNING id, name, email, role, company_name, company_logo, dashboard_theme',
-          [name, company_name, company_logo, dashboard_theme, password, req.user.id]
+          [name, company_name, company_logo, dashboard_theme, encryptedPassword, req.user.id]
         );
       } else {
         updateResult = await pool.query(
@@ -1839,7 +1871,7 @@ async function startServer() {
       const sender = senderRes.rows[0];
 
       // 2. Perform permission/blocking checks
-      const isSenderBlockedFromTransfer = senderType === 'users' && !sender.can_transfer && sender.role !== 'admin';
+      const isSenderBlockedFromTransfer = senderType === 'users' && sender.can_transfer === false && sender.role !== 'admin';
       if (isSenderBlockedFromTransfer) {
         return res.status(403).json({ success: false, error: 'A transferência de tokens está bloqueada para sua conta.' });
       }
@@ -2766,12 +2798,52 @@ async function startServer() {
       const targetUserId = req.params.id;
 
       await pool.query(
-        "UPDATE users SET mfa_biometric_enabled = false, mfa_device_id = NULL, mfa_device_name = NULL WHERE id = $1",
+        "UPDATE users SET mfa_biometric_enabled = false, mfa_device_id = NULL, mfa_device_name = NULL, biometric_credential_id = NULL WHERE id = $1",
         [targetUserId]
       );
       
       await logAction(req.user.id, req.user.email, 'admin_reset_mfa', `MFA biométrico desativado pelo admin para o usuário ID: ${targetUserId}`);
       res.json({ success: true, message: 'Autenticação multifator biométrica redefinida (desativada) com sucesso.' });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Remover a senha de um usuário feito apenas por um Administrador (exige nova senha no próximo login)
+  app.post('/api/admin/users/:id/remove-password', requireAuth, requireAdmin, async (req: any, res) => {
+    try {
+      if (!dbConnected) throw new Error("DB offline");
+      const targetUserId = req.params.id;
+
+      await pool.query(
+        "UPDATE users SET password = NULL WHERE id = $1",
+        [targetUserId]
+      );
+      
+      await logAction(req.user.id, req.user.email, 'admin_remove_password', `Senha removida pelo admin para o usuário ID: ${targetUserId}`);
+      res.json({ success: true, message: 'Senha do usuário removida com sucesso. O sistema solicitará que ele cadastre uma nova senha comercial no primeiro login.' });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // POST /api/auth/setup-new-password - Redefinição/atualização de senha para usuários forçados/resetados
+  app.post('/api/auth/setup-new-password', async (req, res) => {
+    const { userId, password, confirmPassword } = req.body;
+    try {
+      if (!dbConnected) throw new Error("DB offline");
+      if (!userId || !password) {
+        return res.status(400).json({ success: false, error: 'Dados incompletos para redefinição.' });
+      }
+      if (password !== confirmPassword) {
+        return res.status(400).json({ success: false, error: 'As senhas não conferem.' });
+      }
+
+      const hashed = hashPassword(password);
+      await pool.query('UPDATE users SET password = $1 WHERE id = $2', [hashed, userId]);
+      
+      await logAction(userId, 'sistema', 'senha_redefinida', 'O usuário redefiniu sua senha com sucesso.');
+      res.json({ success: true, message: 'Nova senha cadastrada com sucesso! Você já pode realizar o login.' });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }
@@ -3019,10 +3091,31 @@ async function startServer() {
       }
 
       // Verificação em Banco Produtivo (A verificação de conta bloqueada e MFA ativos já foi realizada na etapa inicial)
-      let dbResult = await pool.query('SELECT id, name, email, role, is_approved, company_name, company_logo, wallet, can_transfer, can_request, can_request_delivery, nickname FROM users WHERE (LOWER(email) = $1 OR LOWER(nickname) = $1 OR id::text = $1) AND password = $2', [cleanEmail, password]);
+      let dbUserRes = await pool.query('SELECT id, name, email, role, is_approved, company_name, company_logo, wallet, can_transfer, can_request, can_request_delivery, nickname, password FROM users WHERE LOWER(email) = $1 OR LOWER(nickname) = $1 OR id::text = $1', [cleanEmail]);
       
-      if (dbResult.rows.length > 0) {
-        const user = dbResult.rows[0];
+      let userObj = dbUserRes.rows[0];
+      let isCredentialsValid = false;
+
+      if (userObj) {
+        const storedPwd = userObj.password;
+        // Se a senha foi removida pelo admin (NULL ou string vazia)
+        if (!storedPwd || storedPwd.trim() === '') {
+          return res.json({ success: false, requireNewPassword: true, userId: userObj.id, message: 'Solicitação de administrador: O primeiro login de sua conta requer cadastro de nova senha.' });
+        }
+
+        // Verifica compatibilidade e hashing
+        isCredentialsValid = verifyPassword(password, storedPwd);
+        
+        if (isCredentialsValid) {
+          // Se a senha estiver correta mas não estiver criptografada/hashed
+          if (!isBcryptHash(storedPwd)) {
+            return res.json({ success: false, requireNewPassword: true, userId: userObj.id, message: 'A sua conta possui uma senha antiga não criptografada. Para sua segurança, cadastre uma nova senha.' });
+          }
+        }
+      }
+
+      if (userObj && isCredentialsValid) {
+        const user = userObj;
         if (user.role === 'blocked') {
           await logAction(user.id, user.email, 'login_falhou', 'Usuário bloqueado tentou acessar');
           return res.status(403).json({ success: false, error: 'Usuário bloqueado pelo administrador.' });
@@ -3148,9 +3241,10 @@ async function startServer() {
 
       // Insere o novo usuário
       const userId = crypto.randomUUID();
+      const encryptedPassword = hashPassword(password);
       const insertResult = await pool.query(
         'INSERT INTO users (id, name, email, password, role, company_name, company_logo, is_approved, telefone, endereco, bairro, cidade, numero, cep, nickname) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) RETURNING id, name, email, role, company_name, company_logo, is_approved, nickname',
-        [userId, name, cleanEmail, password, requested_role === 'delivery' ? 'delivery' : 'user', company_name || null, company_logo || null, false, telefone || null, endereco || null, bairro || null, cidade || null, numero || null, cep || null, cleanNick]
+        [userId, name, cleanEmail, encryptedPassword, requested_role === 'delivery' ? 'delivery' : 'user', company_name || null, company_logo || null, false, telefone || null, endereco || null, bairro || null, cidade || null, numero || null, cep || null, cleanNick]
       );
       
       const user = insertResult.rows[0];
