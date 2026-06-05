@@ -79,6 +79,8 @@ export function AdminSettings({ user, onRefreshUser }: { user: any, onRefreshUse
     setError('');
     let credentialIdVal = '';
     
+    const isIframe = typeof window !== 'undefined' && window.self !== window.top;
+
     try {
       if (typeof window !== 'undefined' && navigator.credentials && navigator.credentials.create) {
         try {
@@ -87,24 +89,40 @@ export function AdminSettings({ user, onRefreshUser }: { user: any, onRefreshUse
           const userId = new Uint8Array(16);
           window.crypto.getRandomValues(userId);
           
+          let hasPlatformAuthenticator = false;
+          try {
+            if ((window as any).PublicKeyCredential && typeof (window as any).PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable === 'function') {
+              hasPlatformAuthenticator = await (window as any).PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+            }
+          } catch (e) {
+            console.warn("Erro ao checar se existe biometria no dispositivo:", e);
+          }
+
           const publicKeyCredentialCreationOptions: any = {
-            challenge: challenge,
+            challenge: challenge.buffer,
             rp: {
               name: "Vitrine Comercial " + (user?.name || "Parceiro"),
               id: window.location.hostname
             },
             user: {
-              id: userId,
+              id: userId.buffer,
               name: user?.email || "user@exemplo.com",
               displayName: user?.name || "Usuário"
             },
-            pubKeyCredParams: [{ type: "public-key", alg: -7 }],
+            pubKeyCredParams: [
+              { type: "public-key", alg: -7 },   // ES256 (De longe a mais comum e compatível)
+              { type: "public-key", alg: -257 }, // RS256 (Fallback para chaves baseadas em RSA)
+            ],
             authenticatorSelection: {
-              authenticatorAttachment: "platform",
+              residentKey: "preferred",
               userVerification: "required"
             },
             timeout: 60000
           };
+
+          if (hasPlatformAuthenticator) {
+            publicKeyCredentialCreationOptions.authenticatorSelection.authenticatorAttachment = "platform";
+          }
 
           const credential = await navigator.credentials.create({
             publicKey: publicKeyCredentialCreationOptions
@@ -113,16 +131,45 @@ export function AdminSettings({ user, onRefreshUser }: { user: any, onRefreshUse
           if (credential) {
             const rawId = new Uint8Array(credential.rawId);
             credentialIdVal = Array.from(rawId).map(b => b.toString(16).padStart(2, '0')).join('');
+          } else {
+            throw new Error("O leitor biométrico do dispositivo não retornou nenhuma assinatura.");
           }
         } catch (webauthnError: any) {
           console.warn("WebAuthn API bloqueada no iframe ou cancelada:", webauthnError);
-          alert("Alera do Sistema / Compatibilidade: Como estamos em um ambiente sandbox do navegador (iframe), a biometria integrada nativa foi simulada com sucesso! Uma Chave Biométrica Eletrônica Virtual única foi criada e salva de forma 100% segura apenas na memória interna deste aparelho.");
-          const randomUniqueToken = "virtual_mfa_" + Math.random().toString(36).substring(2, 15) + "_" + Math.random().toString(36).substring(2, 15) + "_" + Date.now();
-          credentialIdVal = randomUniqueToken;
+          
+          if (isIframe) {
+            alert("Alerta de Sandbox: Como você está acessando no ambiente de demonstração (iframe do AI Studio), a biometria nativa do seu celular foi simulada via chave virtual de segurança temporária para este navegador.");
+            const randomUniqueToken = "virtual_mfa_" + Math.random().toString(36).substring(2, 15) + "_" + Math.random().toString(36).substring(2, 15) + "_" + Date.now();
+            credentialIdVal = randomUniqueToken;
+          } else {
+            setShowBiometricSetup(false);
+            setTogglingMfa(false);
+            
+            let userFriendlyMsg = webauthnError.message || "Erro desconhecido";
+            if (webauthnError.name === "NotAllowedError") {
+              userFriendlyMsg = "Operação cancelada pelo usuário ou tempo limite excedido. Por favor, tente novamente e certifique-se de autenticar na tela do seu dispositivo.";
+            } else if (webauthnError.name === "SecurityError") {
+              userFriendlyMsg = "Erro de Segurança do Domínio. O seu navegador bloqueou a gravação do registro neste domínio " + window.location.hostname + " (WebAuthn requer HTTPS seguro).";
+            } else if (webauthnError.name === "NotSupportedError") {
+              userFriendlyMsg = "Este dispositivo ou navegador não possui suporte ao método de autenticação selecionado ou não possui biometria ativa (impressão digital/facial instalada e ativa nas configurações do aparelho).";
+            }
+            
+            alert("Erro ao Ativar Biometria Física:\n\n" + userFriendlyMsg);
+            setError("Erro ao ativar biometria física: " + userFriendlyMsg);
+            return;
+          }
         }
       } else {
-        const randomUniqueToken = "virtual_mfa_" + Math.random().toString(36).substring(2, 15) + "_" + Math.random().toString(36).substring(2, 15) + "_" + Date.now();
-        credentialIdVal = randomUniqueToken;
+        if (isIframe) {
+          const randomUniqueToken = "virtual_mfa_" + Math.random().toString(36).substring(2, 15) + "_" + Math.random().toString(36).substring(2, 15) + "_" + Date.now();
+          credentialIdVal = randomUniqueToken;
+        } else {
+          alert("Erro de Compatibilidade: Este dispositivo, navegador ou conexão HTTP (não segura) não possui suporte para APIs de Biometria Integrada (WebAuthn). Certifique-se de estar usando HTTPS.");
+          setError("Dispositivo ou navegador sem suporte nativo a biometria.");
+          setShowBiometricSetup(false);
+          setTogglingMfa(false);
+          return;
+        }
       }
 
       const res = await apiFetch('/api/users/me/toggle-mfa', {

@@ -120,6 +120,7 @@ function AdminLogin({ onLogin }: { onLogin: (user: any) => void }) {
 
     try {
       let registeredCredId = localStorage.getItem(`biometric_cred_${loginEmail.toLowerCase().trim()}`) || '';
+      const isIframe = typeof window !== 'undefined' && window.self !== window.top;
       
       if (typeof window !== 'undefined' && navigator.credentials && navigator.credentials.get) {
         try {
@@ -127,11 +128,24 @@ function AdminLogin({ onLogin }: { onLogin: (user: any) => void }) {
           window.crypto.getRandomValues(challenge);
           
           const publicKeyCredentialRequestOptions: any = {
-            challenge: challenge,
+            challenge: challenge.buffer,
             rpId: window.location.hostname,
             userVerification: "required",
             timeout: 60000
           };
+
+          if (registeredCredId && !registeredCredId.startsWith("virtual_mfa_")) {
+            // Converte a chave armazenada em hexadecimal de volta para Uint8Array / ArrayBuffer
+            const bytes: number[] = [];
+            for (let i = 0; i < registeredCredId.length; i += 2) {
+              bytes.push(parseInt(registeredCredId.substr(i, 2), 16));
+            }
+            const credentialIdUint8 = new Uint8Array(bytes);
+            publicKeyCredentialRequestOptions.allowCredentials = [{
+              id: credentialIdUint8.buffer,
+              type: "public-key"
+            }];
+          }
           
           const assertion = await navigator.credentials.get({
             publicKey: publicKeyCredentialRequestOptions
@@ -143,7 +157,22 @@ function AdminLogin({ onLogin }: { onLogin: (user: any) => void }) {
           }
         } catch (webauthnErr: any) {
           console.warn("WebAuthn GET bloqueado no iframe ou cancelado:", webauthnErr);
-          alert("Validação Biométrica Rápida: Autenticando com segurança local de navegação...");
+          
+          if (isIframe) {
+            alert("Validação Biométrica Rápida: Autenticando com segurança local de navegação...");
+          } else {
+            setLoading(false);
+            
+            let userFriendlyMsg = webauthnErr.message || "Erro desconhecido";
+            if (webauthnErr.name === "NotAllowedError") {
+              userFriendlyMsg = "Nenhum registro de digital correspondente foi encontrado para esta conta ou a leitura biométrica facial/digital foi cancelada.";
+            } else if (webauthnErr.name === "SecurityError") {
+              userFriendlyMsg = "Erro de Segurança do Domínio. O navegador bloqueou a criptografia no domínio " + window.location.hostname + ".";
+            }
+            
+            setError("Falha na Validação Biométrica Física: " + userFriendlyMsg);
+            return;
+          }
         }
       }
 
