@@ -99,13 +99,13 @@ export function AdminSettings({ user, onRefreshUser }: { user: any, onRefreshUse
           }
 
           const publicKeyCredentialCreationOptions: any = {
-            challenge: challenge.buffer,
+            challenge: challenge, // Passa Uint8Array direto (Máxima compatibilidade)
             rp: {
               name: "Vitrine Comercial " + (user?.name || "Parceiro"),
               id: window.location.hostname
             },
             user: {
-              id: userId.buffer,
+              id: userId, // Passa Uint8Array direto (Máxima compatibilidade)
               name: user?.email || "user@exemplo.com",
               displayName: user?.name || "Usuário"
             },

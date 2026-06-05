@@ -833,6 +833,27 @@ async function startServer() {
 
     const isApiOrWebhook = req.path.startsWith('/api') || req.path.includes('webhook');
     if (isApiOrWebhook) {
+      // 1. Verificar se a requisição é de um usuário autenticado e autorizado
+      let isAuthorizedUser = false;
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        const token = authHeader.split(' ')[1];
+        try {
+          const decoded: any = jwt.verify(token, JWT_SECRET);
+          if (decoded && decoded.id && decoded.role !== 'blocked') {
+            isAuthorizedUser = true;
+          }
+        } catch (err) {
+          // Token inválido/expirado
+        }
+      }
+
+      // Se for um usuário autenticado e com perfil autorizado, ignoramos o bloqueio antiscraping
+      if (isAuthorizedUser) {
+        return next();
+      }
+
+      // Caso contrário, aplica o limite estrito para proteger contra raspagem (unauthorized ou sem login)
       const ip = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || 'unknown';
       const now = Date.now();
       const windowMs = 60000; // 1 minuto
@@ -2881,6 +2902,39 @@ async function startServer() {
       res.json({ success: true, message: 'Nova senha cadastrada com sucesso! Você já pode realizar o login.' });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Obter detalhes da credencial biométrica de um usuário para login (WebAuthn)
+  app.get('/api/auth/biometric/credential-info', async (req, res) => {
+    try {
+      const email = typeof req.query.email === 'string' ? req.query.email.trim().toLowerCase() : '';
+      if (!email) {
+        return res.status(400).json({ success: false, error: 'E-mail ou ID é obrigatório.' });
+      }
+
+      if (!dbConnected) {
+        return res.status(500).json({ success: false, error: 'Banco de dados inacessível' });
+      }
+
+      const userRes = await pool.query(
+        "SELECT id, mfa_biometric_enabled, mfa_device_id, biometric_credential_id FROM users WHERE LOWER(email) = $1 OR LOWER(nickname) = $1 OR id::text = $1",
+        [email]
+      );
+
+      if (userRes.rows.length === 0) {
+        return res.status(404).json({ success: false, error: 'Nenhum usuário localizado com esta identificação.' });
+      }
+
+      const user = userRes.rows[0];
+      return res.json({
+        success: true,
+        mfa_biometric_enabled: user.mfa_biometric_enabled,
+        mfa_device_id: user.mfa_device_id,
+        credentialId: user.biometric_credential_id
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
     }
   });
 

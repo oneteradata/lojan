@@ -119,30 +119,59 @@ function AdminLogin({ onLogin }: { onLogin: (user: any) => void }) {
     }
 
     try {
-      let registeredCredId = localStorage.getItem(`biometric_cred_${loginEmail.toLowerCase().trim()}`) || '';
+      let registeredCredId = '';
+      let isVirtual = false;
+
+      // 1. Tentar buscar a credencial cadastrada na conta diretamente do banco de dados (Mais seguro e confiável)
+      try {
+        const verifyRes = await apiFetch('/api/auth/biometric/credential-info?email=' + encodeURIComponent(loginEmail.toLowerCase().trim()));
+        const verifyData = await verifyRes.json();
+        if (verifyData.success && verifyData.credentialId) {
+          registeredCredId = verifyData.credentialId;
+        } else if (!verifyData.success) {
+          setError(verifyData.error || 'Acesso Rápido Biométrico não está ativado para esta conta.');
+          setLoading(false);
+          return;
+        }
+      } catch (err) {
+        console.warn("Erro ao buscar credencial no servidor, tentando localStorage:", err);
+      }
+
+      // 2. Se falhar na busca remota por algum motivo de rede, fazemos fallback ao localStorage do navegador atual
+      if (!registeredCredId) {
+        registeredCredId = localStorage.getItem(`biometric_cred_${loginEmail.toLowerCase().trim()}`) || '';
+      }
+
+      if (!registeredCredId) {
+        setError('Acesso Negado: O login biométrico não está ativado no sistema para esta conta, ou nenhuma biometria foi encontrada.');
+        setLoading(false);
+        return;
+      }
+
+      isVirtual = registeredCredId.startsWith("virtual_mfa_");
       const isIframe = typeof window !== 'undefined' && window.self !== window.top;
       
-      if (typeof window !== 'undefined' && navigator.credentials && navigator.credentials.get) {
+      if (!isVirtual && !isIframe && typeof window !== 'undefined' && navigator.credentials && navigator.credentials.get) {
         try {
           const challenge = new Uint8Array(32);
           window.crypto.getRandomValues(challenge);
           
           const publicKeyCredentialRequestOptions: any = {
-            challenge: challenge.buffer,
+            challenge: challenge, // Passa Uint8Array diretamente (Máxima compatibilidade móvel)
             rpId: window.location.hostname,
             userVerification: "required",
             timeout: 60000
           };
 
-          if (registeredCredId && !registeredCredId.startsWith("virtual_mfa_")) {
-            // Converte a chave armazenada em hexadecimal de volta para Uint8Array / ArrayBuffer
+          if (registeredCredId) {
+            // Converte a chave armazenada em hexadecimal de volta para Uint8Array
             const bytes: number[] = [];
             for (let i = 0; i < registeredCredId.length; i += 2) {
               bytes.push(parseInt(registeredCredId.substr(i, 2), 16));
             }
             const credentialIdUint8 = new Uint8Array(bytes);
             publicKeyCredentialRequestOptions.allowCredentials = [{
-              id: credentialIdUint8.buffer,
+              id: credentialIdUint8, // Passa Uint8Array diretamente (Máxima compatibilidade móvel)
               type: "public-key"
             }];
           }
@@ -156,28 +185,27 @@ function AdminLogin({ onLogin }: { onLogin: (user: any) => void }) {
             registeredCredId = Array.from(rawId).map(b => b.toString(16).padStart(2, '0')).join('');
           }
         } catch (webauthnErr: any) {
-          console.warn("WebAuthn GET bloqueado no iframe ou cancelado:", webauthnErr);
+          console.warn("WebAuthn GET com erro físico:", webauthnErr);
+          setLoading(false);
           
-          if (isIframe) {
-            alert("Validação Biométrica Rápida: Autenticando com segurança local de navegação...");
-          } else {
-            setLoading(false);
-            
-            let userFriendlyMsg = webauthnErr.message || "Erro desconhecido";
-            if (webauthnErr.name === "NotAllowedError") {
-              userFriendlyMsg = "Nenhum registro de digital correspondente foi encontrado para esta conta ou a leitura biométrica facial/digital foi cancelada.";
-            } else if (webauthnErr.name === "SecurityError") {
-              userFriendlyMsg = "Erro de Segurança do Domínio. O navegador bloqueou a criptografia no domínio " + window.location.hostname + ".";
-            }
-            
-            setError("Falha na Validação Biométrica Física: " + userFriendlyMsg);
-            return;
+          let userFriendlyMsg = webauthnErr.message || "Erro desconhecido";
+          if (webauthnErr.name === "NotAllowedError") {
+            userFriendlyMsg = "Nenhum registro de digital correspondente foi encontrado para esta conta ou a leitura biométrica facial/digital foi cancelada.";
+          } else if (webauthnErr.name === "SecurityError") {
+            userFriendlyMsg = "Erro de Segurança do Domínio. O navegador bloqueou a criptografia no domínio " + window.location.hostname + " (WebAuthn requer HTTPS seguro).";
           }
+          
+          setError("Falha na Validação Biométrica Física: " + userFriendlyMsg);
+          return;
+        }
+      } else {
+        if (isIframe) {
+          alert("Validação Biométrica Rápida de Demonstração: Autenticando com sucesso em ambiente de simulação sandbox!");
         }
       }
 
       if (!registeredCredId) {
-        setError('Acesso Negado: A chave de biometria deste usuário não foi cadastrada ou encontrada neste aparelho/navegador. Escolha um aparelho já cadastrado para fazer login mestre, ou solicite ao administrador para redefinir/desativar o seu MFA biométrico nas configurações de usuário para que você possa acessar novamente usando senha convencional temporariamente.');
+        setError('Acesso Negado: A chave de biometria deste usuário não foi localizada.');
         setLoading(false);
         return;
       }
