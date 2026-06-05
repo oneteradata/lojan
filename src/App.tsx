@@ -54,6 +54,7 @@ function Storefront() {
   const [showWallet, setShowWallet] = useState(true);
   const [isRegistering, setIsRegistering] = useState(false);
   const [user, setUser] = useState<any>(null);
+  const [notifications, setNotifications] = useState<any[]>([]);
   
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -64,6 +65,27 @@ function Storefront() {
       }).catch(e => console.error(e));
     }
   }, []);
+
+  useEffect(() => {
+    if (!user) {
+      setNotifications([]);
+      return;
+    }
+    const loadNotifs = async () => {
+      try {
+        const res = await apiFetch('/api/notifications');
+        const data = await res.json();
+        if (data.success && Array.isArray(data.notifications)) {
+          setNotifications(data.notifications);
+        }
+      } catch (e) {
+        console.warn(e);
+      }
+    };
+    loadNotifs();
+    const interval = setInterval(loadNotifs, 10000);
+    return () => clearInterval(interval);
+  }, [user]);
 
   // Auth state
   const [email, setEmail] = useState('');
@@ -406,7 +428,14 @@ function Storefront() {
             <User onClick={() => setShowLogin(true)} className="w-4 h-4 cursor-pointer hover:text-[#007AFF] transition-colors " strokeWidth={1.5} />
           )}
           {user && (
-            <Bell onClick={() => setShowNotifications(true)} className="w-4 h-4 cursor-pointer hover:text-[#007AFF] transition-colors animate-pulse" strokeWidth={1.5} />
+            <div className="relative cursor-pointer">
+              <Bell onClick={() => setShowNotifications(true)} className="w-4 h-4 text-gray-700 hover:text-[#007AFF] transition-colors" strokeWidth={1.5} />
+              {notifications.length > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[8px] font-bold w-3.5 h-3.5 flex items-center justify-center rounded-full animate-pulse border border-white">
+                  {notifications.length}
+                </span>
+              )}
+            </div>
           )}
           <div className="relative">
              <ShoppingBag onClick={() => setIsCartOpen(true)} className="w-4 h-4 cursor-pointer hover:text-[#007AFF] transition-colors" strokeWidth={1.5} />
@@ -420,7 +449,10 @@ function Storefront() {
       </header>
 
       {showNotifications && (
-        <NotificationPanel onClose={() => setShowNotifications(false)} />
+        <NotificationPanel 
+          onClose={() => setShowNotifications(false)} 
+          onClear={() => setNotifications([])}
+        />
       )}
 
       {/* Modal de Autenticação */}

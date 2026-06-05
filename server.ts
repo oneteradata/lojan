@@ -28,7 +28,7 @@ function verifyPassword(plain: string, hash: string): boolean {
 }
 
 function isBcryptHash(str: string): boolean {
-  return typeof str === 'string' && str.startsWith('$2a$');
+  return typeof str === 'string' && (str.startsWith('$2a$') || str.startsWith('$2b$') || str.startsWith('$2y$'));
 }
 
 const requireAuth = (req: any, res: any, next: any) => {
@@ -185,6 +185,12 @@ async function logAction(userId: string | number | null, userEmail: string | nul
     if (!dbConnected) return;
     await pool.query('INSERT INTO logs (user_id, user_email, event_name, details) VALUES ($1, $2, $3, $4)', 
       [userId, userEmail, eventName, details]);
+
+    // Also write a real notification to notifications table so it appears inside the bell
+    const title = eventName.replace(/_/g, ' ').toUpperCase();
+    const isGeneric = (userId ? false : true);
+    await pool.query('INSERT INTO notifications (title, message, user_id, is_generic) VALUES ($1, $2, $3, $4)',
+      [title, details, userId ? userId.toString() : null, isGeneric]);
   } catch(e) {
     console.error('Erro ao salvar log:', e);
   }
@@ -1885,7 +1891,7 @@ async function startServer() {
          return res.status(401).json({ success: false, error: 'Conta de origem sem senha cadastrada.' });
       }
 
-      if (password !== senderPasswordHash) {
+      if (!verifyPassword(password, senderPasswordHash)) {
          return res.status(401).json({ success: false, error: 'Senha incorreta.' });
       }
 
@@ -2038,7 +2044,7 @@ async function startServer() {
       if (userRes.rows.length === 0) return res.status(404).json({ success: false, error: 'Usuário não encontrado.' });
       
       const user = userRes.rows[0];
-      if (password !== user.password) {
+      if (!verifyPassword(password, user.password)) {
         return res.status(401).json({ success: false, error: 'Senha mestre incorreta.' });
       }
 
@@ -2404,7 +2410,7 @@ async function startServer() {
 
       // Verify admin password
       const adminRes = await pool.query('SELECT password FROM users WHERE id = $1', [req.user.id]);
-      if (adminRes.rows.length === 0 || password !== adminRes.rows[0].password) {
+      if (adminRes.rows.length === 0 || !verifyPassword(password, adminRes.rows[0].password)) {
         return res.status(403).json({ success: false, error: 'Senha incorreta para confirmação da limpeza.' });
       }
 
@@ -2527,6 +2533,27 @@ async function startServer() {
     }
   });
 
+  // POST /api/notifications/clear - Limpar todas as notificações do usuário
+  app.post('/api/notifications/clear', requireAuth, async (req: any, res) => {
+    try {
+      if (!dbConnected) {
+        return res.json({ success: true });
+      }
+      const userIdStr = req.user.id ? req.user.id.toString() : '';
+      let userIdNum = parseInt(req.user.id);
+      if (isNaN(userIdNum)) userIdNum = -1;
+
+      await pool.query(`
+        DELETE FROM notifications 
+        WHERE user_id = $1 OR user_id = $2 OR is_generic = true
+      `, [userIdStr, userIdNum.toString()]);
+
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
   // POST /api/notifications/:id/read - Solicitar leitura mediante confirmação de senha ("logar novamente")
   app.post('/api/notifications/:id/read', requireAuth, async (req: any, res) => {
     const { password } = req.body;
@@ -2538,7 +2565,7 @@ async function startServer() {
 
       // Verify user password
       const userRes = await pool.query('SELECT password FROM users WHERE id = $1', [req.user.id]);
-      if (userRes.rows.length === 0 || password !== userRes.rows[0].password) {
+      if (userRes.rows.length === 0 || !verifyPassword(password, userRes.rows[0].password)) {
         return res.status(403).json({ success: false, error: 'Senha incorreta. Não pôde liberar leitura.' });
       }
 
@@ -2995,7 +3022,7 @@ async function startServer() {
       }
 
       const adminRes = await pool.query('SELECT password FROM users WHERE id = $1', [req.user.id]);
-      if (adminRes.rows.length === 0 || password !== adminRes.rows[0].password) {
+      if (adminRes.rows.length === 0 || !verifyPassword(password, adminRes.rows[0].password)) {
         return res.status(403).json({ success: false, error: 'Senha de administrador incorreta.' });
       }
 

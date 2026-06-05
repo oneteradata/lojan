@@ -117,10 +117,10 @@ export function AdminSettings({ user, onRefreshUser }: { user: any, onRefreshUse
         } catch (webauthnError: any) {
           console.warn("WebAuthn API bloqueada no iframe ou cancelada:", webauthnError);
           alert("Alerta do Navegador: Não foi possível acessar o leitor nativo diretamente devido a restrição do visualizador (iframe) ou cancelamento. Ativaremos a Chave Biométrica Eletrônica Virtual no seu navegador para permitir o login rápido!");
-          credentialIdVal = "local_fingerprint_fallback_" + Date.now();
+          credentialIdVal = "local_fingerprint_fallback_key";
         }
       } else {
-        credentialIdVal = "local_fingerprint_fallback_" + Date.now();
+        credentialIdVal = "local_fingerprint_fallback_key";
       }
 
       const res = await apiFetch('/api/users/me/toggle-mfa', {

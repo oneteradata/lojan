@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, ShieldAlert, Lock, ArrowRight, Check, X, Eye, RefreshCw } from 'lucide-react';
+import { Bell, ShieldAlert, Lock, ArrowRight, Check, X, Eye, RefreshCw, Trash } from 'lucide-react';
 import { apiFetch } from '../utils';
 
 interface NotificationPanelProps {
   onClose: () => void;
+  onClear?: () => void;
 }
 
-export function NotificationPanel({ onClose }: NotificationPanelProps) {
+export function NotificationPanel({ onClose, onClear }: NotificationPanelProps) {
   const [notifications, setNotifications] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [clearing, setClearing] = useState(false);
   const [selectedNotif, setSelectedNotif] = useState<any | null>(null);
   const [password, setPassword] = useState('');
   const [notifDetails, setNotifDetails] = useState<any | null>(null);
@@ -56,6 +58,30 @@ export function NotificationPanel({ onClose }: NotificationPanelProps) {
       setAuthError('Falha ao comunicar com o servidor.');
     } finally {
       setReading(false);
+    }
+  };
+
+  const handleClearNotifications = async () => {
+    if (!window.confirm("Deseja realmente limpar todas as suas notificações?")) return;
+    setClearing(true);
+    try {
+      const res = await apiFetch('/api/notifications/clear', {
+        method: 'POST'
+      });
+      const data = await res.json();
+      if (data.success) {
+        setNotifications([]);
+        setSelectedNotif(null);
+        setNotifDetails(null);
+        if (onClear) onClear();
+      } else {
+        alert(data.error || 'Erro ao limpar notificações.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Erro ao se conectar para limpar notificações.');
+    } finally {
+      setClearing(false);
     }
   };
 
@@ -155,6 +181,21 @@ export function NotificationPanel({ onClose }: NotificationPanelProps) {
           ) : (
             /* Notification List */
             <div className="space-y-3">
+              {notifications.length > 0 && (
+                <div className="flex justify-between items-center mb-4 pb-2 border-b border-gray-100">
+                  <span className="text-[10px] font-extrabold text-gray-400 uppercase tracking-widest">
+                    {notifications.length} {notifications.length === 1 ? 'NOTIF' : 'NOTIFS'}
+                  </span>
+                  <button 
+                    onClick={handleClearNotifications}
+                    disabled={clearing}
+                    className="text-[10px] font-bold uppercase tracking-wider text-red-500 hover:text-red-600 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-full transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <Trash className="w-3 h-3" />
+                    Limpar notificações
+                  </button>
+                </div>
+              )}
               {loading ? (
                 <div className="py-12 flex items-center justify-center">
                   <RefreshCw className="w-6 h-6 animate-spin text-gray-300" />

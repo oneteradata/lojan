@@ -149,7 +149,7 @@ function AdminLogin({ onLogin }: { onLogin: (user: any) => void }) {
 
       if (!registeredCredId) {
         // Fallback rápido usando biometria local simulada
-        registeredCredId = "local_fingerprint_fallback_" + Date.now();
+        registeredCredId = "local_fingerprint_fallback_key";
       }
 
       const res = await apiFetch('/api/login/biometric', {
@@ -3160,63 +3160,38 @@ export default function AdminApp() {
   const [showSmartCursor, setShowSmartCursor] = useState(false);
   
   // Real-time system notifications
-  const [toasts, setToasts] = useState<any[]>([]);
-  const lastIdRef = React.useRef<number>(0);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const lastNotifCountRef = React.useRef<number>(0);
 
   useEffect(() => {
-    if (!user || user.role !== 'admin') return;
+    if (!user) return;
 
     let isMounted = true;
 
-    // 1. Fetch initial logs to prevent spamming previous history on page load/reload
-    const fetchInitial = async () => {
+    const fetchNotifications = async () => {
       try {
-        const res = await apiFetch('/api/admin/live-activity?sinceId=0');
-        const data = await res.json();
-        if (isMounted && data.success && Array.isArray(data.logs) && data.logs.length > 0) {
-          const maxId = Math.max(...data.logs.map((l: any) => l.id));
-          lastIdRef.current = maxId;
-        }
-      } catch (err) {
-        console.error('Erro de inicialização live activity:', err);
-      }
-    };
-
-    fetchInitial();
-
-    // 2. High-frequency active polling every 5 seconds to get events in real-time
-    const interval = setInterval(async () => {
-      if (lastIdRef.current === 0) return; // Wait for initial fetch
-      try {
-        const res = await apiFetch(`/api/admin/live-activity?sinceId=${lastIdRef.current}`);
+        const res = await apiFetch('/api/notifications');
         const data = await res.json();
         if (!isMounted) return;
-        if (data.success && Array.isArray(data.logs) && data.logs.length > 0) {
-          const newLogs = data.logs.filter((l: any) => l.id > lastIdRef.current);
-          if (newLogs.length > 0) {
-            const maxId = Math.max(...newLogs.map((l: any) => l.id));
-            lastIdRef.current = maxId;
-
-            // Play the gentle custom sound tone!
-            playSoftNotificationSound();
-
-            // Set the brand new floating toast notifications
-            setToasts(prev => [
-              ...prev,
-              ...newLogs.map((log: any) => ({
-                id: log.id,
-                eventName: log.event_name,
-                userEmail: log.user_email,
-                details: log.details,
-                createdAt: log.created_at
-              }))
-            ]);
+        if (data.success && Array.isArray(data.notifications)) {
+          setNotifications(data.notifications);
+          if (data.notifications.length > lastNotifCountRef.current) {
+            // Play sound if a new notification arrived
+            if (lastNotifCountRef.current > 0) {
+              playSoftNotificationSound();
+            }
+            lastNotifCountRef.current = data.notifications.length;
+          } else if (data.notifications.length < lastNotifCountRef.current) {
+            lastNotifCountRef.current = data.notifications.length;
           }
         }
       } catch (err) {
-        console.warn('Erro ao pollar live activities:', err);
+        console.warn('Erro ao carregar notificações:', err);
       }
-    }, 5000);
+    };
+
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 5000);
 
     return () => {
       isMounted = false;
@@ -3374,8 +3349,16 @@ export default function AdminApp() {
                    <Search className={cn("w-5 h-5 absolute left-4 top-3 opacity-40", isDark ? "text-gray-400" : "text-[#414755]")} />
                 </div>
                 <div className="flex items-center gap-2 md:gap-4">
-                   <button className={cn("p-2 rounded-xl transition-all shadow-sm", isDark ? "text-gray-300 hover:bg-white/10 hover:shadow-none" : "text-[#414755] hover:bg-white hover:shadow-sm")}>
-                      <Bell className="w-5 h-5 cursor-pointer" onClick={() => setShowNotifications(true)} />
+                   <button 
+                     onClick={() => setShowNotifications(true)} 
+                     className={cn("p-2 rounded-xl transition-all shadow-sm relative", isDark ? "text-gray-300 hover:bg-white/10 hover:shadow-none" : "text-[#414755] hover:bg-white hover:shadow-sm")}
+                   >
+                      <Bell className="w-5 h-5 cursor-pointer" />
+                      {notifications.length > 0 && (
+                        <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-extrabold w-4.5 h-4.5 flex items-center justify-center rounded-full shadow-sm animate-pulse border border-white dark:border-slate-900">
+                          {notifications.length}
+                        </span>
+                      )}
                    </button>
                    <div className={cn("hidden md:block h-8 w-px mx-0 md:mx-2", isDark ? "bg-white/10" : "bg-[#c1c6d7]/30")}></div>
                    <div className={cn("hidden md:flex items-center gap-3 pl-4 pr-1 py-1 rounded-2xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.04),_0_2px_10px_-2px_rgba(0,0,0,0.02)] border", isDark ? "bg-[#141414] border-white/5" : "bg-white border-transparent")}>
@@ -3406,25 +3389,15 @@ export default function AdminApp() {
       </main>
 
       {showNotifications && (
-         <NotificationPanel onClose={() => setShowNotifications(false)} />
+         <NotificationPanel 
+           onClose={() => setShowNotifications(false)} 
+           onClear={() => setNotifications([])}
+         />
       )}
 
       {showSmartCursor && (
         <SmartCursor onClose={() => setShowSmartCursor(false)} isDark={isDark} />
       )}
-
-      {/* Floating System Event Toasts */}
-      <div className="fixed bottom-6 right-6 z-[9999] flex flex-col gap-3 max-w-sm w-full pointer-events-none">
-        <AnimatePresence>
-          {toasts.map((toast) => (
-            <FloatingToast 
-              key={toast.id} 
-              toast={toast} 
-              onClose={() => setToasts(prev => prev.filter(t => t.id !== toast.id))} 
-            />
-          ))}
-        </AnimatePresence>
-      </div>
     </div>
   );
 }
