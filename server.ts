@@ -1193,7 +1193,7 @@ async function startServer() {
 
   // Editar produto
   app.put('/api/products/:id', requireAuth, async (req: any, res) => {
-    const { name, category, price, tokens, stock, details, media, variations, business_model, tables, seats_per_table, is_available, req_token_type } = req.body;
+    const { name, category, price, tokens, stock, details, media, variations, business_model, tables, seats_per_table, is_available, req_token_type, req_token_amount } = req.body;
     try {
       if (!dbConnected) throw new Error("DB offline");
       const userEmail = req.user.email;
@@ -1230,14 +1230,21 @@ async function startServer() {
       }
 
       const imagesString = (mediaParsed || []).map((m: any) => m.url).join(',');
+      
+      const parsedTokens = parseInt(tokens) || 0;
+      const tokenAmount = req_token_amount !== undefined 
+        ? (parseInt(req_token_amount) || 0) 
+        : (tokens !== undefined ? parsedTokens : (productObj.rows[0].req_token_amount || 1));
+
       const result = await pool.query(`
         UPDATE products 
-        SET name = $1, category = $2, price = $3, tokens = $4, stock = $5, details = $6, media = $7, variations = $8, image = $9, business_model = $10, tables = $11, seats_per_table = $12, is_available = $13, req_token_type = $14
-        WHERE id = $15 RETURNING *
+        SET name = $1, category = $2, price = $3, tokens = $4, stock = $5, details = $6, media = $7, variations = $8, image = $9, business_model = $10, tables = $11, seats_per_table = $12, is_available = $13, req_token_type = $14, req_token_amount = $15
+        WHERE id = $16 RETURNING *
       `, [
-        name, category, String(price || '0'), parseInt(tokens) || 0, parseInt(stock) || 0, details, 
+        name, category, String(price || '0'), parsedTokens, parseInt(stock) || 0, details, 
         JSON.stringify(mediaParsed), JSON.stringify(variationsParsed), imagesString, business_model || 'Venda', tables || null, seats_per_table || null, statusToSet,
         parseInt(req_token_type) || 2048,
+        tokenAmount,
         req.params.id
       ]);
       await logAction(req.user.id, userEmail, 'produto_editado', `Produto ${req.params.id} (${name}) editado`);

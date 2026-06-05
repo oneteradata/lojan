@@ -1263,6 +1263,7 @@ function ProductModal({ item, user, onClose }: { item?: any, user?: any, onClose
     business_model: item?.business_model || 'Venda',
     price: item?.price || '', 
     tokens: item?.tokens || '', 
+    req_token_amount: item?.req_token_amount?.toString() || item?.tokens?.toString() || '',
     req_token_type: item?.req_token_type?.toString() || '2048',
     stock: item?.stock || '', 
     details: item?.details || '',
@@ -1640,7 +1641,8 @@ function ProductModal({ item, user, onClose }: { item?: any, user?: any, onClose
                     <span className="absolute left-3 top-1/2 -translate-y-1/2">🪙</span>
                     <input 
                       type="number" placeholder="0" 
-                      value={formData.tokens} onChange={e => setFormData({...formData, tokens: e.target.value})}
+                      value={formData.tokens || formData.req_token_amount} 
+                      onChange={e => setFormData({...formData, tokens: e.target.value, req_token_amount: e.target.value})}
                       className="w-full bg-white border border-gray-200 focus:border-[#007AFF] rounded-2xl pl-8 pr-3 py-3.5 text-sm outline-none transition-all shadow-sm"
                     />
                   </div>
