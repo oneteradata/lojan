@@ -2221,13 +2221,30 @@ function AdminOrders({ user }: { user: any }) {
             <div className="space-y-4 overflow-y-auto">
                {currentList.map(o => (
                  <div key={o.id} onClick={() => setSelectedOrder(o)} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex justify-between items-center cursor-pointer hover:shadow-md transition-all">
-                    <div>
-                      <p className="font-bold text-sm">Pedido #{o.id}</p>
-                      <p className="text-xs text-gray-500">{o.customer_name || 'Desconhecido'} • {new Date(o.created_at).toLocaleDateString()}</p>
+                    <div className="flex-1 min-w-0 pr-2">
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <span className="font-bold text-sm">Pedido #{o.id}</span>
+                        {o.order_code && (
+                          <span className="text-[10px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded-lg border border-slate-200/60 font-mono font-bold uppercase shrink-0">
+                            Código: {o.order_code}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500 truncate">{o.customer_name || 'Desconhecido'} • {new Date(o.created_at).toLocaleDateString()}</p>
+                      {o.payment_method && (
+                        <div className="flex items-center gap-1 mt-1.5 pt-1.5 border-t border-gray-50 text-[10px]">
+                          <span className="text-gray-400 font-extrabold uppercase tracking-widest">Pagamento:</span>
+                          <span className="font-semibold text-gray-600 bg-gray-50 px-1.5 py-0.5 rounded border border-gray-100 uppercase">
+                            {o.payment_method === 'reserva' ? 'Reserva' : 
+                             o.payment_method === 'entrega' ? 'Pagamento na Entrega' : 
+                             o.payment_method}
+                          </span>
+                        </div>
+                      )}
                     </div>
-                    <div className="text-right">
+                    <div className="text-right shrink-0">
                       <p className="font-bold text-[#007AFF]">{o.total_price}</p>
-                      <span className={cn("text-[10px] px-2 py-0.5 rounded-full font-bold uppercase", o.status === 'Pendente' ? 'bg-red-100 text-red-700 animate-pulse border border-red-200' : o.status === 'Entregue' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700')}>{o.status}</span>
+                      <span className={cn("text-[10px] px-2 py-0.5 rounded-full font-bold uppercase block w-fit ml-auto mt-1", o.status === 'Pendente' ? 'bg-red-100 text-red-700 animate-pulse border border-red-200' : o.status === 'Entregue' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700')}>{o.status}</span>
                     </div>
                  </div>
                ))}
@@ -2276,6 +2293,21 @@ function AdminOrders({ user }: { user: any }) {
                            )}
                         </div>
                      </div>
+                      {/* Informações detalhadas do Pedido para o Vendedor */}
+                      <div className="bg-slate-50 p-4 rounded-2xl mb-4 border border-slate-200/60 flex justify-between gap-4 text-left">
+                         <div>
+                            <p className="text-[10px] text-gray-400 font-extrabold tracking-widest uppercase">Código do Pedido</p>
+                            <p className="font-mono font-bold text-sm text-slate-800 mt-1">{selectedOrder.order_code || '-'}</p>
+                         </div>
+                         <div className="text-right">
+                            <p className="text-[10px] text-gray-400 font-extrabold tracking-widest uppercase">Método de Pagamento</p>
+                            <p className="font-bold text-sm text-[#007AFF] uppercase mt-1">
+                               {selectedOrder.payment_method === 'reserva' ? 'Reserva' : 
+                                selectedOrder.payment_method === 'entrega' ? 'Pagamento na Entrega' : 
+                                selectedOrder.payment_method || '-'}
+                            </p>
+                         </div>
+                      </div>
                      <div className="space-y-4">
                         <p className="text-[10px] text-gray-400 font-bold tracking-widest uppercase text-center">Itens do Pedido</p>
                         {selectedOrder.items && selectedOrder.items.map((item: any) => (

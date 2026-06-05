@@ -606,6 +606,8 @@ async function initDB() {
     try { await pool.query(`ALTER TABLE orders ADD COLUMN delivery_user_id INTEGER REFERENCES users(id);`); } catch (e) {}
     try { await pool.query(`ALTER TABLE orders ADD COLUMN seller_id INTEGER;`); } catch (e) {}
     try { await pool.query(`ALTER TABLE orders ADD COLUMN default_shipping JSONB;`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE orders ADD COLUMN payment_method VARCHAR(100);`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE orders ADD COLUMN order_code VARCHAR(100);`); } catch (e) {}
 
     // Inserção de um usuário admin teste se não existir por email
     const adminResult = await pool.query('SELECT id FROM users WHERE email = $1', ['admin@valentina.com']);
@@ -3377,10 +3379,47 @@ async function startServer() {
         return res.status(400).json({ success: false, error: 'deu problema com validação' });
       }
 
+      // Automatically determine seller_id and payment_method if not passed
+      let resolvedSellerId = seller_id;
+      let calculatedPaymentMethod = payment_method;
+
+      if (items && items.length > 0) {
+        const firstProductId = parseInt(items[0].id);
+        try {
+          const prodRes = await pool.query('SELECT user_id, business_model FROM products WHERE id = $1', [firstProductId]);
+          if (prodRes.rows.length > 0) {
+            if (!resolvedSellerId) {
+              resolvedSellerId = prodRes.rows[0].user_id;
+            }
+            if (!calculatedPaymentMethod && prodRes.rows[0].business_model === 'Reserva') {
+              calculatedPaymentMethod = 'reserva';
+            }
+          }
+        } catch (e) {
+          console.error('Erro ao buscar metadados do primeiro produto:', e);
+        }
+      }
+
+      if (!calculatedPaymentMethod) {
+        calculatedPaymentMethod = 'entrega';
+      }
+
+      let calculatedOrderCode = order_code;
+      if (!calculatedOrderCode) {
+        if (calculatedPaymentMethod === 'reserva') {
+          const r1 = Math.floor(100 + Math.random() * 900);
+          const r2 = Math.floor(100 + Math.random() * 900);
+          calculatedOrderCode = `${r1}-${r2}`;
+        } else {
+          const randNum = Math.floor(1000 + Math.random() * 9000);
+          calculatedOrderCode = `858-${randNum}`;
+        }
+      }
+
       // 2. Cria o pedido no Postgres
       const orderResult = await pool.query(
-        'INSERT INTO orders (user_id, total_price, seller_id) VALUES ($1, $2, $3) RETURNING id',
-        [userId, total, seller_id || null]
+        'INSERT INTO orders (user_id, total_price, seller_id, payment_method, order_code) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+        [userId, total, resolvedSellerId || null, calculatedPaymentMethod, calculatedOrderCode]
       );
       const orderId = orderResult.rows[0].id;
 
