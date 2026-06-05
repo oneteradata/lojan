@@ -2793,9 +2793,17 @@ async function startServer() {
         return res.status(403).json({ success: false, error: 'Usuário bloqueado pelo administrador.' });
       }
 
-      // Se houver uma credencial biométrica registrada, valida ela (ou valida local se houver bypass para teste no iframe)
-      if (user.biometric_credential_id && credentialId && user.biometric_credential_id !== credentialId) {
-        return res.status(403).json({ success: false, error: 'A assinatura do leitor biométrico não corresponde ao dispositivo cadastrado.' });
+      // Validação estrita da credencial biométrica cadastrada para o smartphone
+      if (!credentialId) {
+        return res.status(400).json({ success: false, error: 'Chave biométrica de identificação do dispositivo não fornecida.' });
+      }
+
+      if (!user.biometric_credential_id) {
+        return res.status(400).json({ success: false, error: 'Este usuário não possui uma assinatura de chave biométrica devidamente cadastrada no servidor.' });
+      }
+
+      if (user.biometric_credential_id !== credentialId) {
+        return res.status(403).json({ success: false, error: 'Acesso Negado: A assinatura/chave digital do aparelho tentada não corresponde ao smartphone cadastrado originalmente na ativação do 2FA.' });
       }
 
       const tokenUser = {

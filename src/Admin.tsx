@@ -148,8 +148,9 @@ function AdminLogin({ onLogin }: { onLogin: (user: any) => void }) {
       }
 
       if (!registeredCredId) {
-        // Fallback rápido usando biometria local simulada
-        registeredCredId = "local_fingerprint_fallback_key";
+        setError('Acesso Negado: A chave de biometria deste usuário não foi cadastrada ou encontrada neste aparelho/navegador. Escolha um aparelho já cadastrado para fazer login mestre, ou solicite ao administrador para redefinir/desativar o seu MFA biométrico nas configurações de usuário para que você possa acessar novamente usando senha convencional temporariamente.');
+        setLoading(false);
+        return;
       }
 
       const res = await apiFetch('/api/login/biometric', {
