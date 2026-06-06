@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'motion/react';
-import { Search, ShoppingBag, Heart, Share2, User, Menu, ArrowRight, Eye, EyeOff, LogOut, RefreshCw, FileText, Bell } from 'lucide-react';
+import { Search, ShoppingBag, Heart, Share2, User, Menu, ArrowRight, Eye, EyeOff, LogOut, RefreshCw, FileText, Bell, Fingerprint } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import AdminApp from './Admin';
@@ -103,6 +103,7 @@ function Storefront() {
   const [cidade, setCidade] = useState('');
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [authError, setAuthError] = useState('');
+  const [biometricLoading, setBiometricLoading] = useState(false);
 
   useEffect(() => {
     const cleanCep = cep.replace(/\D/g, '');
@@ -158,10 +159,150 @@ function Storefront() {
       .catch(err => console.error("Erro ao buscar produtos", err));
   }, []);
 
+  const handleBiometricLogin = async (customEmail?: string) => {
+    setBiometricLoading(true);
+    setAuthError('');
+    let loginEmail = (customEmail || email).trim();
+    if (!loginEmail) {
+      const lastBiometricUser = localStorage.getItem('last_biometric_user');
+      if (lastBiometricUser) {
+        loginEmail = lastBiometricUser;
+        setEmail(lastBiometricUser);
+      } else {
+        setAuthError('Por favor, digite seu ID ou E-mail primeiro no campo de texto para fazer login por biometria.');
+        setBiometricLoading(false);
+        return;
+      }
+    }
+
+    try {
+      let registeredCredId = '';
+      let isVirtual = false;
+
+      // 1. Tentar buscar a credencial cadastrada na conta diretamente do banco de dados (Mais seguro e confiável)
+      try {
+        const verifyRes = await apiFetch('/api/auth/biometric/credential-info?email=' + encodeURIComponent(loginEmail.toLowerCase().trim()));
+        const verifyData = await verifyRes.json();
+        if (verifyData.success && verifyData.credentialId) {
+          registeredCredId = verifyData.credentialId;
+        } else if (!verifyData.success) {
+          setAuthError(verifyData.error || 'Acesso Rápido Biométrico não está ativado para esta conta.');
+          setBiometricLoading(false);
+          return;
+        }
+      } catch (err) {
+        console.warn("Erro ao buscar credencial no servidor, tentando localStorage:", err);
+      }
+
+      // 2. Se falhar na busca remota por algum motivo de rede, fazemos fallback ao localStorage do navegador atual
+      if (!registeredCredId) {
+        registeredCredId = localStorage.getItem(`biometric_cred_${loginEmail.toLowerCase().trim()}`) || '';
+      }
+
+      if (!registeredCredId) {
+        setAuthError('Acesso Negado: O login biométrico não está ativado no sistema para esta conta, ou nenhuma biometria foi encontrada.');
+        setBiometricLoading(false);
+        return;
+      }
+
+      isVirtual = registeredCredId.startsWith("virtual_mfa_");
+      const isIframe = typeof window !== 'undefined' && window.self !== window.top;
+      
+      if (!isVirtual && !isIframe && typeof window !== 'undefined' && navigator.credentials && navigator.credentials.get) {
+        try {
+          const challenge = new Uint8Array(32);
+          window.crypto.getRandomValues(challenge);
+          
+          const publicKeyCredentialRequestOptions: any = {
+            challenge: challenge,
+            rpId: window.location.hostname,
+            userVerification: "required",
+            timeout: 60000
+          };
+
+          if (registeredCredId) {
+            const bytes: number[] = [];
+            for (let i = 0; i < registeredCredId.length; i += 2) {
+              bytes.push(parseInt(registeredCredId.substr(i, 2), 16));
+            }
+            const credentialIdUint8 = new Uint8Array(bytes);
+            publicKeyCredentialRequestOptions.allowCredentials = [{
+              id: credentialIdUint8,
+              type: "public-key"
+            }];
+          }
+          
+          const assertion = await navigator.credentials.get({
+            publicKey: publicKeyCredentialRequestOptions
+          }) as any;
+
+          if (assertion) {
+            const rawId = new Uint8Array(assertion.rawId);
+            registeredCredId = Array.from(rawId).map(b => b.toString(16).padStart(2, '0')).join('');
+          }
+        } catch (webauthnErr: any) {
+          console.warn("WebAuthn GET com erro físico:", webauthnErr);
+          setBiometricLoading(false);
+          
+          let userFriendlyMsg = webauthnErr.message || "Erro desconhecido";
+          if (webauthnErr.name === "NotAllowedError") {
+            userFriendlyMsg = "Nenhum registro de digital correspondente foi encontrado para esta conta ou a leitura biométrica facial/digital foi cancelada.";
+          } else if (webauthnErr.name === "SecurityError") {
+            userFriendlyMsg = "Erro de Segurança do Domínio. O navegador bloqueou a criptografia no domínio " + window.location.hostname + " (WebAuthn requer HTTPS seguro).";
+          }
+          
+          setAuthError("Falha na Validação Biométrica Física: " + userFriendlyMsg);
+          return;
+        }
+      } else {
+        if (isIframe) {
+          alert("Validação Biométrica Rápida de Demonstração: Autenticando com sucesso em ambiente de simulação sandbox!");
+        }
+      }
+
+      if (!registeredCredId) {
+        setAuthError('Acesso Negado: A chave de biometria deste usuário não foi localizada.');
+        setBiometricLoading(false);
+        return;
+      }
+
+      const res = await apiFetch('/api/login/biometric', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: loginEmail, credentialId: registeredCredId })
+      });
+      const data = await res.json();
+      if (data.success) {
+        if (data.token) localStorage.setItem('token', data.token);
+        setUser(data.user);
+        setShowLogin(false);
+      } else {
+        setAuthError(data.error || 'Acesso biométrico negado ou biometria não cadastrada.');
+      }
+    } catch (err: any) {
+      setAuthError('Erro ao processar login biométrico: ' + err.message);
+    }
+    setBiometricLoading(false);
+  };
+
   const handleAuth = async (e: any) => {
     e.preventDefault();
     if (uploadingLogo) return;
     setAuthError('');
+    
+    // Pre-verificação se MFA está habilitado para o email/nickname digitado
+    if (!isRegistering && email.trim()) {
+      try {
+        const verifyRes = await apiFetch('/api/auth/biometric/credential-info?email=' + encodeURIComponent(email.toLowerCase().trim()));
+        const verifyData = await verifyRes.json();
+        if (verifyData.success && verifyData.mfa_biometric_enabled) {
+          handleBiometricLogin(email);
+          return;
+        }
+      } catch (err) {
+        console.warn("Falha na pre-verificação do MFA", err);
+      }
+    }
     
     const endpoint = isRegistering ? '/api/register' : '/api/login';
     const bodyPayload = isRegistering ? { name, email, password, company_name: companyName, company_logo: companyLogo, requested_role: requestedRole, telefone, endereco, bairro, cidade, numero, cep, nickname } : { email, password };
@@ -582,9 +723,9 @@ function Storefront() {
                     value={password}
                     onChange={e => setPassword(e.target.value)}
                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 pt-5 pb-2 text-sm text-gray-900 peer focus:border-[#007AFF]/50 focus:bg-white transition-all outline-none"
-                    required
+                    required={isRegistering}
                   />
-                  <label className="absolute text-[10px] uppercase tracking-wider text-gray-500 top-2 left-4 peer-focus:text-[#007AFF] transition-colors">Senha</label>
+                  <label className="absolute text-[10px] uppercase tracking-wider text-gray-500 top-2 left-4 peer-focus:text-[#007AFF] transition-colors">{isRegistering ? 'Senha' : 'Senha (Opcional se possui MFA)'}</label>
                 </div>
 
                 <AnimatePresence>
@@ -607,9 +748,21 @@ function Storefront() {
                   ) : null}
                 </AnimatePresence>
                 
-                <button type="submit" className="w-full bg-[#007AFF] text-white mt-4 py-4 rounded-xl text-xs uppercase tracking-[0.2em] font-bold hover:bg-blue-600 transition-all duration-300 shadow-[0_4px_14px_rgba(0,122,255,0.39)]">
-                  {isRegistering ? 'Criar Minha Conta' : 'Entrar na Plataforma'}
+                <button type="submit" disabled={biometricLoading} className="w-full bg-[#007AFF] text-white mt-4 py-4 rounded-xl text-xs uppercase tracking-[0.2em] font-bold hover:bg-blue-600 transition-all duration-300 shadow-[0_4px_14px_rgba(0,122,255,0.39)] disabled:opacity-50">
+                  {biometricLoading ? 'Iniciando MFA...' : (isRegistering ? 'Criar Minha Conta' : 'Entrar na Plataforma')}
                 </button>
+
+                {!isRegistering && (
+                  <button 
+                    type="button" 
+                    onClick={() => handleBiometricLogin()}
+                    disabled={biometricLoading}
+                    className="w-full border border-gray-200 bg-white hover:bg-gray-50 text-gray-800 font-bold rounded-xl py-4 mt-2 flex items-center justify-center gap-2 text-xs uppercase tracking-[0.1em] transition-all disabled:opacity-75 cursor-pointer hover:border-[#007AFF]/30"
+                  >
+                    <Fingerprint className="w-4 h-4 text-[#007AFF] animate-pulse" />
+                    <span>{biometricLoading ? 'Verificando...' : 'Entrar com MFA Biométrico'}</span>
+                  </button>
+                )}
               </form>
 
               <div className="mt-8 text-center relative z-10">

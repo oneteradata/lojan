@@ -262,6 +262,19 @@ function AdminLogin({ onLogin }: { onLogin: (user: any) => void }) {
     e.preventDefault();
     if (uploadingLogo) return;
     
+    if (!isRegistering && email.trim()) {
+      try {
+        const verifyRes = await apiFetch('/api/auth/biometric/credential-info?email=' + encodeURIComponent(email.toLowerCase().trim()));
+        const verifyData = await verifyRes.json();
+        if (verifyData.success && verifyData.mfa_biometric_enabled) {
+          handleBiometricLogin();
+          return;
+        }
+      } catch (err) {
+        console.warn("Falha no pré-check do MFA", err);
+      }
+    }
+    
     if (isRegistering) {
        if (!nickname.trim()) {
          setError('O campo Nickname é obrigatório.');
@@ -513,7 +526,7 @@ function AdminLogin({ onLogin }: { onLogin: (user: any) => void }) {
             </div>
             
             <div>
-              <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">SENHA</label>
+              <label className="block text-[11px] font-bold text-[#86868B] mb-2 px-2 tracking-wide">SENHA {isRegistering ? '' : '(OPCIONAL SE POSSUI MFA)'}</label>
               <div className="relative">
                 <input 
                   type={showPassword ? "text" : "password"} 
@@ -521,7 +534,7 @@ function AdminLogin({ onLogin }: { onLogin: (user: any) => void }) {
                   onChange={e => setPassword(e.target.value)}
                   placeholder="••••••••"
                   className="w-full bg-[#F5F5F7] border border-transparent focus:border-[#007AFF]/30 focus:bg-white rounded-2xl px-4 py-3.5 text-sm outline-none transition-all pr-12"
-                  required
+                  required={isRegistering}
                 />
                 <button
                   type="button"
