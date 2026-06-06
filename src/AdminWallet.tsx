@@ -629,8 +629,12 @@ export function AdminWallet({
                 Recebimento
               </h3>
               <div className="bg-white rounded-3xl p-8 shadow-sm border border-gray-100 flex flex-col items-center justify-center text-center gap-4">
-                <div className="w-24 h-24 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200 flex items-center justify-center">
-                  <Download className="w-10 h-10 text-gray-300" />
+                <div className="w-40 h-40 bg-white rounded-2xl border border-gray-200 p-2.5 flex items-center justify-center shadow-sm">
+                  <img
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${user.id}`}
+                    alt="QR Code"
+                    className="w-full h-full object-contain"
+                  />
                 </div>
                 <div>
                   <p className="text-gray-500 text-sm mb-1">
@@ -845,86 +849,6 @@ export function AdminWallet({
             </motion.div>
           )}
         </AnimatePresence>
-      </div>
-
-      {/* Visual AI Integration Prompt Section */}
-      <div className="px-6 mt-8">
-        <div className="bg-slate-900 text-white rounded-3xl p-6 md:p-8 shadow-2xl relative overflow-hidden border border-slate-800">
-          <div className="absolute top-0 right-0 p-8 opacity-[0.03] select-none text-9xl pointer-events-none font-black">🤖</div>
-          <div className="flex items-center gap-3 mb-4">
-            <span className="text-2xl">🤖</span>
-            <div>
-              <span className="text-[10px] bg-indigo-500/25 text-indigo-300 font-bold px-3 py-1 rounded-full uppercase tracking-widest">
-                Prompt de Automação
-              </span>
-              <h3 className="text-lg font-extrabold tracking-tight mt-1">Guia de Integração para Agentes de IA</h3>
-            </div>
-          </div>
-          
-          <p className="text-xs text-slate-300 leading-relaxed mb-4">
-            Copie o prompt estruturado abaixo para parametrizar e ensinar outra Inteligência Artificial (ou script de chatbot) a interagir com as APIs de carteiro, transferências e pagamentos de eTokens do seu marketplace com segurança.
-          </p>
-
-          <div className="relative">
-            <pre className="bg-slate-950 rounded-2xl p-4 text-[11px] font-mono whitespace-pre-wrap text-emerald-400 overflow-x-auto max-h-[300px] scrollbar-thin border border-slate-800 leading-relaxed text-left">
-{`# CONTEXTO DO SISTEMA DE WALLET & ETOKENS
-Você é uma inteligência artificial assistente financeira integrada ao ecossistema de marketplace "Valentina".
-Seu objetivo é auxiliar e executar operações de consulta, pagamento e transferência de eTokens (moedas digitais) na rede de parceiros comerciais.
-
-## ARQUITETURA DE BANCO DE DADOS
-- O banco de dados é PostgreSQL.
-- Existem dois tipos de tabelas que possuem carteira: 'users' (parceiros comerciais e administradores) e 'user_client' (clientes finais).
-- Ambas as tabelas têm uma coluna "wallet" armazenada como um objeto JSON.
-- A estrutura do campo "wallet" é a seguinte:
-  {
-    "tokens": [
-      "pYnZ4shs...", // Strings de caracteres correspondentes ao token
-      "vXmF6yhq..."
-    ]
-  }
-
-## CLASSIFICAÇÃO DOS ETOKENS (MOEDA POR COMPRIMENTO)
-O "tipo" ou formato de moeda do eToken depende do comprimento (length) da string do token:
-- E64 (comprimento 64)
-- E128 (comprimento 128)
-- E256 (comprimento 256)
-- E512 (comprimento 512)
-- E1024 (comprimento 1024)
-- E2048 (comprimento 2048) - Padrão do sistema
-- E4096 (comprimento 4096)
-
-## INTEGRANDO VIA API DE TRANSFERÊNCIA DE ETOKENS
-Para efetuar uma transferência ou pagamento programado entre tabelas (de 'user' para outro 'user' ou 'user_client'), utilize a rota principal descrita abaixo:
-
-- **Endpoint**: POST /api/transfer_tokens
-- **Headers**:
-  - Authorization: Bearer <JWT_TOKEN_DO_REQUISITANTE>
-  - Content-Type: application/json
-- **Payload (JSON)**:
-  {
-    "receiver_id": "DESTINATARIO_ID_NICKNAME", // UUID, Nickname ou ID do destinatário
-    "amount": 10,                              // Quantidade de tokens a serem transferidos
-    "token_length": 2048,                      // Comprimento do token (ex: 2048 para E2048)
-    "password": "SENHA_DE_CONFIRMACAO"         // Senha mestre do remetente
-  }
-
-## CONDUTA DE SEGURANÇA E EXECUÇÃO
-1. Sempre valide o saldo do requisitante antes de formular a chamada de transferência. Ele deve ter a quantidade suficiente de strings com o comprimento correspondente na propriedade wallet.tokens.
-2. Em caso de retorno de erro "Saldo insuficiente", oriente o usuário sobre como solicitar ou creditar mais moedas daquele tipo correspondente.`}
-            </pre>
-            <button
-              onClick={() => {
-                const promptText = `# CONTEXTO DO SISTEMA DE WALLET & ETOKENS\nVocê é uma inteligência artificial assistente financeira integrada ao ecossistema de marketplace "Valentina".\nSeu objetivo é auxiliar e executar operações de consulta, pagamento e transferência de eTokens (moedas digitais) na rede de parceiros comerciais.\n\n## ARQUITETURA DE BANCO DE DADOS\n- O banco de dados é PostgreSQL.\n- Existem dois tipos de tabelas que possuem carteira: 'users' (parceiros comerciais e administradores) e 'user_client' (clientes finais).\n- Ambas as tabelas têm uma coluna "wallet" armazenada como um objeto JSON.\n- A estrutura do campo "wallet" é a seguinte:\n  {\n    "tokens": [\n      "pYnZ4shs...", // Strings de caracteres correspondentes ao token\n      "vXmF6yhq..."\n    ]\n  }\n\n## CLASSIFICAÇÃO DOS ETOKENS\nO "tipo" ou formato de moeda do eToken depende do comprimento (length) da string do token:\n- E64 (comprimento 64)\n- E128 (comprimento 128)\n- E256 (comprimento 256)\n- E512 (comprimento 512)\n- E1024 (comprimento 1024)\n- E2048 (comprimento 2048) - Padrão do sistema\n- E4096 (comprimento 4096)\n\n## INTEGRANDO VIA API DE TRANSFERÊNCIA\nPara efetuar uma transferência ou pagamento programado entre tabelas (de 'user' para outro 'user' ou 'user_client'), utilize a rota principal descrita abaixo:\n\n- **Endpoint**: POST /api/transfer_tokens\n- **Headers**:\n  - Authorization: Bearer <JWT_TOKEN_DO_REQUISITANTE>\n  - Content-Type: application/json\n- **Payload (JSON)**:\n  {\n    "receiver_id": "DESTINATARIO_ID_NICKNAME", // UUID, Nickname ou ID do destinatário\n    "amount": 10,                              // Quantidade de tokens a serem transferidos\n    "token_length": 2048,                      // Comprimento do token\n    "password": "SENHA_DE_CONFIRMACAO"         // Senha mestre do remetente\n  }\n\n## CONDUTA DE SEGURANÇA\n1. Sempre valide o saldo do requisitante.\n2. Em caso de erro, avise sobre o saldo insuficiente.`;
-                navigator.clipboard.writeText(promptText);
-                alert("Prompt copiado para a área de transferência com sucesso!");
-              }}
-              type="button"
-              className="absolute top-3 right-3 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-[10px] font-bold uppercase tracking-wider px-4 py-2 rounded-xl transition-all cursor-pointer shadow-sm"
-            >
-              Copiar Prompt
-            </button>
-          </div>
-        </div>
       </div>
 
       {/* Modal de Detalhes da Transação */}
